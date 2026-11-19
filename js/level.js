@@ -219,6 +219,7 @@
       if (overlap(p.x + 1, p.y + 1, PW - 2, PH - 2, r[0], r[1], r[2], r[3])) {
         let cause = o.t;
         if (o.t === 'spike') cause = o.y === F ? 'spike_floor' : o.y === C ? 'spike_ceil' : 'spike_slab';
+        else if (o.t === 'hblock' && o.look) cause = o.side === 'bottom' ? 'look_floor' : 'look_ceil'; // b66: the b59 ground looks (block, mace, crystal, ember) are not the flight tunnel
         return { cause, obj: o };
       }
     }

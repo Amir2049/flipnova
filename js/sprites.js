@@ -990,6 +990,24 @@
         ctx.fillRect(x + w - 1, y + i, 1, 1);
       }
     }
+    FF.drawPhaseMarks(ctx, x, y, w, h, phase, active);
+  };
+
+  // b66: Dual Flip is readable by SHAPE, not only by colour (blue/purple is the classic colour-blind pair).
+  // Blue world = gravity down = ▼, purple world = gravity up = ▲, the same arrow the player's own gravity points.
+  // Drawn on every phase solid, solid or ghost, every ~22 px along its long side. Pure drawing: no rule changes.
+  FF.drawPhaseMarks = function (ctx, x, y, w, h, phase, active) {
+    if (w < 7 || h < 5) return;
+    const down = phase === 'b';
+    ctx.fillStyle = active ? '#ffffff' : FF.rgba(phase === 'b' ? C.blueLight : C.purpleLight, 0.75);
+    const arrow = (cx, cy) => { // 5 x 3 px
+      for (let r = 0; r < 3; r++) ctx.fillRect(cx - 2 + r, down ? cy - 1 + r : cy + 1 - r, 5 - 2 * r, 1);
+    };
+    const tall = h >= w, len = tall ? h : w, n = Math.max(1, Math.floor((len - 6) / 22));
+    for (let i = 0; i < n; i++) {
+      const at = Math.round((len * (i + 0.5)) / n);
+      if (tall) arrow(x + Math.floor(w / 2), y + at); else arrow(x + at, y + Math.floor(h / 2));
+    }
   };
 
   // Moving barrier — a grumpy crusher block. Deadly to touch.

@@ -222,11 +222,11 @@
 
   const WHY = {
     ar: {
-      spike_floor: 'لمست أشواك الأرض — اقلب قبلها بلحظة (العلامات الخضراء تساعدك).',
-      spike_ceil: 'لمست أشواك السقف — اقلب للأسفل قبلها بلحظة.',
+      spike_floor: 'أشواك الأرض — قلبتك جت متأخرة عن آخر لحظة آمنة. القلبة المتأخرة بتجيب NERVE، بس العلامات الخضراء بتوريك آخر لحظة.',
+      spike_ceil: 'أشواك السقف — قلبتك للأرض جت متأخرة عن آخر لحظة آمنة.',
       spike_slab: 'أشواك الممر الخطِر — القلبات هنا أقصر، اقلب أبكر بقليل.',
-      wall_b: 'الجدار <span style="color:#27d7ff">الأزرق</span> صلب في العالم الأزرق — اعبره وأنت بنفسجي (مقلوب للسقف).',
-      wall_p: 'الجدار <span style="color:#b45cff">البنفسجي</span> صلب في العالم البنفسجي — اعبره وأنت أزرق (نحو الأرض).',
+      wall_b: 'الجدار <span style="color:#27d7ff">الأزرق ▼</span> صلب وانت نازل للأرض — اعبره وانت مقلوب للسقف ▲.',
+      wall_p: 'الجدار <span style="color:#b45cff">البنفسجي ▲</span> صلب وانت مقلوب للسقف — اعبره وانت نازل للأرض ▼.',
       slab: 'اصطدمت بحافة المفترق — اختر ممرك قبل الوصول إليه.',
       catch: 'اصطدمت بحافة منصة الطور — ادخل تحتها أو فوقها.',
       block: 'اصطدمت بحافة صلبة.',
@@ -239,14 +239,16 @@
       lift: 'خبطت في جنب المصعد — انزل عليه من فوق.',
       crumble: 'خبطت في حافة المنصة الهشّة.',
       blink: 'خبطت في حافة الجسر الوامض.',
-      hblock: 'خبطت في جدار النفق — في الطيران: اضغط مطوّل للطلوع وسيب للنزول، وبحركات صغيرة.'
+      hblock: 'خبطت في جدار النفق — في الطيران: اضغط مطوّل للطلوع وسيب للنزول، وبحركات صغيرة.',
+      look_floor: 'خطر على الأرض — قلبتك جت متأخرة عن آخر لحظة آمنة. البلوك والكورة أم شوك والكريستال والجمر بيموّتوا زي الشوك بالظبط.',
+      look_ceil: 'خطر في السقف — قلبتك للأرض جت متأخرة عن آخر لحظة آمنة.'
     },
     en: {
-      spike_floor: 'Floor spikes — flip a moment earlier (the green marks help).',
-      spike_ceil: 'Ceiling spikes — flip down a moment earlier.',
+      spike_floor: 'Floor spikes — your flip came after the last safe moment. Late flips pay NERVE; the green marks show where late becomes too late.',
+      spike_ceil: 'Ceiling spikes — your flip down came after the last safe moment.',
       spike_slab: 'Risk-lane spikes — flips are shorter here, tap a bit earlier.',
-      wall_b: 'The <span style="color:#27d7ff">blue</span> wall is solid in the blue world — cross it while purple (flipped up).',
-      wall_p: 'The <span style="color:#b45cff">purple</span> wall is solid in the purple world — cross it while blue (gravity down).',
+      wall_b: 'The <span style="color:#27d7ff">blue ▼</span> wall is solid while your gravity points down — cross it flipped up ▲.',
+      wall_p: 'The <span style="color:#b45cff">purple ▲</span> wall is solid while your gravity points up — cross it flipped down ▼.',
       slab: 'You hit the fork edge — pick your lane before it.',
       catch: 'You hit the edge of a phase platform.',
       block: 'You hit a solid edge.',
@@ -259,7 +261,9 @@
       lift: 'You hit the side of the lift — land on it from above.',
       crumble: 'You hit the edge of a crumbling platform.',
       blink: 'You hit the edge of the blinking bridge.',
-      hblock: 'You hit the tunnel wall — while flying: hold to rise, release to fall, in small taps.'
+      hblock: 'You hit the tunnel wall — while flying: hold to rise, release to fall, in small taps.',
+      look_floor: 'Floor hazard — your flip came after the last safe moment. Blocks, maces, crystals and embers kill just like spikes.',
+      look_ceil: 'Ceiling hazard — your flip down came after the last safe moment.'
     }
   };
 
@@ -827,6 +831,7 @@
     }, 66);
   }
   UI.bossCard = bossCard;
+  UI.whyText = (L, cause) => (WHY[L] || {})[cause] || ''; // b66: tools/death-tip-test.js checks every death has a tip
   function bossEnd(res) {
     if (res.replay || !res.boss) return;
     if (res.boss.id === 'tyrant' && UI.lastOpts && UI.lastOpts.story === 'tyrant') { // 📖 chapter 1 keeps its own record too
