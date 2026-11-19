@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds dist/FLIPNOVA-Windows.zip: the single-file game (dist/FLIPNOVA.html, or $1) inside a portable Electron app.
-# Unzip anywhere and double-click FLIPNOVA.exe. Needs curl, unzip, zip and internet (downloads Electron once).
+# Unzip anywhere and double-click Flippo.exe. Needs curl, unzip, zip and internet (downloads Electron once).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HTML="${1:-$ROOT/dist/FLIPNOVA.html}"
@@ -10,7 +10,7 @@ OUT="$ROOT/build/windows/FLIPNOVA"
 mkdir -p "$ROOT/build"
 [ -f "$CACHE" ] || curl -sSL -o "$CACHE" "https://github.com/electron/electron/releases/download/v$EV/electron-v$EV-win32-x64.zip"
 rm -rf "$OUT" && mkdir -p "$OUT" && unzip -q "$CACHE" -d "$OUT"
-mv "$OUT/electron.exe" "$OUT/FLIPNOVA.exe"
+mv "$OUT/electron.exe" "$OUT/Flippo.exe"
 rm -f "$OUT/LICENSES.chromium.html" "$OUT/resources/default_app.asar"
 (cd "$OUT/locales" && ls | grep -v -E '^(en-US|ar)\.pak$' | xargs rm -f)
 mkdir -p "$OUT/resources/app"

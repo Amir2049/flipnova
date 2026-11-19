@@ -51,7 +51,7 @@ const SHOTS = process.argv[2] || '';
       oldSave: FF.save.best === 4200 && FF.save.skin === 'cat' && FF.save.owned.cat === 1 && !FF.save.bossWin, locked: !FF.isUnlocked(FF.skinById('ivoid')), arStrings: !!FF.UI.act };
   });
   console.log('card', card);
-  ok.card = card.shown && card.leads && /WEEKLY BOSS/.test(card.text) && /⏳\s*\u2066?\d/.test(card.left) && card.oldSave && card.locked;
+  ok.card = card.shown && card.leads && /BOSS/.test(card.text) && /⏳\s*\u2066?\d/.test(card.left) && card.oldSave && card.locked;
   await A.page.click('#eventCard .evCard.boss');
   await A.page.waitForFunction(() => FF.UI.game && FF.UI.game.boss, null, { timeout: 8000 });
   const fight = await A.page.evaluate(async () => {

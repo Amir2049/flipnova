@@ -111,7 +111,7 @@
   });
   // ⚔️ build 36: the WEEKLY BOSS event (INFINITY VOID vs THE CRIMSON TYRANT)
   Object.assign(T.en, {
-    bossCard: 'WEEKLY BOSS', bossName: 'THE CRIMSON TYRANT', bossVs: 'INFINITY VOID vs THE CRIMSON TYRANT', bossLeft: '⏳ {t}', bossNone: '3 hearts, a checkpoint every phase. Flip through seal orbs to strike.',
+    bossCard: 'BOSS', bossName: 'THE CRIMSON TYRANT', bossVs: 'INFINITY VOID vs THE CRIMSON TYRANT', bossLeft: '⏳ {t}', bossNone: '3 hearts, a checkpoint every phase. Flip through seal orbs to strike.',
     bossBestT: '🏆 Best: {t}', bossBestP: '⚔️ Best: {p}% damage', bossWins: '{n}× defeated', bossRwP2: 'PHASE 2', bossRwP3: 'PHASE 3', bossRwWin: 'DEFEAT', bossLocal: 'Boss results are kept on this device',
     bossWinT: 'TYRANT FALLS!', bossLoseT: 'DEFEATED', bossResWin: '⚔️ Defeated in <b>{t}</b>', bossResLose: '⚔️ <b>{p}%</b> damage · phase {ph}/3', bossNewBest: '🏆 New best time this week!',
     bossNewPct: '⚔️ New best damage this week!', bossSkin: '✦ INFINITY VOID unlocked — it is yours, equip it in Characters', needBoss: 'Defeat the Weekly Boss', shopToday: "TODAY'S SHOP · new in {h}h", shopDeal: '-30%', bundle: 'BUNDLE ×3', bundleDone: 'Bundle bought!', needNerve: 'Reach NERVE 40 (NOVA)', needSecs: 'Survive 180 s in Endless', earnSkin: '✦ Earned: {n}', bossHow: 'Flip through glowing seals to strike · a last-moment dodge = COUNTER + time-shield',
@@ -131,7 +131,7 @@
     storyHow: 'دوره: تلات دقّات والضربة على التالتة. دورك: اضغط لما كل حلقة دهبي تقفل عشان تردّ الدقّة.', storyKnocks: 'دقّة رديتها'
   });
   Object.assign(T.ar, {
-    bossCard: 'زعيم الأسبوع', bossName: 'الطاغية القرمزي', bossVs: 'إنفينيتي ڤويد ضد الطاغية القرمزي', bossLeft: '⏳ {t}', bossNone: '٣ قلوب ونقطة حفظ كل مرحلة. اقلب جوه الأختام المنوّرة عشان تضرب.',
+    bossCard: 'الزعيم', bossName: 'الطاغية القرمزي', bossVs: 'إنفينيتي ڤويد ضد الطاغية القرمزي', bossLeft: '⏳ {t}', bossNone: '٣ قلوب ونقطة حفظ كل مرحلة. اقلب جوه الأختام المنوّرة عشان تضرب.',
     bossBestT: '🏆 أحسن وقت: {t}', bossBestP: '⚔️ أحسن ضرب: {p}%', bossWins: 'هزمته {n} مرة', bossRwP2: 'المرحلة ٢', bossRwP3: 'المرحلة ٣', bossRwWin: 'اهزمه', bossLocal: 'نتايج الزعيم محفوظة على جهازك بس',
     bossWinT: 'الطاغية وقع!', bossLoseT: 'اتهزمت', bossResWin: '⚔️ هزمته في <b>{t}</b>', bossResLose: '⚔️ ضربته <b>{p}%</b> · المرحلة {ph}/3', bossNewBest: '🏆 أحسن وقت ليك الأسبوع ده!',
     bossNewPct: '⚔️ أحسن ضرب ليك الأسبوع ده!', bossSkin: '✦ إنفينيتي ڤويد بقى بتاعك — لبسه من الشخصيات', needBoss: 'اهزم زعيم الأسبوع', shopToday: 'محل النهارده · يتجدد بعد {h}س', shopDeal: '-30%', bundle: 'بكج ×3', bundleDone: 'اشتريت البكج!', needNerve: 'وصّل NERVE لـ40 (NOVA)', needSecs: 'عيش 180 ثانية في Endless', earnSkin: '✦ كسبت: {n}', bossHow: 'اقلب جوه الأختام المنوّرة عشان تضرب · تفادي في آخر لحظة = ضربة مرتدة + درع زمن',
@@ -1435,7 +1435,7 @@
   function shareClip() {
     const b = UI.clip;
     if (!b) return;
-    const ext = b.type === 'video/mp4' ? 'mp4' : 'webm', name = 'flipnova-clip.' + ext;
+    const ext = b.type === 'video/mp4' ? 'mp4' : 'webm', name = 'flippo-clip.' + ext;
     if (window.AndroidBridge && window.AndroidBridge.shareVideo) {
       const fr = new FileReader();
       fr.onload = () => window.AndroidBridge.shareVideo(String(fr.result).split(',')[1], ext, t('clipText'));
@@ -1869,7 +1869,7 @@
     }
     big.toBlob(async (blob) => {
       try {
-        const file = new File([blob], 'flipnova.png', { type: 'image/png' });
+        const file = new File([blob], 'flippo.png', { type: 'image/png' });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], text, title: 'FLIPPO' });
           return;
@@ -1877,7 +1877,7 @@
       } catch (e) { /* fall back to download */ }
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'flipnova-' + res.score + '.png';
+      a.download = 'flippo-' + res.score + '.png';
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 3000);
       toast(t('saved'));
@@ -1938,7 +1938,7 @@
     };
     big.toBlob(async (blob) => {
       try {
-        const file = new File([blob], 'flipnova-challenge.png', { type: 'image/png' });
+        const file = new File([blob], 'flippo-challenge.png', { type: 'image/png' });
         if (blob && navigator.canShare && navigator.canShare({ files: [file] })) {
           UI.lastShare.via = 'files';
           await navigator.share({ files: [file], text: text + '\n' + link, title: 'FLIPPO' });

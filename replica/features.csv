@@ -1,0 +1,27 @@
+feature,area,priority,original,clone,notes
+One-tap control,core,must,yes,yes,tap flips gravity
+Gravity flip floor/ceiling,core,must,yes,yes,plus Dual Flip world swap
+Instant restart after death,core,must,yes,yes,
+Hand-made levels,content,must,yes,yes,Adventure: 50 levels / 150 stars
+Endless mode,content,must,yes,yes,28 stages / 12 worlds
+Difficulty that ramps fairly,core,must,yes,yes,human-bot tested (tools/human-test.js)
+Checkpoints / practice mode,core,must,yes,yes,Adventure checkpoints + Zen practice
+Progress saved offline,core,must,yes,yes,localStorage + IndexedDB backup + transfer code
+Works offline,platform,must,yes,yes,APK and service worker
+Android app,platform,must,yes,yes,APK ready; not on Google Play yet
+Cosmetic unlocks (skins / trails),meta,should,yes,yes,55 skins / 20 trails
+Daily challenge,meta,should,yes,yes,Daily Remix + missions + 7-day streak
+Online leaderboards,social,should,yes,yes,verified by replay
+Level editor,content,should,yes,yes,free (paywalled on some rivals)
+Share levels with others,social,should,yes,partial,level codes; no in-game browse of others' levels
+Achievements,meta,should,yes,yes,
+Share a clip / screenshot,social,should,partial,yes,slow-mo last 3 s clip + challenge link
+Boss fights,content,could,partial,yes,Weekly Boss duel
+Colour-blind mode,accessibility,should,partial,yes,
+Reduce flashes / shake,accessibility,should,partial,yes,
+Music synced to levels,audio,could,yes,skip,deliberate design rule: no music
+iOS app,platform,should,yes,no,web version plays on iPhone
+Cloud save across devices,platform,should,yes,partial,manual transfer code only
+Play Store listing live,platform,must,yes,no,listing ready in company/google-play-kit.md
+Localisation (Arabic + English),platform,should,partial,yes,
+Story mode,content,could,partial,no,story code left in ui.js but no screen in b65

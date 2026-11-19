@@ -1,10 +1,10 @@
-// FLIPNOVA for Windows: the same game (build 21) in its own window. F11 = fullscreen.
+// Flippo for Windows: the same game (build 21) in its own window. F11 = fullscreen.
 const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 Menu.setApplicationMenu(null);
 app.whenReady().then(() => {
   const win = new BrowserWindow({
-    width: 1280, height: 720, minWidth: 640, minHeight: 360, title: 'FLIPNOVA', backgroundColor: '#05060d',
+    width: 1280, height: 720, minWidth: 640, minHeight: 360, title: 'Flippo', backgroundColor: '#05060d',
     icon: path.join(__dirname, 'icon.png'), autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
   });

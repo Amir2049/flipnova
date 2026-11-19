@@ -25,7 +25,7 @@ import androidx.webkit.WebViewAssetLoader;
 import java.io.File;
 import java.io.FileOutputStream;
 
-/** Hosts the FLIPNOVA web game (bundled in assets/www) full-screen, offline, in landscape. */
+/** Hosts the Flippo web game (bundled in assets/www) full-screen, offline, in landscape. */
 public class MainActivity extends Activity {
     private WebView web;
 
@@ -131,7 +131,7 @@ public class MainActivity extends Activity {
             Intent send = new Intent(Intent.ACTION_SEND);
             send.setType("text/plain");
             send.putExtra(Intent.EXTRA_TEXT, text);
-            runOnUiThread(() -> startActivity(Intent.createChooser(send, "FLIPNOVA")));
+            runOnUiThread(() -> startActivity(Intent.createChooser(send, "Flippo")));
         }
 
         @JavascriptInterface
@@ -140,7 +140,7 @@ public class MainActivity extends Activity {
                 File dir = new File(getCacheDir(), "shared");
                 if (!dir.exists() && !dir.mkdirs()) return;
                 String e = "mp4".equals(ext) ? "mp4" : "webm";
-                File f = new File(dir, "flipnova-clip." + e);
+                File f = new File(dir, "flippo-clip." + e);
                 try (FileOutputStream out = new FileOutputStream(f)) {
                     out.write(Base64.decode(base64, Base64.DEFAULT));
                 }
@@ -150,7 +150,7 @@ public class MainActivity extends Activity {
                 send.putExtra(Intent.EXTRA_STREAM, uri);
                 send.putExtra(Intent.EXTRA_TEXT, text);
                 send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                runOnUiThread(() -> startActivity(Intent.createChooser(send, "FLIPNOVA")));
+                runOnUiThread(() -> startActivity(Intent.createChooser(send, "Flippo")));
             } catch (Exception ignored) {
                 // sharing is optional — never crash the game over it
             }
@@ -161,7 +161,7 @@ public class MainActivity extends Activity {
             try {
                 File dir = new File(getCacheDir(), "shared");
                 if (!dir.exists() && !dir.mkdirs()) return;
-                File f = new File(dir, "flipnova.png");
+                File f = new File(dir, "flippo.png");
                 try (FileOutputStream out = new FileOutputStream(f)) {
                     out.write(Base64.decode(base64Png, Base64.DEFAULT));
                 }
@@ -171,7 +171,7 @@ public class MainActivity extends Activity {
                 send.putExtra(Intent.EXTRA_STREAM, uri);
                 send.putExtra(Intent.EXTRA_TEXT, text);
                 send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                runOnUiThread(() -> startActivity(Intent.createChooser(send, "FLIPNOVA")));
+                runOnUiThread(() -> startActivity(Intent.createChooser(send, "Flippo")));
             } catch (Exception ignored) {
                 // sharing is optional — never crash the game over it
             }

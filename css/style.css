@@ -721,6 +721,12 @@ html[dir=rtl] .evCard.weekBoss.mini2 { padding: 0 calc(var(--u) * 14) 0 calc(var
 .evCard.weekBoss.mini2 .evTitle, .evCard.weekBoss.mini2 .evRank { display: none; }
 .evCard.weekBoss.mini2 .evTxt { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--u) * .8); line-height: 1.1; min-width: 0; }
 .evCard.weekBoss.mini2 .evTag { font-size: calc(var(--u) * 3.6); padding: calc(var(--u) * .5) calc(var(--u) * 1.6); white-space: nowrap; }
+/* b65 QA: the tag ran past the card (AR by ~20px, EN by ~8px) and the sprite covered the countdown — tighter tag, no tracking in Arabic, room for the sprite */
+.evCard.weekBoss.mini2 .evTag { font-size: calc(var(--u) * 3.3); letter-spacing: .06em; padding: calc(var(--u) * .5) calc(var(--u) * 1.2); }
+html[dir=rtl] .evCard.weekBoss.mini2 .evTag { letter-spacing: 0; }
+.evCard.weekBoss.mini2 .evTxt { max-width: 100%; }
+/* the .doors rule (later, same weight) wiped the sprite's room in LTR: keep it in both directions */
+.doors .evCard.weekBoss.mini2 { padding-block: 0; padding-inline: calc(var(--u) * 14) calc(var(--u) * 2.6); }
 .evCard.weekBoss.mini2 .evTime { font-size: calc(var(--u) * 4.2); font-weight: 900; white-space: nowrap; }
 .evCard.weekBoss.mini2 .evGo { position: relative; margin: 0; width: auto; height: calc(var(--u) * 9); display: flex; align-items: center; padding: 0 calc(var(--u) * 3); font-size: calc(var(--u) * 4.4); white-space: nowrap; }
 .evCard.weekBoss.mini2 .bossArt { bottom: auto; top: 50%; inset-inline-start: calc(var(--u) * -2); inset-inline-end: auto; width: calc(var(--u) * 17); translate: 0 -50%; animation: none; }

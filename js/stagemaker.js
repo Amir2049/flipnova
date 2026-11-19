@@ -40,7 +40,7 @@
       exp: '📤 صدّر', imp: '📥 استورد', expNote: 'ده كود كل المراحل — انسخه واحفظه أو ابعته:', copy: '📋 انسخ', copied: '📋 اتنسخ',
       impNote: 'الصق كود المراحل هنا:', load: 'حمّل', impOk: '📥 اتحمّلت المراحل (مسودة — جرّبها قبل ما تنشر)', impBad: 'الكود ده مش كود مراحل',
       reviews: '⭐ آراء اللاعيبة', watchEnd: '🏁 شوف النهاية', graph: 'السرعة اللي بتحسها في كل مرحلة (اللون = الصعوبة) — دوس على عمود تفتح مرحلته',
-      app: 'FLIPNOVA Maker', hello: 'أهلا يا أمير 👋 كمّل من المرحلة {n}',
+      app: 'Flippo Maker', hello: 'أهلا يا أمير 👋 كمّل من المرحلة {n}',
       bk: '🕘 نسخ', bkNote: 'نسخ احتياطية بتتعمل لوحدها (كل ما تفتح، وكل 5 دقايق شغل). دوس على نسخة ترجعلها:', bkNone: 'لسه مفيش نسخ — بتتعمل لوحدها وانت شغال', bkOk: '🕘 رجعت للنسخة دي (واللي كانت قبلها اتحفظت نسخة)', stagesN: 'مرحلة',
       notes: '📝 أفكاري', notesNote: 'أفكارك ومهامك — ليك انت بس، بتتحفظ لوحدها:', notesPh: 'مثلا: مرحلة 12 محتاجة استراحة أطول…', lang: 'EN',
       tUndo: 'رجوع', tRedo: 'تقدّم', tTestAll: 'اختبر كل المراحل', tSurprise: 'فاجئني: مرحلة عشوائية', tExp: 'صدّر كل المراحل كود', tImp: 'استورد كود مراحل', tEnd: 'شوف النهاية', tReset: 'رجّع المنشور'
@@ -61,7 +61,7 @@
       exp: '📤 Export', imp: '📥 Import', expNote: 'This code holds every stage — copy it to keep it or send it:', copy: '📋 Copy', copied: '📋 Copied',
       impNote: 'Paste a stage code here:', load: 'Load', impOk: '📥 Stages loaded (a draft — test them before you publish)', impBad: 'That is not a stage code',
       reviews: '⭐ Player reviews', watchEnd: '🏁 Watch the ending', graph: 'How fast each stage feels (colour = difficulty) — tap a bar to open its stage',
-      app: 'FLIPNOVA Maker', hello: 'Hi Amir 👋 back to stage {n}',
+      app: 'Flippo Maker', hello: 'Hi Amir 👋 back to stage {n}',
       bk: '🕘 Backups', bkNote: 'Backups are made by themselves (every time you open, and every 5 minutes of work). Tap one to go back to it:', bkNone: 'No backups yet — they are made while you work', bkOk: '🕘 Restored (what you had was backed up first)', stagesN: 'stages',
       notes: '📝 Notes', notesNote: 'Your ideas and to-dos — only for you, saved by themselves:', notesPh: 'e.g. stage 12 needs a longer breather…', lang: 'ع',
       tUndo: 'Undo', tRedo: 'Redo', tTestAll: 'Test every stage', tSurprise: 'Surprise me: a random stage', tExp: 'Export all stages as a code', tImp: 'Import a stage code', tEnd: 'Watch the ending', tReset: 'Back to published'

@@ -1,0 +1,18 @@
+{
+ "_about": "Themes for one-tap runner / gravity-flip games (Flippo's genre).",
+ "request_patterns": ["\\bi wish\\b", "\\bplease (add|make)\\b", "\\bwould (be nice|love)\\b", "\\bshould (make|add)\\b", "\\bhoping for\\b", "\\bcan you please\\b"],
+ "themes": [
+  {"id": "ads", "label": "Too many ads", "kind": "complaint", "patterns": ["\\bads?\\b", "\\badds\\b", "\\badvertisements?\\b"]},
+  {"id": "paywall", "label": "Paywalls, subscriptions and premium currency", "kind": "complaint", "patterns": ["\\bsubscription\\b", "\\$\\d", "\\bpurchase\\b", "\\bgold bars\\b", "\\bspinner\\b", "\\bfull one\\b", "\\bpay\\b"]},
+  {"id": "physics", "label": "Controls and physics feel wrong", "kind": "complaint", "patterns": ["\\bphysics are\\b", "\\bland(ing)?\\b", "\\bpropelled\\b", "\\bcamera\\b"]},
+  {"id": "performance", "label": "Lag and crashes", "kind": "complaint", "patterns": ["\\blag(ging)?\\b", "\\bclosed\\b", "\\bcrash"]},
+  {"id": "difficulty", "label": "Difficulty spikes", "kind": "complaint", "patterns": ["\\bway to hard\\b", "\\btoo hard\\b", "\\bfailing\\b", "\\bmake you fail\\b"]},
+  {"id": "accessibility", "label": "Accessibility", "kind": "complaint", "patterns": ["\\baccessibility\\b", "\\bcan.t see\\b", "\\bcannot see\\b"]},
+  {"id": "content", "label": "Wants more levels", "kind": "request", "patterns": ["\\bmore (different )?levels\\b", "\\bamount of levels\\b"]},
+  {"id": "secrets", "label": "Secrets and collectibles", "kind": "request", "patterns": ["\\bcoins\\b", "\\bsecret\\b"]},
+  {"id": "practice", "label": "Practice mode", "kind": "request", "patterns": ["\\bpractice mode\\b"]},
+  {"id": "editor", "label": "Level editor", "kind": "request", "patterns": ["\\bcreate your own level\\b", "\\blevel (maker|editor)\\b"]},
+  {"id": "skill", "label": "Praise: skill and timing", "kind": "praise", "patterns": ["\\bskill\\b", "\\btiming\\b", "\\bhard levels\\b", "\\bchallenge\\b"]},
+  {"id": "fair-free", "label": "Praise: free, no microtransactions", "kind": "praise", "patterns": ["\\bno microtransactions\\b", "\\bfree game\\b"]}
+ ]
+}
