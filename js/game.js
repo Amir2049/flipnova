@@ -55,10 +55,8 @@
     this.stage = this.L.stageAt(sx);
     this.checkpoint = 0;
     this.deaths = 0;
-    this.legend = this.mode === 'legend';
-    this.practice = this.legend && !!o.practice;
     // recorded modes: every tap is queued to the next physics tick and logged, so the run can be replayed exactly
-    this.rec = this.legend || this.mode === 'endless' || this.mode === 'daily' || this.mode === 'boss';
+    this.rec = this.mode === 'endless' || this.mode === 'daily' || this.mode === 'boss';
     this.replay = this.rec && o.replay ? o.replay : null;
     this.seed = lvlOpts.seed;
     this.ri = 0;
@@ -414,11 +412,11 @@
     if (this.victory) { this.updateVictory(dt); return; }
     if (this.dead) {
       this.deadT += dt;
-      if ((this.mode === 'campaign' || this.practice) && this.deadT > 0.75) this.respawnAtCheckpoint();
+      if (this.mode === 'campaign' && this.deadT > 0.75) this.respawnAtCheckpoint();
       else if (this.mode === 'zen' && this.deadT > 0.7) this.respawn();
       else if (this.mode === 'demo' && this.deadT > 1.2) { this.opts.seed = 0; this.reset(); }
       else if (this.boss) { this.boss.defeatTick(this.deadT); if (this.deadT > FF.BOSS_DEFEAT_LEN && !this.ended) this.end(); } // ⚔️ build 38: the defeat cinematic
-      else if (this.deadT > (this.mode === 'endless' ? (this.soClose ? 1.15 : 0.45) : 0.95) && !this.ended && this.mode !== 'zen' && this.mode !== 'demo' && this.mode !== 'campaign' && !this.practice) this.end();
+      else if (this.deadT > (this.mode === 'endless' ? (this.soClose ? 1.15 : 0.45) : 0.95) && !this.ended && this.mode !== 'zen' && this.mode !== 'demo' && this.mode !== 'campaign') this.end();
       return;
     }
     this.acc += dt;
@@ -432,7 +430,7 @@
   const VIRAL_SPEED = 1.5, GAME_SPEED = 1.25;
   Game.VIRAL_SPEED = VIRAL_SPEED;
   Game.GAME_SPEED = GAME_SPEED;
-  Game.modeSpeed = (mode) => (mode === 'viral' || mode === 'legend' ? VIRAL_SPEED : mode === 'demo' || mode === 'editor' ? 1 : GAME_SPEED);
+  Game.modeSpeed = (mode) => (mode === 'demo' || mode === 'editor' ? 1 : GAME_SPEED);
   // Endless and Daily start at 1.1x (build 35: never slower than the tutorial — it was 1x) and the whole game speeds up fast:
   // 1.5x at 10500 px (the start of stage 5 now that stage 1 is 1500 px; it was 12000): never slower than before anywhere,
   // then it ACCELERATES — every stage climbs more than the one before — up to 2.2x at the end of stage 22
@@ -796,19 +794,14 @@
 
     this.history.push(p.x, p.y, p.grav);
     if (this.history.length > 90) this.history.splice(0, 3);
-    if ((this.mode === 'daily' || this.weekRun || (this.legend && !this.practice)) && !this.inRift && (Math.round(this.time * 120) % 4 === 0) && this.ghostRec.length < 30 * 2 * 600) {
+    if ((this.mode === 'daily' || this.weekRun) && !this.inRift && (Math.round(this.time * 120) % 4 === 0) && this.ghostRec.length < 30 * 2 * 600) {
       this.ghostRec.push(Math.round(p.x), Math.round(p.y));
     }
-    if ((this.mode === 'daily' || this.legend || this.weekRun) && this.ghost && !this.ghostBeaten) {
+    if ((this.mode === 'daily' || this.weekRun) && this.ghost && !this.ghostBeaten) {
       const gx = this.ghost[this.ghost.length - 2];
       if (p.x > gx + 20) {
         this.ghostBeaten = true;
-        if (this.legend) {
-          this.popup('NEW BEST!', COL.coin, 18);
-          this.flash = 0.6;
-          this.flashCol = COL.coin;
-          this.sfx('record');
-        } else if (this.weekRun) {
+        if (this.weekRun) {
           // 👻 the week's #1 (or your own best this week) is behind you now
           const gn = this.ghostLabel();
           this.popup(gn === 'YOU' ? 'GHOST BEATEN!' : 'PASSED ' + gn + '!', '#5ef2ff', 18);
@@ -945,7 +938,7 @@
     for (const q of this.particles) q.g = p.grav * 300;
     this.sfx('crash');
     this.buzz(45);
-    if (this.mode === 'campaign' || this.legend) this.deaths++;
+    if (this.mode === 'campaign') this.deaths++;
     this.chain = 0;
     // v8 SO CLOSE: died within 20% (at least 30 m) of your best flag — say how close, and hold the moment a bit longer
     const bx = this.opts.bestX || 0;
@@ -1032,8 +1025,6 @@
       stage: this.maxStage,
       deaths: this.deaths,
       level: this.opts.level || null,
-      legend: this.legend,
-      practice: this.practice,
       replay: !!this.replay,
       tutorial: !!this.opts.tutorial,
       assist: !!(this.opts.god || (this.opts.timeScale && this.opts.timeScale !== 1) || this.opts.startX || this.opts.book),
@@ -1043,7 +1034,7 @@
       date: this.mode === 'daily' ? FF.todayKey() : undefined,
       progress: this.L.finishX && this.L.finishX !== Infinity ? FF.clamp(this.p.x / this.L.finishX, 0, 1) : 0,
       deathX: this.dead ? this.p.x : null,
-      ghostRec: this.mode === 'daily' || this.legend || this.weekRun ? this.ghostRec : null,
+      ghostRec: this.mode === 'daily' || this.weekRun ? this.ghostRec : null,
       twist: this.twist || null,
       remix: this.remix ? this.remix.mod : null,
       weekRun: !!this.weekRun,
@@ -1841,7 +1832,7 @@
   };
 
   Game.prototype.renderGhost = function (ctx, cam) {
-    if (!this.ghost || (this.mode !== 'daily' && !this.legend && !this.weekRun)) return;
+    if (!this.ghost || (this.mode !== 'daily' && !this.weekRun)) return;
     const i = Math.floor(this.time * 30) * 2;
     const g = this.ghost;
     if (i >= g.length - 1) {

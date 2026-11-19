@@ -1802,10 +1802,6 @@
       // markers for multi-world levels: {world: 'id'} switches the look, {speed: n} the pace
       if (step && step.world) {
         (this.worldMarks || (this.worldMarks = [])).push({ x: this.genX, w: step.world });
-        if (this.opts.practice && this.genX > 300) {
-          this.add({ t: 'check', x: this.genX, w: 4 });
-          this.checkpoints.push(this.genX);
-        }
         continue;
       }
       if (step && step.speed) {
