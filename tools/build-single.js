@@ -1,4 +1,4 @@
-// Packs the shipped game (build/www, made by tools/build-dist.sh) into ONE html file: dist/FLIPNOVA.html.
+// Packs the shipped game (build/www, made by tools/build-dist.sh) into ONE html file: dist/Flippo.html.
 // Double-click it and it opens in the browser — nothing to unzip, no other files needed.
 // Scripts, styles, fonts and the icon are all inlined; the world board and gift codes still need internet.
 const fs = require('fs');
@@ -30,6 +30,6 @@ html = html.replace(/<script src="(js\/[a-z0-9-]+\.js)"><\/script>/g, (_, src) =
 if (!n || /<script src=/.test(html)) throw new Error('scripts were not all inlined');
 // b46: the prologue film rides along inside the file (ui.js turns it back into a video)
 if (fs.existsSync(path.join(WWW, 'video', 'prologue-en.mp4'))) swap(/<script>/, '<script>window.FF_FILM_B64="' + b64('video/prologue-en.mp4') + '";</script><script>');
-const out = path.join(ROOT, 'dist', 'FLIPNOVA.html');
+const out = path.join(ROOT, 'dist', 'Flippo.html');
 fs.writeFileSync(out, html);
 console.log(out + ' — ' + n + ' scripts inlined, ' + Math.round(fs.statSync(out).size / 1024) + ' KB');

@@ -1,9 +1,9 @@
 // Offline cache so the game works without internet once installed.
-const CACHE = 'flipnova-v12b'; // b48: the Tyrant's level with the trailer's art
+const CACHE = 'flippo-b66'; // b66: story / boss-level scripts are gone (a missing file made the whole offline cache fail)
 const FILES = [
   './', './index.html', './css/style.css', './manifest.webmanifest',
   './fonts/cairo.css', './fonts/cairo-arabic.woff2', './fonts/cairo-latin.woff2', './fonts/cinzel-900.woff2', './js/core.js', './js/font.js', './js/sprites.js', './js/worlds.js', './js/stages.js', './js/homebg.js', './js/level.js', './js/campaign.js',
-  './js/audio.js', './js/game.js', './js/bossworld.js', './js/boss.js', './js/boss-niro.js', './js/hdart.js', './js/hdboss.js', './js/story.js', './js/bosslevel.js', './js/tyrantlevel.js', './js/fairness.js', './js/editor.js', './js/online-config.js', './js/online.js', './js/ui.js', './js/stagemaker.js', './js/main.js',
+  './js/audio.js', './js/game.js', './js/bossworld.js', './js/boss.js', './js/boss-niro.js', './js/hdart.js', './js/hdboss.js', './js/fairness.js', './js/editor.js', './js/online-config.js', './js/online.js', './js/screen.js', './js/ui.js', './js/stagemaker.js', './js/main.js',
   './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())));
