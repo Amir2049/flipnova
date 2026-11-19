@@ -1,0 +1,8 @@
+graphify-out/
+build/
+dist/FLIPNOVA-Windows.zip
+# release signing: never commit keys or their passwords
+*.jks
+*.keystore
+keystore.properties
+*.keystore.properties

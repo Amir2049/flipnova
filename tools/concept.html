@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>FLIPNOVA — Concept Art</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;800&display=swap">
+<style>
+  body { margin: 0; background: #05060d; }
+  canvas { display: block; margin: 0 0 20px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="keyart"></canvas>
+<canvas id="characters"></canvas>
+<canvas id="worlds"></canvas>
+<canvas id="obstacles"></canvas>
+<script src="../js/core.js"></script>
+<script src="../js/font.js"></script>
+<script src="../js/sprites.js"></script>
+<script src="../js/worlds.js"></script>
+<script>
+(async function () {
+  await document.fonts.load('800 40px Cairo');
+  await document.fonts.load('600 40px Cairo');
+  FF.prepareWorlds();
+  const C = FF.COLORS;
+  const S = 6;
+
+  function lowres(w, h) { const c = FF.makeCanvas(w, h); return [c, c.getContext('2d')]; }
+  function up(id, low, after) {
+    const cv = document.getElementById(id);
+    cv.width = low.width * S; cv.height = low.height * S;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.drawImage(low, 0, 0, cv.width, cv.height);
+    if (after) after(g);
+  }
+  function ar(g, text, x, y, size, color, weight, align) {
+    g.font = (weight || 800) + ' ' + size + 'px Cairo';
+    g.fillStyle = color || '#fff';
+    g.textAlign = align || 'center';
+    g.direction = 'rtl';
+    g.lineWidth = Math.max(4, size / 7);
+    g.strokeStyle = 'rgba(5,6,16,0.9)';
+    g.strokeText(text, x, y);
+    g.fillText(text, x, y);
+  }
+  const px = (g, x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+
+  // ---------------- 1. KEY ART ----------------
+  {
+    const [cv, g] = lowres(180, 225);
+    const neon = FF.worldById('neon');
+    g.drawImage(neon.far, 0, 0);
+    g.drawImage(neon.mid, -40, 0);
+    // diagonal split: blue world (left) / purple world (right)
+    for (let y = 0; y < 225; y++) {
+      const split = 70 + y * 0.35;
+      g.fillStyle = 'rgba(39,215,255,0.16)'; g.fillRect(0, y, split, 1);
+      g.fillStyle = 'rgba(180,92,255,0.22)'; g.fillRect(split, y, 180 - split, 1);
+      if (y % 2 === 0) { g.fillStyle = '#ffffff'; g.fillRect(Math.round(split), y, 1, 1); }
+    }
+    // floor & ceiling
+    for (let x = 0; x < 180; x += 32) { g.drawImage(neon.ceilTile, x, -30); g.drawImage(neon.floorTile, x, 190); }
+    px(g, 0, 29, 180, 1, C.blue); px(g, 0, 190, 180, 1, C.purple);
+    FF.drawSpikes(g, 20, 190, 16, 'up');
+    FF.drawSpikes(g, 132, 30, 24, 'down');
+    FF.drawSpikes(g, 150, 190, 16, 'up');
+    FF.drawPhaseRect(g, 112, 30, 7, 160, 'b', false, 0);
+    FF.drawPhaseRect(g, 60, 120, 18, 6, 'p', true, 0.3);
+    // flip arc trail
+    for (let i = 0; i < 26; i++) {
+      const t = i / 25;
+      const x = 22 + t * 66, y = 176 - Math.sin(t * Math.PI / 2) * 130;
+      const col = i % 3 === 0 ? C.blue : i % 3 === 1 ? C.purple : '#ffffff';
+      px(g, Math.round(x), Math.round(y), i > 18 ? 3 : 2, i > 18 ? 3 : 2, col);
+    }
+    for (let i = 0; i < 5; i++) FF.drawCoin(g, 100 + i * 12, 50 + Math.sin(i) * 3, i * 0.13, { offset: i });
+    FF.drawCoin(g, 158, 70, 0.1, { gold: true });
+    // Flippo mid-flip, big
+    const big = FF.makeCanvas(20, 24);
+    FF.drawFlippo(big.getContext('2d'), 4, 6, { skin: 'flippo', face: 'flip' });
+    g.save(); g.translate(92, 62); g.rotate(-0.5); g.drawImage(big, -20, -24, 40, 48); g.restore();
+    // title
+    FF.font.draw(g, 'FLIP', 90, 104, { scale: 3, align: 'center', color: '#ffffff', outline: '#0a0d1f' });
+    FF.font.draw(g, 'FRENZY', 90, 130, { scale: 3, align: 'center', color: C.coin, outline: '#0a0d1f' });
+    up('keyart', cv, (G) => {
+      ar(G, 'اركض. اقلب الجاذبية. غيّر العالم.', 540, 1000, 58, '#ffffff');
+      ar(G, 'ضغطة واحدة تقلب الأرض والسقف… وتبدّل العالم بين الأزرق والبنفسجي', 540, 1068, 30, '#b8f3ff', 600);
+    });
+  }
+
+  // ---------------- 2. CHARACTER SHEET ----------------
+  {
+    const [cv, g] = lowres(180, 215);
+    for (let y = 0; y < 215; y++) px(g, 0, y, 180, 1, FF.mix('#10102a', '#2a1446', y / 215));
+    for (let i = 0; i < 40; i++) px(g, (i * 53) % 180, (i * 37) % 215, 1, 1, '#3a3570');
+    FF.font.draw(g, 'FLIPPO', 90, 6, { scale: 2, align: 'center', color: C.hazard, outline: '#000' });
+    const faces = ['run', 'blink', 'flip', 'focus', 'joy', 'dead'];
+    faces.forEach((f, i) => {
+      const x = 8 + i * 29;
+      px(g, x - 2, 26, 26, 30, 'rgba(255,255,255,0.06)');
+      const b = FF.makeCanvas(20, 24);
+      FF.drawFlippo(b.getContext('2d'), 4, 6, { skin: 'flippo', face: f, foot: f === 'run' ? 0 : -1 });
+      g.drawImage(b, x - 9, 26, 40, 48);
+    });
+    // upside down running (ceiling)
+    FF.font.draw(g, 'SKINS', 90, 86, { scale: 1, align: 'center', color: C.coin });
+    FF.SKINS.forEach((s, i) => {
+      const x = 8 + i * 24;
+      const b = FF.makeCanvas(20, 24);
+      FF.drawFlippo(b.getContext('2d'), 4, 6, { skin: s, face: 'run', foot: 0, t: 0 });
+      g.drawImage(b, x - 6, 98, 30, 36);
+    });
+    FF.font.draw(g, 'TRAILS', 90, 146, { scale: 1, align: 'center', color: C.coin });
+    // trail demos
+    const trailRows = [
+      (k) => ['#ff5a3c', '#ff9a6b', '#ffd0b0'][k % 3],
+      (k) => (k % 2 ? '#ffffff' : C.coin),
+      (k) => ['#ff3355', '#ffb000', '#ffd23f', '#7dffb2', '#27d7ff', '#b45cff'][k % 6],
+      (k) => FF.rgba('#ff5a3c', 0.25 + k * 0.05)
+    ];
+    trailRows.forEach((colf, r) => {
+      const y0 = 160 + r * 11;
+      for (let k = 0; k < 14; k++) px(g, 30 + k * 7, y0 + Math.round(Math.sin(k / 2) * 2), r === 1 ? 1 : 3, r === 1 ? 1 : 3, colf(k));
+      FF.drawFlippo(g, 132, y0 - 4, { skin: 'flippo', face: 'run', foot: r % 2 });
+    });
+    up('characters', cv, (G) => {
+      const lbl = ['يجري', 'يرمش', 'يقلب!', 'تركيز كومبو', 'Near Miss', 'اصطدام'];
+      lbl.forEach((t, i) => ar(G, t, (8 + i * 29 + 11) * S, 64 * S + 34, 26, '#ffffff', 600));
+      
+      const sk = ['فليبو', 'نيون', 'روبو', 'سحابة', 'حلوى', 'الظل', 'الذهبي'];
+      sk.forEach((t, i) => ar(G, t, (8 + i * 24 + 9) * S, 136 * S + 22, 24, '#ffffff', 600));
+      ar(G, 'أشكال تجميلية فقط — نفس الحجم ونفس السرعة للجميع', 540, 1265, 30, '#b8f3ff', 600);
+    });
+  }
+
+  // ---------------- 3. WORLDS ----------------
+  {
+    const [cv, g] = lowres(180, 505);
+    px(g, 0, 0, 180, 505, '#05060d');
+    FF.WORLDS.forEach((w, i) => {
+      const strip = FF.makeCanvas(180, 320);
+      const sg = strip.getContext('2d');
+      FF.drawWorld(sg, w, 40 + i * 70, 1);
+      if (w.scanlines) FF.drawScanlines(sg, 0.18);
+      // sample obstacles per world
+      if (w.id === 'neon') { FF.drawPhaseRect(sg, 70, 214, 110, 8, 'b', true, 0); FF.drawCoin(sg, 120, 200, 0, { gold: true }); }
+      if (w.id === 'clock') { FF.drawMover(sg, 110, 196, 14, 44, 0); }
+      if (w.id === 'mirror') { FF.drawPhaseRect(sg, 90, 60, 7, 200, 'b', true, 0); FF.drawPhaseRect(sg, 130, 60, 7, 200, 'p', false, 0); }
+      if (w.id === 'candy') { for (let k = 0; k < 8; k++) FF.drawCoin(sg, 70 + k * 10, 245 - Math.sin(k / 7 * Math.PI) * 50, k * 0.1, { offset: k }); }
+      if (w.id === 'glitch') { sg.fillStyle = 'rgba(255,255,255,0.08)'; for (let x = 80; x < 170; x += 6) for (let y = 61; y < 260; y += 6) sg.fillRect(x, y, 3, 1); FF.drawLock(sg, 120, 210, '#fff'); }
+      FF.drawSpikes(sg, 40, 260, 16, 'up');
+      FF.drawFlippo(sg, 20, 248, { skin: 'flippo', face: 'run', foot: 0 });
+      g.drawImage(strip, 0, 172, 180, 98, 0, 4 + i * 100, 180, 98);
+      FF.font.draw(g, (i + 1) + ' ' + w.name, 4, 8 + i * 100, { color: '#fff', outline: '#000' });
+    });
+    up('worlds', cv, (G) => {
+      const sig = ['مفترقات طرق: آمن أم خطِر؟', 'حواجز متحركة بتوقيت معروف', 'جدران طور تختفي وتظهر', 'مسارات عملات ملتفة', 'مناطق قفل القلب'];
+      FF.WORLDS.forEach((w, i) => {
+        ar(G, w.nameAr + ' — ' + sig[i], 1060, (4 + i * 100 + 30) * S, 30, '#ffffff', 800, 'right');
+      });
+    });
+  }
+
+  // ---------------- 4. OBSTACLES ----------------
+  {
+    const [cv, g] = lowres(180, 186);
+    for (let y = 0; y < 220; y++) px(g, 0, y, 180, 1, FF.mix('#0b0f2a', '#160b2a', y / 220));
+    FF.font.draw(g, 'READ THE WORLD', 90, 5, { align: 'center', color: C.coin, outline: '#000' });
+    const cell = (i) => [i % 2 ? 94 : 4, 20 + Math.floor(i / 2) * 40];
+    const items = [
+      (x, y) => { px(g, x, y + 30, 80, 1, '#555'); FF.drawSpikes(g, x + 28, y + 30, 24, 'up'); },
+      (x, y) => { FF.drawPhaseRect(g, x + 22, y, 8, 32, 'b', true, 0); FF.drawPhaseRect(g, x + 50, y, 8, 32, 'p', false, 0); },
+      (x, y) => { for (let k = 0; k < 32; k += 3) px(g, x + 40, y + k, 1, 1, '#ff99aa'); FF.drawMover(g, x + 33, y + 6, 14, 22, 0); },
+      (x, y) => { g.fillStyle = 'rgba(255,255,255,0.10)'; for (let k = 0; k < 80; k += 6) g.fillRect(x + k, y, 3, 32); FF.drawLock(g, x + 36, y + 12, '#fff'); },
+      (x, y) => { for (let k = 0; k < 6; k++) FF.drawCoin(g, x + 14 + k * 10, y + 16 - Math.sin(k / 5 * Math.PI) * 10, k * 0.12, { offset: k }); },
+      (x, y) => { FF.drawCoin(g, x + 40, y + 16, 0.1, { gold: true }); px(g, x + 10, y + 26, 60, 4, C.purpleDark); FF.drawPhaseRect(g, x + 10, y + 26, 60, 4, 'p', true, 0); },
+      (x, y) => { px(g, x, y + 14, 80, 5, '#3a3170'); px(g, x, y + 14, 80, 1, '#8f7bff'); FF.drawSpikes(g, x + 50, y + 14, 16, 'up'); FF.drawCoin(g, x + 58, y + 3, 0, { gold: true }); FF.drawCoin(g, x + 30, y + 26, 0.2, {}); },
+      (x, y) => { FF.drawPortal(g, x + 40, y + 16, 0.4); }
+    ];
+    items.forEach((f, i) => { const [x, y] = cell(i); px(g, x, y - 2, 82, 36, 'rgba(255,255,255,0.04)'); f(x, y); });
+    up('obstacles', cv, (G) => {
+      const lbl = ['Spike Gate — أشواك حمراء دائمًا', 'Phase Wall — صلب بلونه، شبح بالآخر', 'Moving Barrier — مساره مرسوم مسبقًا', 'Flip Lock — لا قلب داخل المنطقة', 'Coin Line — اجمعه كاملًا = كومبو', 'Catch Platform — منصة طور تلتقطك', 'Choice Fork — جوهرة ×5 للشجعان', 'Secret Glitch — بوابة سرية نادرة'];
+      lbl.forEach((t, i) => { const [x, y] = cell(i); ar(G, t, (x + 41) * S, (y + 37) * S, 21, '#ffffff', 600); });
+    });
+  }
+  document.title = 'READY';
+})();
+</script>
+</body>
+</html>

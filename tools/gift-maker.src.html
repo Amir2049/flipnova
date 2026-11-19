@@ -1,0 +1,317 @@
+<title>صانع هدايا FLIPNOVA</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap">
+<style>
+  /* Layout: one column on phones, preview + editor side by side on wide screens; the game's own neon arcade look */
+  :root {
+    --bg: #07081a; --panel: #11132e; --line: #2a2f63; --fg: #e8ecff; --muted: #9aa3d4;
+    --accent: #ffd23f; --blue: #27d7ff; --purple: #b45cff; --ok: #7dffb2; --bad: #ff5a7a;
+    --f-body: 'Cairo', 'Segoe UI', Tahoma, sans-serif; --f-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 16px; }
+  header h1 { margin: 0; font-size: 1.7rem; font-weight: 900; text-wrap: balance; }
+  header h1 b { color: var(--accent); }
+  header p { margin: 2px 0 0; color: var(--muted); max-width: 65ch; }
+  .cols { display: grid; gap: 16px; grid-template-columns: 1fr; }
+  .side, .main { display: contents; }
+  .s-prev { order: 0; } .s-who { order: 1; } .s-col { order: 2; } .s-art { order: 3; } .s-out { order: 4; }
+  @media (min-width: 900px) { .cols { grid-template-columns: 340px 1fr; align-items: start; } .side, .main { display: grid; gap: 16px; min-width: 0; } .side { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+  section h2 { margin: 0; font-size: 1.05rem; color: var(--blue); }
+  .step { color: var(--accent); font-family: var(--f-mono); font-size: .85rem; letter-spacing: .04em; }
+  label { display: grid; gap: 4px; font-size: .9rem; color: var(--muted); min-width: 0; }
+  input[type=text], select, textarea { font: inherit; color: var(--fg); background: #0a0c22; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; width: 100%; box-sizing: border-box; }
+  input[type=text]:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .mono { font-family: var(--f-mono); direction: ltr; text-align: left; letter-spacing: .03em; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .row > label { flex: 1 1 130px; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+  .sw { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+  .sw input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; flex: none; }
+  button { font: inherit; font-weight: 700; color: var(--fg); background: #1a1e45; border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--blue); }
+  button.on { background: var(--blue); color: #04101c; border-color: var(--blue); }
+  button.primary { background: var(--accent); color: #241700; border-color: var(--accent); }
+  .preview { display: grid; place-items: center; background: #050612; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .preview canvas { image-rendering: pixelated; width: 100%; max-width: 320px; aspect-ratio: 16 / 10; height: auto; }
+  .grid-wrap { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; }
+  @media (max-width: 520px) { .grid-wrap { grid-template-columns: 1fr; } }
+  #pix { image-rendering: pixelated; width: 224px; height: 280px; max-width: 100%; touch-action: none; border: 1px solid var(--line); border-radius: 6px; background: #050612; cursor: crosshair; }
+  .tools { display: grid; gap: 8px; min-width: 0; }
+  .pal { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pal button { width: 40px; height: 34px; padding: 0; position: relative; }
+  .pal button span { position: absolute; inset: 5px; border-radius: 4px; }
+  .note { color: var(--muted); font-size: .85rem; margin: 0; }
+  .err { color: var(--bad); font-weight: 700; margin: 0; min-height: 1.2em; }
+  textarea.out { min-height: 120px; font-size: .78rem; }
+  ol { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; }
+  details summary { cursor: pointer; color: var(--blue); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap" dir="rtl">
+  <header>
+    <h1>صانع <b>هدايا</b> FLIPNOVA</h1>
+    <p>ارسم سكن وأثر حركة لصاحبك، واختار له كود. الصفحة بتطلعلك سطر SQL تلصقه في Supabase، والكود يشتغل في اللعبة على طول من غير تحديث.</p>
+  </header>
+
+  <div class="cols">
+    <div class="side">
+      <section class="s-prev" aria-labelledby="pv">
+        <h2 id="pv">المعاينة</h2>
+        <div class="preview"><canvas id="prev" width="64" height="40"></canvas></div>
+        <p class="note">نفس الرسم اللي في اللعبة بالظبط. الوش بيتغير لوحده عشان تشوف كل حالاته.</p>
+      </section>
+      <section class="s-out" aria-labelledby="outh">
+        <h2 id="outh"><span class="step">STEP 3</span> سطر SQL</h2>
+        <p class="err" id="err"></p>
+        <textarea class="out mono" id="out" readonly spellcheck="false"></textarea>
+        <div class="row"><button class="primary" id="copy" type="button">انسخ SQL</button><button id="regen" type="button">ID جديد</button></div>
+        <ol class="note">
+          <li>افتح Supabase ← <b>SQL Editor</b> ← <b>New query</b>.</li>
+          <li>الصق السطر ودوس <b>Run</b>. لو ظهر تحذير دوس <b>Run this query</b>.</li>
+          <li>ابعت الكود لصاحبك: يكتبه في اللعبة من <b>الإعدادات ← 🎁 كود</b>.</li>
+        </ol>
+        <details>
+          <summary>أول مرة بس: إعداد جدول الهدايا</summary>
+          <p class="note">نفّذ ده مرة واحدة قبل أول هدية.</p>
+          <textarea class="out mono" id="setup" readonly spellcheck="false"></textarea>
+          <button id="copySetup" type="button">انسخ الإعداد</button>
+        </details>
+      </section>
+    </div>
+
+    <div class="main">
+      <section class="s-who" aria-labelledby="who">
+        <h2 id="who"><span class="step">STEP 1</span> الكود والاسم</h2>
+        <div class="row">
+          <label>الكود السري (حروف إنجليزي وأرقام و -)
+            <input type="text" id="code" class="mono" value="AHMED-STAR-2026" maxlength="32" autocomplete="off"></label>
+          <label>الهدية لمين (ملاحظة ليك)
+            <input type="text" id="who2" value="أحمد" maxlength="40"></label>
+        </div>
+        <div class="row">
+          <label>اسم السكن في اللعبة
+            <input type="text" id="sname" class="mono" value="STAR KID" maxlength="16"></label>
+          <label>اسم أثر الحركة
+            <input type="text" id="tname" class="mono" value="STARDUST" maxlength="16"></label>
+        </div>
+        <label>الرسالة اللي تظهر لما يفعّل الكود (بالإنجليزي، زي باقي اللعبة)
+          <input type="text" id="msg" value="⭐ Welcome, Ahmed — this skin was made just for you" maxlength="140"></label>
+      </section>
+
+      <section class="s-col" aria-labelledby="col">
+        <h2 id="col"><span class="step">STEP 2</span> الألوان والتأثير</h2>
+        <div class="swatches" id="base"></div>
+        <div class="row">
+          <label>التأثير الحي حوالين الشخصية
+            <select id="fx">
+              <option value="none">مفيش</option><option value="glow">توهج</option><option value="orbs" selected>كورتين بيلفوا</option>
+              <option value="rain">كود نازل (ماتريكس)</option><option value="sparkle">لمعة</option><option value="glitch">جليتش</option><option value="rainbow">هالة قوس قزح</option>
+            </select></label>
+          <div class="sw"><input type="color" id="c1" value="#ffd23f" aria-label="لون التأثير ١"> لون ١</div>
+          <div class="sw"><input type="color" id="c2" value="#27d7ff" aria-label="لون التأثير ٢"> لون ٢</div>
+        </div>
+        <div class="row" style="align-items:end">
+          <label>شكل أثر الحركة
+            <select id="tstyle"><option value="dots">نقط</option><option value="rain">خطوط نازلة</option></select></label>
+          <div class="swatches" id="tcols" style="flex:2 1 260px"></div>
+        </div>
+      </section>
+
+      <section class="s-art" aria-labelledby="art">
+        <h2 id="art">ارسم فوق الشخصية</h2>
+        <div class="grid-wrap">
+          <canvas id="pix" width="16" height="20" aria-label="لوحة الرسم 16×20"></canvas>
+          <div class="tools">
+            <div class="pal" id="pal" role="group" aria-label="ألوان الرسم"></div>
+            <div class="row">
+              <button type="button" data-tool="." id="tErase">ممحاة</button>
+              <button type="button" data-tool="_" id="tHole">خرم (شفاف)</button>
+              <button type="button" id="clear">امسح الرسم</button>
+            </div>
+            <p class="note">ابدأ بشكل جاهز:</p>
+            <div class="row" id="presets"></div>
+            <p class="note">اللوحة 16×20 بكسل، وجسم الشخصية في النص (12×12). الرسم بيتحط فوق الجسم في كل حالات الوش.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>/*@@GAME@@*/</script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  // ---- sha256 (tiny, so the code itself never goes into the SQL)
+  function sha256(str) {
+    const K = [], H = [];
+    let n = 2, c = 0;
+    const isP = (x) => { for (let i = 2; i * i <= x; i++) if (x % i === 0) return false; return true; };
+    const frac = (x) => ((x - Math.floor(x)) * 4294967296) | 0;
+    while (c < 64) { if (isP(n)) { if (c < 8) H[c] = frac(Math.pow(n, 1 / 2)); K[c] = frac(Math.pow(n, 1 / 3)); c++; } n++; }
+    const bytes = Array.from(new TextEncoder().encode(str));
+    const bl = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bl >>> (i * 8)) & 255);
+    const w = new Array(64);
+    const r = (x, k) => (x >>> k) | (x << (32 - k));
+    for (let o = 0; o < bytes.length; o += 64) {
+      for (let i = 0; i < 16; i++) w[i] = (bytes[o + i * 4] << 24) | (bytes[o + i * 4 + 1] << 16) | (bytes[o + i * 4 + 2] << 8) | bytes[o + i * 4 + 3];
+      for (let i = 16; i < 64; i++) {
+        const s0 = r(w[i - 15], 7) ^ r(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = r(w[i - 2], 17) ^ r(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      let [a, b, cc, d, e, f, g, h] = H;
+      for (let i = 0; i < 64; i++) {
+        const t1 = (h + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+        const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & cc) ^ (b & cc))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = cc; cc = b; b = a; a = (t1 + t2) | 0;
+      }
+      H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + cc) | 0; H[3] = (H[3] + d) | 0;
+      H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+    }
+    return H.map((x) => (x >>> 0).toString(16).padStart(8, '0')).join('');
+  }
+
+  // ---- state
+  const BASE = [['body', 'الجسم', '#3a2a8a'], ['dark', 'الحدود', '#0d0624'], ['shade', 'الظل', '#2a1d66'], ['light', 'اللمعة', '#7a66ff'], ['eye', 'العين', '#ffffff'], ['pupil', 'النني', '#1a0b2e'], ['glow', 'التوهج', '#b45cff']];
+  const PAL = { a: '#ffd23f', b: '#ffffff', c: '#ff3355', d: '#27d7ff', e: '#7dffb2', f: '#05060d' };
+  let art = Array.from({ length: 20 }, () => '.'.repeat(16).split(''));
+  let tool = 'a';
+  let sid = 'g_' + Math.random().toString(36).slice(2, 7), tid = 't_' + Math.random().toString(36).slice(2, 7);
+  const PRESETS = {
+    'تاج': ['', '', '...a..a..a......', '...aaaaaaa......', '...acaadaa......'],
+    'شعر شايك': ['', '..b.b..b.b......', '.bbbbbbbbbb.....', 'bbbbbbbbbbbb....', '..bbbbbbbbb.....'],
+    'نضارة': ['', '', '', '', '', '', '', '...ffffffff.....', '...fddfffdd.....', '...ffffffff.....'],
+    'قرون': ['..c........c....', '..cc......cc....', '...cc....cc.....']
+  };
+
+  const base = $('base');
+  BASE.forEach(([k, label, v]) => {
+    const d = document.createElement('div'); d.className = 'sw';
+    d.innerHTML = '<input type="color" id="b_' + k + '" value="' + v + '" aria-label="' + label + '"> ' + label;
+    base.appendChild(d);
+  });
+  const tcols = $('tcols');
+  ['#ffd23f', '#ffffff', '#27d7ff', '#b45cff'].forEach((v, i) => {
+    const d = document.createElement('div'); d.className = 'sw';
+    d.innerHTML = '<input type="color" id="t' + i + '" value="' + v + '" aria-label="لون الأثر ' + (i + 1) + '"> أثر ' + (i + 1);
+    tcols.appendChild(d);
+  });
+  const pal = $('pal');
+  Object.keys(PAL).forEach((ch) => {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.tool = ch; b.title = 'لون ' + ch;
+    b.innerHTML = '<span></span>'; pal.appendChild(b);
+    const inp = document.createElement('input'); inp.type = 'color'; inp.value = PAL[ch]; inp.id = 'p_' + ch; inp.style.cssText = 'width:22px;height:34px;padding:0;border:0;background:none';
+    inp.setAttribute('aria-label', 'غيّر لون ' + ch);
+    inp.addEventListener('input', () => { PAL[ch] = inp.value; refresh(); });
+    pal.appendChild(inp);
+  });
+  const presets = $('presets');
+  Object.keys(PRESETS).forEach((name) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = name;
+    b.onclick = () => { PRESETS[name].forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] !== '.') art[y][x] = row[x]; }); refresh(); };
+    presets.appendChild(b);
+  });
+  document.querySelectorAll('[data-tool]').forEach((b) => b.addEventListener('click', () => { tool = b.dataset.tool; refresh(); }));
+  $('clear').onclick = () => { art = Array.from({ length: 20 }, () => '.'.repeat(16).split('')); refresh(); };
+  $('regen').onclick = () => { sid = 'g_' + Math.random().toString(36).slice(2, 7); tid = 't_' + Math.random().toString(36).slice(2, 7); refresh(); };
+  document.querySelectorAll('input,select').forEach((el) => el.addEventListener('input', refresh));
+
+  function gift() {
+    const v = (id) => $(id).value;
+    const skin = { id: sid, name: v('sname').toUpperCase() || 'GIFT' };
+    BASE.forEach(([k]) => { skin[k] = v('b_' + k); });
+    if (v('fx') !== 'glow') { if (v('fx') === 'none') delete skin.glow; }
+    const rows = art.map((r) => r.join(''));
+    if (rows.some((r) => /[^.]/.test(r))) { skin.art = rows; skin.pal = Object.assign({}, PAL); }
+    skin.fx = { type: v('fx') === 'glow' ? 'none' : v('fx'), c1: v('c1'), c2: v('c2') };
+    const trail = { id: tid, name: v('tname').toUpperCase() || 'GIFT', colors: [0, 1, 2, 3].map((i) => v('t' + i)), style: v('tstyle') };
+    return { skin, trail, message: v('msg') };
+  }
+
+  // ---- pixel editor
+  const pix = $('pix'), pg = pix.getContext('2d');
+  function drawPix(g) {
+    pg.clearRect(0, 0, 16, 20);
+    pg.globalAlpha = 0.45;
+    const bs = window.FF.registerSkin(Object.assign({}, g.skin, { art: null, id: 'g_basepreview', fx: null }));
+    if (bs) window.FF.drawFlippo(pg, 2, 4, { skin: bs, face: 'run', foot: 0 });
+    pg.globalAlpha = 1;
+    for (let y = 0; y < 20; y++) for (let x = 0; x < 16; x++) {
+      const ch = art[y][x];
+      if (ch === '_') { pg.fillStyle = 'rgba(255,90,122,0.6)'; pg.fillRect(x, y, 1, 1); }
+      else if (PAL[ch]) { pg.fillStyle = PAL[ch]; pg.fillRect(x, y, 1, 1); }
+    }
+  }
+  let painting = false;
+  const paintAt = (e) => {
+    const r = pix.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / r.width * 16), y = Math.floor((e.clientY - r.top) / r.height * 20);
+    if (x < 0 || y < 0 || x > 15 || y > 19) return;
+    if (art[y][x] !== tool) { art[y][x] = tool; refresh(); }
+  };
+  pix.addEventListener('pointerdown', (e) => { painting = true; pix.setPointerCapture(e.pointerId); paintAt(e); });
+  pix.addEventListener('pointermove', (e) => { if (painting) paintAt(e); });
+  pix.addEventListener('pointerup', () => { painting = false; });
+  pix.addEventListener('pointercancel', () => { painting = false; });
+
+  // ---- output
+  const SETUP = /*@@SETUP@@*/'';
+  $('setup').value = SETUP;
+  const sq = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+  function refresh() {
+    document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === tool));
+    document.querySelectorAll('#pal button').forEach((b) => { b.querySelector('span').style.background = PAL[b.dataset.tool]; });
+    const g = gift();
+    drawPix(g);
+    const code = $('code').value.replace(/\s/g, '').toUpperCase();
+    const errs = [];
+    if (!/^[A-Z0-9-]{6,32}$/.test(code)) errs.push('الكود لازم يكون من 6 لـ 32 حرف: حروف إنجليزي كبيرة وأرقام و - بس.');
+    $('err').textContent = errs.join(' ');
+    $('out').value = errs.length ? '' :
+      '-- ' + ($('who2').value || 'gift').replace(/[\r\n]/g, ' ') + '\n' +
+      'insert into public.ff_gifts (code_hash, name, gift) values (' + sq(sha256(code)) + ', ' + sq($('who2').value || 'gift') + ', ' + sq(JSON.stringify(g)) + '::jsonb)\n' +
+      'on conflict (code_hash) do update set gift = excluded.gift, name = excluded.name, active = true;';
+    preview.gift = g;
+    preview.skin = window.FF.registerSkin(Object.assign({}, g.skin, { id: 'g_live' }));
+  }
+  const copy = async (ta) => {
+    try { await navigator.clipboard.writeText(ta.value); return true; } catch (e) { ta.focus(); ta.select(); return false; }
+  };
+  $('copy').onclick = async () => { const ok = await copy($('out')); $('copy').textContent = ok ? 'اتنسخ ✓' : 'السطر متحدد، انسخه'; setTimeout(() => { $('copy').textContent = 'انسخ SQL'; }, 1600); };
+  $('copySetup').onclick = async () => { const ok = await copy($('setup')); $('copySetup').textContent = ok ? 'اتنسخ ✓' : 'متحدد، انسخه'; };
+
+  // ---- animated preview with the game's own renderer
+  const pc = $('prev'), cg = pc.getContext('2d');
+  const preview = { gift: null };
+  const FACES = ['run', 'run', 'joy', 'focus', 'flip', 'blink'];
+  function frame(ts) {
+    const t = ts / 1000;
+    cg.fillStyle = '#0b0d26'; cg.fillRect(0, 0, 64, 40);
+    cg.fillStyle = '#1b1f4a'; cg.fillRect(0, 31, 64, 9); cg.fillStyle = '#27d7ff'; cg.fillRect(0, 31, 64, 1);
+    const g = preview.gift;
+    if (g) {
+      const s = preview.skin;
+      const tr = g.trail.colors;
+      for (let i = 0; i < 18; i++) {
+        const x = 28 - i * 2, y = 24 + Math.round(Math.sin(t * 6 + i * 0.5) * 2);
+        cg.fillStyle = tr[(i + Math.floor(t * 14)) % tr.length];
+        if (g.trail.style === 'rain') cg.fillRect(x, y - ((i * 5 + t * 40) % 9), 1, 2 + (i & 1));
+        else cg.fillRect(x, y, 2, 2);
+      }
+      const face = FACES[Math.floor(t / 1.2) % FACES.length];
+      if (s) window.FF.drawFlippo(cg, 30, 19 + Math.round(Math.sin(t * 8)), { skin: s, face, foot: Math.floor(t * 8) & 1, t, sx: 1, sy: 1 });
+    }
+    requestAnimationFrame(frame);
+  }
+  refresh();
+  requestAnimationFrame(frame);
+})();
+</script>

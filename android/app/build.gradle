@@ -1,0 +1,79 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing (build 35). Point env FLIPNOVA_KEYSTORE_PROPS at a .properties file OUTSIDE the repo with
+//   storeFile=/path/to/upload.jks   storePassword=...   keyAlias=...   keyPassword=...
+// Without it the release APK is signed with the local debug key as before (sideload builds). No key or password lives here.
+def releaseProps = null
+def releasePropsPath = System.getenv('FLIPNOVA_KEYSTORE_PROPS')
+if (releasePropsPath) {
+    def f = new File(releasePropsPath)
+    if (!f.isFile()) throw new GradleException("FLIPNOVA_KEYSTORE_PROPS points to a missing file: " + releasePropsPath)
+    releaseProps = new Properties()
+    f.withInputStream { releaseProps.load(it) }
+    ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].each { k ->
+        if (!releaseProps.getProperty(k)) throw new GradleException("FLIPNOVA_KEYSTORE_PROPS file is missing '" + k + "'")
+    }
+}
+
+android {
+    namespace 'com.flipfrenzy.game'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.flipfrenzy.game'
+        minSdk 24
+        targetSdk 36
+        versionCode 65
+        versionName '14.0'
+    }
+
+    buildFeatures { buildConfig true }
+
+    // two apps from the same web build: the game, and FLIPNOVA Maker (the stage engine, its own icon and app)
+    flavorDimensions 'app'
+    productFlavors {
+        game {
+            dimension 'app'
+            resValue 'string', 'app_name', 'Flippo'
+            buildConfigField 'String', 'START', '"index.html"'
+        }
+        maker {
+            dimension 'app'
+            applicationIdSuffix '.maker'
+            resValue 'string', 'app_name', 'Flippo Maker'
+            buildConfigField 'String', 'START', '"index.html?maker=1"'
+        }
+    }
+
+    signingConfigs {
+        if (releaseProps != null) {
+            release {
+                def sf = new File(releaseProps.getProperty('storeFile'))
+                // a relative storeFile is read next to the properties file
+                storeFile sf.isAbsolute() ? sf : new File(new File(releasePropsPath).getParentFile(), releaseProps.getProperty('storeFile'))
+                storePassword releaseProps.getProperty('storePassword')
+                keyAlias releaseProps.getProperty('keyAlias')
+                keyPassword releaseProps.getProperty('keyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // your own key when FLIPNOVA_KEYSTORE_PROPS is set (Google Play), otherwise the local debug key (sideload)
+            signingConfig releaseProps != null ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.core:core:1.13.1'
+}

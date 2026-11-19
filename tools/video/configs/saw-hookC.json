@@ -1,0 +1,1 @@
+{"vid": "v3", "hook1": "RATE MY RUN", "hook2": "1 TO 10", "end1": "YOUR TURN", "seg": [{"n": 46, "stop": 0.98, "skip": 0.95, "slow": 0.965, "freeze": 30, "label": "NOOO"}, {"n": 1, "stop": 0.02, "skip": 0}, {"n": 12, "stop": 0.3, "skip": 0.27}, {"n": 27, "stop": 0.55, "skip": 0.52}, {"n": 39, "stop": 0.8, "skip": 0.77}, {"n": 47, "stop": 2, "skip": 0.94, "slow": 0.975}]}

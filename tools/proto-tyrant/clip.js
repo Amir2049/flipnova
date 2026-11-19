@@ -1,0 +1,16 @@
+const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'); const { execFileSync } = require('child_process');
+(async () => { const TMP = fs.mkdtempSync(path.join(__dirname, 'rec-'));
+  const b = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] }); const ctx = await b.newContext({ viewport: { width: 1280, height: 720 }, recordVideo: { dir: TMP, size: { width: 1280, height: 720 } } });
+  await ctx.addInitScript(() => { const conn = AudioNode.prototype.connect; AudioNode.prototype.connect = function (dst) { const r = conn.apply(this, arguments); if (dst && dst instanceof AudioDestinationNode && !dst.context.__tap) { const c = dst.context; c.__tap = c.createMediaStreamDestination(); conn.call(this, c.__tap); window.__tapCtx = c; } return r; }; });
+  const p = await ctx.newPage(); const t0 = Date.now(); await p.goto('file://' + __dirname + '/FLIPNOVA-tyrant-prototype.html'); await p.waitForTimeout(1500);
+  const recStart = await p.evaluate(async () => { const P = window.__P, S = P.S; P.tap(); await new Promise((r) => setTimeout(r, 200)); const c = window.__tapCtx; window.__chunks = []; const rec = new MediaRecorder(c.__tap.stream, { mimeType: 'audio/webm;codecs=opus' }); rec.ondataavailable = (e) => window.__chunks.push(e.data); rec.start(250); window.__rec = rec;
+    setInterval(() => { if (S.mode === 'stagger' && S.stg) { const r = S.stg.rings.find((x) => !x.done && S.t > x.t0 + 0.45); if (r) P.tap(); return; } if (S.mode !== 'fight' && S.mode !== 'teach') return; if (S.t - S.flipT < 0.14) return; const hl = S.t - S.flipT < 0.07 ? S.from : S.lane;
+      for (const q of S.proj) { if (q.st !== 'in') continue; const d = q.x - 420; if (q.gold && q.lane === hl && d > 0 && d < 120) { P.tap(); return; } if (!q.gold && q.lane === hl && d > 0 && d < 260 && q.k === 'blade') { P.tap(); return; } if (q.k === 'meteor' && q.lane === hl && q.land - S.t < 0.3) { P.tap(); return; } if (q.k === 'breath' && q.lane === hl) { P.tap(); return; } } }, 16);
+    return performance.timeOrigin + performance.now() - 200; });
+  await p.waitForFunction(() => window.__P.S.mode === 'won' && window.__P.S.t - window.__P.S.mt0 > 3, null, { timeout: 240000 });
+  const audio = await p.evaluate(() => new Promise((ok) => { const r = window.__rec; r.onstop = async () => { const buf = new Uint8Array(await new Blob(window.__chunks).arrayBuffer()); let s = ''; for (let i = 0; i < buf.length; i += 32768) s += String.fromCharCode.apply(null, buf.subarray(i, i + 32768)); ok(btoa(s)); }; r.stop(); }));
+  const v = await p.video().path(); await ctx.close(); await b.close();
+  fs.writeFileSync(TMP + '/a.webm', Buffer.from(audio, 'base64'));
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', v, '-itsoffset', ((recStart - t0) / 1000).toFixed(3), '-i', TMP + '/a.webm', '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'medium', '-crf', '24', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', '-b:a', '160k', '-af', 'loudnorm=I=-15:TP=-1.5', '-movflags', '+faststart', '-shortest', __dirname + '/tyrant-prototype-gameplay.mp4']);
+  fs.rmSync(TMP, { recursive: true, force: true }); console.log('ok', (fs.statSync(__dirname + '/tyrant-prototype-gameplay.mp4').size / 1e6).toFixed(1) + ' MB');
+})().catch((e) => { console.error(e); process.exit(1); });

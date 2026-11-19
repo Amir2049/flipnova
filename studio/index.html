@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0f1c">
+  <title>NOVA STUDIO</title>
+  <link rel="stylesheet" href="css/studio.css">
+</head>
+<body>
+  <!-- HOME -->
+  <section id="home" class="screen on">
+    <header class="homeHead">
+      <div class="logo">NOVA<span>STUDIO</span></div>
+      <div class="tag" data-t="tagline"></div>
+      <button class="btn ghost" data-act="lang" id="langBtn"></button>
+      <button class="btn ghost" data-act="library">📚 <span data-t="library"></span></button>
+      <button class="btn ghost" data-act="import">📥 <span data-t="import"></span></button>
+    </header>
+    <div id="resume"></div>
+    <h3 data-t="newGame"></h3>
+    <div id="tplList" class="cards"></div>
+    <h3 data-t="myGames"></h3>
+    <div id="projList" class="cards"></div>
+  </section>
+
+  <!-- EDITOR -->
+  <section id="editor" class="screen">
+    <header class="bar">
+      <button class="ic" data-act="home" title="Home">⌂</button>
+      <div class="tabs">
+        <button class="tab on" data-tab="scene">🗺 <span data-t="tScene"></span></button>
+        <button class="tab" data-tab="art">🎨 <span data-t="tArt"></span></button>
+        <button class="tab" data-tab="objects">🧩 <span data-t="tObjects"></span></button>
+        <button class="tab" data-tab="rules">⚡ <span data-t="tRules"></span></button>
+        <button class="tab" data-tab="game">⚙ <span data-t="tGame"></span></button>
+      </div>
+      <button class="btn play" data-act="play">▶ <span data-t="play"></span></button>
+    </header>
+
+    <div class="pane on" id="pane-scene">
+      <div class="tools">
+        <button class="tool on" data-tool="draw" data-tt="hDraw">✏️</button>
+        <button class="tool" data-tool="erase" data-tt="hErase">🧽</button>
+        <button class="tool" data-act="rectMode" id="rectBtn" data-tt="hRect">▭</button>
+        <button class="tool" data-tool="pick" data-tt="hPick">💧</button>
+        <button class="tool" data-tool="move" data-tt="hMove">✋</button>
+        <button class="tool" data-tool="here" data-tt="hHere">🎯</button>
+        <button class="tool" data-act="undo" data-tt="hUndo">↶</button>
+        <div class="sep"></div>
+        <button class="tool" data-act="scenePrev">◀</button>
+        <div id="sceneName" class="sceneName"></div>
+        <button class="tool" data-act="sceneNext">▶</button>
+        <button class="tool" data-act="sceneMenu" title="Scene settings">⋯</button>
+      </div>
+      <div class="sceneWrap"><canvas id="sceneCv"></canvas></div>
+      <div id="palette" class="palette"></div>
+    </div>
+
+    <div class="pane" id="pane-art">
+      <div id="spriteList" class="spriteList"></div>
+      <div class="artMain">
+        <canvas id="artCv" width="256" height="256"></canvas>
+        <div class="artSide">
+          <div id="colors" class="colors"></div>
+          <div class="row">
+            <button class="tool on" data-pen="pen">✏️</button><button class="tool" data-pen="erase">🧽</button><button class="tool" data-pen="fill">🪣</button>
+            <button class="tool" data-act="artMirror" title="Mirror">⇋</button><button class="tool" data-act="artUndo">↶</button>
+          </div>
+          <div class="row">
+            <span class="lbl" data-t="frame"></span><button class="tool" data-act="frame0" id="fr0">1</button><button class="tool" data-act="frame1" id="fr1">2</button>
+            <button class="tool" data-act="artClear" title="Clear">🗑</button>
+          </div>
+          <canvas id="artPreview" width="48" height="48"></canvas>
+          <div class="row"><input id="spriteName" maxlength="16"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-objects">
+      <div id="typeList" class="typeList"></div>
+      <div id="typeEdit" class="typeEdit"></div>
+    </div>
+
+    <div class="pane" id="pane-rules">
+      <div class="rulesHead"><span data-t="rulesHead"></span> <button class="btn" data-act="addRule">＋ <span data-t="addRule"></span></button></div>
+      <div id="ruleList" class="ruleList"></div>
+    </div>
+
+    <div class="pane" id="pane-game">
+      <div class="form" id="gameForm"></div>
+    </div>
+  </section>
+
+  <!-- PLAY -->
+  <section id="play" class="screen">
+    <div id="playHost"></div>
+    <button class="ic close" data-act="stop">✕</button>
+  </section>
+
+  <div id="modal" class="modal hidden"><div class="box"><div id="modalBody"></div></div></div>
+  <div id="toast" class="toast hidden"></div>
+  <div id="hint" class="hint hidden"></div>
+
+  <script src="js/runtime.js"></script>
+  <script src="js/templates.js"></script>
+  <script src="js/studio.js"></script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+{
+ "best": 614,
+ "coins": 9,
+ "runs": 1,
+ "skin": "flippo",
+ "trail": "pixel",
+ "owned": {
+  "flippo": 1
+ },
+ "ach": {
+  "clean_line": 1793758898620,
+  "first_flip": 1793758898660,
+  "frenzy": 1793758898678
+ },
+ "seen": {
+  "trajectory": true,
+  "zigzag": true,
+  "spikeC": true,
+  "spikeF": true,
+  "pad": true
+ },
+ "tower": {},
+ "daily": {
+  "date": "",
+  "best": 0,
+  "ghost": null
+ },
+ "totalDist": 98,
+ "xp": 41,
+ "missions": {
+  "date": "2026-11-04",
+  "list": [
+   {
+    "id": "coins",
+    "target": 200,
+    "reward": 120,
+    "progress": 9,
+    "done": false
+   },
+   {
+    "id": "lines",
+    "target": 10,
+    "reward": 120,
+    "progress": 2,
+    "done": false
+   },
+   {
+    "id": "near",
+    "target": 8,
+    "reward": 120,
+    "progress": 2,
+    "done": false
+   }
+  ],
+  "bonus": false
+ },
+ "levels": [],
+ "bestStage": 1,
+ "scores": [
+  {
+   "s": 614,
+   "d": 98,
+   "st": 1,
+   "skin": "flippo",
+   "t": 1793758898681,
+   "name": "FLIPPO",
+   "id": "izwl8b9n14"
+  }
+ ],
+ "todayScores": {
+  "date": "2026-11-04",
+  "list": [
+   {
+    "s": 614,
+    "d": 98,
+    "st": 1,
+    "skin": "flippo",
+    "t": 1793758898681,
+    "name": "FLIPPO",
+    "id": "izwl8b9n14"
+   }
+  ]
+ },
+ "name": "",
+ "camp": {},
+ "legend": {
+  "attempts": 0,
+  "best": 0,
+  "bins": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "done": false,
+  "date": "",
+  "time": 0,
+  "winAttempts": 0,
+  "proof": "",
+  "hall": [],
+  "ms": {},
+  "layout": 4
+ },
+ "settings": {
+  "sfx": 0.8,
+  "ui": 0.6,
+  "muted": false,
+  "vibration": true,
+  "reduceFx": false,
+  "guides": false,
+  "lang": "en",
+  "hand": "right"
+ },
+ "enV1": 1
+}
