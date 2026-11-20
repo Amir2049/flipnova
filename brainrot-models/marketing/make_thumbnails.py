@@ -250,15 +250,14 @@ def thumb_tomb():
 def thumb_egyptian():
     L.reset()
     desert((255, 150, 80), (60, 70, 170))
-    sun(70, -20, 3.0, (255, 210, 160))
+    sun(62, -20, 4.5, (255, 215, 170))
     pyramid((0, 140), 70)
     names = ["MolokhiaKraken", "AstroSphinx", "KosharyDragon", "NilePhoenix", "ShawarmaSultan",
              "FulMoon", "BasbousaCat", "PharaohFalafel"]
-    spots = [(-21, 9, 25), (-11, 10, 12), (0, 11, 0), (11, 10, -12), (21, 9, -25),
-             (-14, -1, 15), (0, -2, 0), (14, -1, -15)]
+    spots = [((i - 3.5) * 7.0, 3.0 - 0.25 * ((i - 3.5) * 1.6) ** 2, -(i - 3.5) * 8) for i in range(8)]
     for n, (x, y, yaw) in zip(names, spots):
         creature(n, (x, y, 0), yaw=yaw)
-    camera((0, -30, 8), (0, 4, 3.0), lens=28)
+    camera((0, -33, 9), (0, 2, 2.6), lens=32)
     p = os.path.join(OUT, "thumbnail_2_egyptian_brainrots.png")
     render(p, 1920, 1080)
     caption(p, [("EGYPTIAN BRAINROTS", FONT, 120, (255, 214, 60), (0.5, 0.1), "mm"),
@@ -268,18 +267,18 @@ def thumb_egyptian():
 def thumb_all20():
     L.reset()
     desert((150, 210, 255), (70, 120, 230))
-    sun(55, -30, 3.8)
+    sun(52, -30, 4.5)
     names = ["BananaRocket", "ToastPenguin", "CactusDJ", "DiscoDumpling", "CosmicKettle", "TurboTurtle", "MoonMango",
              "RoyalNoodle", "PizzaShark", "ThunderSloth", "CrystalCroissant", "GalaxyJellyfish",
              "PharaohFalafel", "MolokhiaKraken", "NilePhoenix", "AstroSphinx", "FulMoon", "BasbousaCat",
              "ShawarmaSultan", "KosharyDragon"]
-    rows = [names[0:7], names[7:14], names[14:20]]
+    rows = [names[0:10], names[10:20]]
     for r, row in enumerate(rows):
-        y = 22 - 11 * r
+        y = 9 - 10 * r
         for i, n in enumerate(row):
-            x = (i - (len(row) - 1) / 2) * 8.5
-            creature(n, (x, y, 0), yaw=-x * 1.4, scale=0.95)
-    camera((0, -36, 17), (0, 9, 1.5), lens=26)
+            x = (i - (len(row) - 1) / 2) * (6.6 if r == 0 else 7.2) + (1.5 if r == 1 else 0)
+            creature(n, (x, y, 0), yaw=-x * 1.2, scale=1.0)
+    camera((0, -34, 12), (0, 3, 2.0), lens=27)
     p = os.path.join(OUT, "thumbnail_3_collect_all_20.png")
     render(p, 1920, 1080)
     caption(p, [("COLLECT ALL 20!", FONT, 130, (255, 214, 60), (0.5, 0.1), "mm")])
