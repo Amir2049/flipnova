@@ -688,7 +688,7 @@ html[dir=rtl] #over:not(.hidden) .overR > * { animation-name: slideStart; }
 .evCard.weekBoss .bossRw { color: #ffe9a0; }
 .bossArt { position: absolute; bottom: calc(var(--u) * 13); inset-inline-end: calc(var(--u) * -6); width: calc(var(--u) * 46); height: auto; image-rendering: pixelated; pointer-events: none;
   filter: drop-shadow(0 0 calc(var(--u) * 3) rgba(255,58,90,.7)); animation: bossPeek 3.2s ease-in-out infinite; }
-html[dir=rtl] .bossArt { transform: scaleX(-1); }
+html[dir=rtl] .bossArt { transform: none; scale: -1 1; } /* b66: `scale`, not transform — the float animation animates transform and was un-mirroring it (the AR sprite collapsed to a sliver every 1.6 s) */
 @keyframes bossPeek { 0%, 100% { translate: 0 0; } 50% { translate: calc(var(--u) * -1.6) calc(var(--u) * -2); } }
 .evCard.weekBoss:hover .bossArt { translate: calc(var(--u) * -4) calc(var(--u) * -3); }
 
@@ -714,7 +714,7 @@ html[dir=rtl] .evCard.weekBoss.mini2 .evTag { letter-spacing: 0; }
 .doors .evCard.weekBoss.mini2 { padding-block: 0; padding-inline: calc(var(--u) * 14) calc(var(--u) * 2.6); }
 .evCard.weekBoss.mini2 .evTime { font-size: calc(var(--u) * 4.2); font-weight: 900; white-space: nowrap; }
 .evCard.weekBoss.mini2 .evGo { position: relative; margin: 0; width: auto; height: calc(var(--u) * 9); display: flex; align-items: center; padding: 0 calc(var(--u) * 3); font-size: calc(var(--u) * 4.4); white-space: nowrap; }
-.evCard.weekBoss.mini2 .bossArt { bottom: auto; top: 50%; inset-inline-start: calc(var(--u) * -2); inset-inline-end: auto; width: calc(var(--u) * 17); translate: 0 -50%; animation: none; }
+.evCard.weekBoss.mini2 .bossArt { bottom: auto; top: 50%; inset-inline-start: calc(var(--u) * 1); inset-inline-end: auto; width: calc(var(--u) * 17); translate: 0 -50%; animation: none; }
 .evCard.weekBoss.mini2:hover .bossArt { translate: 0 -56%; }
 .homeCredit { inset-inline-start: auto !important; inset-inline-end: calc(var(--u) * 9); }
 

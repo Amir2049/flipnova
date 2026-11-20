@@ -38,10 +38,12 @@
     // the sky body: a pixel sun (day / dawn) or moon (dusk / night), drifting slowly
     const bx = Math.round(236 - (t % 120) * 0.15), by = tod === 'day' ? 50 : tod === 'night' ? 46 : 64;
     if (tod === 'night' || tod === 'dusk') {
+      // b66: a full pixel disc with craters. The old crescent was cut with dark rectangles, which only matched a
+      // near-black sky: on the desert / nebula / jungle skies it showed as a tan square with a navy notch.
       ctx.fillStyle = 'rgba(255,246,214,0.85)';
-      ctx.fillRect(bx - 4, by - 6, 8, 12); ctx.fillRect(bx - 6, by - 4, 12, 8);
-      ctx.fillStyle = 'rgba(10,12,40,0.9)';
-      ctx.fillRect(bx, by - 5, 5, 10); ctx.fillRect(bx + 2, by - 6, 3, 12);
+      [4, 8, 10, 10, 10, 10, 8, 4].forEach((w, r) => ctx.fillRect(bx - w / 2, by - 4 + r, w, 1));
+      ctx.fillStyle = 'rgba(205,190,150,0.75)';
+      ctx.fillRect(bx - 3, by - 2, 2, 2); ctx.fillRect(bx + 1, by + 1, 3, 2); ctx.fillRect(bx - 1, by + 3, 1, 1);
     } else {
       ctx.fillStyle = tod === 'dawn' ? 'rgba(255,170,90,0.8)' : 'rgba(255,240,170,0.8)';
       ctx.fillRect(bx - 5, by - 7, 10, 14); ctx.fillRect(bx - 7, by - 5, 14, 10);

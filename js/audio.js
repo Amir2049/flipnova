@@ -250,6 +250,30 @@
       thump(b, { f0: 70, f1: 320, dur: 0.12, gain: 0.35, wave: 'square', lp: 900 });
       noise(b, { f0: 600, f1: 4000, q: 1.5, dur: 0.12, gain: 0.35 });
     },
+    // b66: the b61 worlds' zones get a voice when you enter them (noise, clicks and thumps only — no tones)
+    windTail(b) { // rushing in, with the grit of sand
+      noise(b, { f0: 500, f1: 3600, q: 1.2, dur: 0.4, gain: 0.4, a: 0.25, pan: -0.3 });
+      noise(b, { buf: A.crackle, type: 'highpass', f0: 3000, dur: 0.3, gain: 0.5, delay: 0.15 });
+    },
+    windHead(b) { // pushed back, muffled
+      noise(b, { type: 'lowpass', f0: 2600, f1: 260, q: 0.9, dur: 0.5, gain: 0.4, a: 0.05 });
+      noise(b, { buf: A.crush, type: 'lowpass', f0: 900, f1: 200, dur: 0.4, gain: 0.3, delay: 0.05 });
+    },
+    fieldFloat(b) { // soft air and three unpitched bubble ticks
+      noise(b, { type: 'lowpass', f0: 1800, f1: 500, dur: 0.35, gain: 0.3, a: 0.08 });
+      for (let i = 0; i < 3; i++) noise(b, { f0: 1800 + i * 350, q: 14, dur: 0.03, gain: 0.35, delay: 0.08 + i * 0.07, pan: i % 2 ? 0.5 : -0.5 });
+    },
+    fieldHeavy(b) { // pressed down
+      thump(b, { f0: 100, f1: 34, dur: 0.28, gain: 0.4 });
+      noise(b, { buf: A.crush, type: 'lowpass', f0: 1800, f1: 200, dur: 0.3, gain: 0.35 });
+      click(b, { f: 1200, gain: 0.3, dur: 0.02 });
+    },
+    totem(b) { // a stone knock: the jungle totem is carved stone, not a spring pad
+      noise(b, { f0: 310, q: 12, dur: 0.09, gain: 1.4 });
+      noise(b, { f0: 820, q: 10, dur: 0.06, gain: 1.0 });
+      thump(b, { f0: 150, f1: 60, dur: 0.1, gain: 0.4 });
+      noise(b, { f0: 600, f1: 2400, q: 1.4, dur: 0.1, gain: 0.3, a: 0.02 });
+    },
     lock(b) {
       thump(b, { f0: 120, f1: 80, dur: 0.05, gain: 0.3, wave: 'square', lp: 500 });
       click(b, { f: 1500, gain: 0.3, dur: 0.015 });

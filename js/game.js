@@ -600,10 +600,11 @@
       this.flash = 1;
       this.flashCol = Phys.phaseOf(p.grav) === 'b' ? COL.blue : COL.purple;
       this.squash = -1;
-      this.sfx('pad');
+      const totem = L.near(p.x - 12, p.x + 12).some((o) => o.t === 'totem'); // b66: a totem flip gets its own sound and word (was the pad's BOING)
+      this.sfx(totem ? 'totem' : 'pad');
       this.buzz(10);
       this.burst(p.x + 6, p.grav > 0 ? p.y : p.y + PH, '#39ff88', 8, 60);
-      this.popup('BOING!', '#39ff88');
+      this.popup(totem ? 'FLIP!' : 'BOING!', '#39ff88');
     }
     if (this.invuln > 0) this.invuln -= dt;
 
@@ -642,6 +643,9 @@
     for (const o of near) {
       if (o.ghost && !Phys.overlap(p.x, p.y, PW, PH, o.x, o.y, o.w, o.h)) o.ghost = false;
       switch (o.t) {
+        case 'wind': case 'field': // b66: a sound as you enter a b61 zone (o.heard is for sound only, physics never reads it)
+          if (!o.heard && p.x + PW / 2 >= o.x) { o.heard = true; this.sfx(o.t === 'wind' ? (o.kind === 'tail' ? 'windTail' : 'windHead') : (o.kind === 'float' ? 'fieldFloat' : 'fieldHeavy')); }
+          break;
         case 'coin':
           if (o.taken) break;
           if (frz) {
@@ -1440,8 +1444,9 @@
     const fl = o.kind === 'float', col = fl ? '#3fdc7a' : '#ff6a1a';
     ctx.fillStyle = FF.rgba(col, 0.1); ctx.fillRect(x, C, o.w, F - C);
     ctx.fillStyle = FF.rgba(col, 0.7); ctx.fillRect(x, C, 2, F - C); ctx.fillRect(x + o.w - 2, C, 2, F - C);
+    const calm = !!this.settings.reduceFx; // b66: Reduce flashes = half the moving bits (drawing only)
     if (fl) {
-      for (let i = 0; i < o.w / 14; i++) {
+      for (let i = 0; i < o.w / 14; i += calm ? 2 : 1) {
         const bx = x + ((i * 37) % o.w), by = F - ((t * 18 + i * 23) % (F - C));
         ctx.fillStyle = FF.rgba('#c8ffd8', 0.55); ctx.fillRect(bx, by, 2, 2); ctx.fillRect(bx + 1, by - 1, 1, 1);
       }
@@ -1461,16 +1466,21 @@
     const tail = o.kind === 'tail', col = tail ? '#ffc23a' : '#ff7a3a';
     ctx.fillStyle = FF.rgba(col, 0.09); ctx.fillRect(x, C, o.w, F - C);
     ctx.fillStyle = FF.rgba(col, 0.75); ctx.fillRect(x, C, 2, F - C); ctx.fillRect(x + o.w - 2, C, 2, F - C);
-    for (let i = 0; i < o.w / 9; i++) {
-      const len = 6 + (i % 4) * 3, sp = tail ? 160 : -110;
+    // b66: a dark line inside each edge — orange on the orange desert sky was nearly invisible
+    ctx.fillStyle = 'rgba(5,6,13,0.8)'; ctx.fillRect(x + 2, C, 1, F - C); ctx.fillRect(x + o.w - 3, C, 1, F - C);
+    const calm = !!this.settings.reduceFx;
+    for (let i = 0; i < o.w / 9; i += calm ? 2 : 1) {
+      const len = 6 + (i % 4) * 3, sp = (tail ? 160 : -110) * (calm ? 0.5 : 1);
       const xx = x + (((i * 41 + t * sp) % o.w) + o.w) % o.w, yy = C + 8 + ((i * 29) % (F - C - 16));
-      ctx.fillStyle = FF.rgba(i % 3 ? '#ffe2a8' : '#ffffff', 0.5);
+      ctx.fillStyle = FF.rgba(i % 3 ? '#ffe2a8' : '#ffffff', 0.75);
       ctx.fillRect(Math.round(Math.min(xx, x + o.w - len)), yy, len, 1);
     }
     for (let xx = x + 14; xx < x + o.w - 14; xx += 30) { // chevrons on the middle line
       for (let k = 0; k < 2; k++) {
         const cx = xx + k * 5, d = tail ? 1 : -1;
-        ctx.fillStyle = FF.rgba(col, 0.8);
+        ctx.fillStyle = 'rgba(5,6,13,0.75)'; // b66: a dark copy 1 px behind, so the chevron reads on any sky
+        for (let r = 0; r < 4; r++) { ctx.fillRect(cx + d * r + 1, FF.MID - 4 + r + 1, 1, 1); ctx.fillRect(cx + d * r + 1, FF.MID + 3 - r + 1, 1, 1); }
+        ctx.fillStyle = FF.rgba(col, 0.9);
         for (let r = 0; r < 4; r++) { ctx.fillRect(cx + d * r, FF.MID - 4 + r, 1, 1); ctx.fillRect(cx + d * r, FF.MID + 3 - r, 1, 1); }
       }
     }
@@ -1479,8 +1489,12 @@
   // b61 TOTEM: a carved stone pole across the lane with a glowing double arrow — passing it flips you
   Game.prototype.drawTotem = function (ctx, o, x, t) {
     x = Math.round(x);
-    const glow = 0.55 + 0.35 * Math.sin(t * 6 + o.x * 0.01), passed = this.p && this.p.x + PW / 2 >= o.x;
-    ctx.fillStyle = FF.rgba('#7aff6a', passed ? 0.12 : 0.22 * glow); ctx.fillRect(x - 4, C, o.w + 8, F - C);
+    const passed = this.p && this.p.x + PW / 2 >= o.x;
+    // b66: steady under Reduce flashes; brighter while you are about to pass it (reads p.x, writes nothing)
+    const near = !passed && this.p && o.x - (this.p.x + PW / 2) < 48;
+    const glow = this.settings.reduceFx ? 0.55 : 0.55 + 0.35 * Math.sin(t * 6 + o.x * 0.01);
+    ctx.fillStyle = FF.rgba('#7aff6a', passed ? 0.12 : near ? 0.5 : 0.22 * glow); ctx.fillRect(x - 4, C, o.w + 8, F - C);
+    ctx.fillStyle = '#0a1006'; ctx.fillRect(x - 1, C, 1, F - C); ctx.fillRect(x + o.w, C, 1, F - C); // dark outline: stone on a dark jungle
     for (let y = C; y < F; y += 12) {
       ctx.fillStyle = '#3a4a2e'; ctx.fillRect(x, y, o.w, 11);
       ctx.fillStyle = '#5e7448'; ctx.fillRect(x, y, o.w, 1); ctx.fillRect(x, y, 1, 11);
@@ -1489,7 +1503,7 @@
     const c = passed ? '#5a7a4a' : FF.mix('#7aff6a', '#ffffff', glow * 0.4), m = FF.MID;
     ctx.fillStyle = c;
     ctx.fillRect(x + 2, m - 9, 2, 18);
-    for (let r = 0; r < 3; r++) { ctx.fillRect(x + 2 - r, m - 9 + r, 2 + r * 2, 1); ctx.fillRect(x + 2 - r, m + 8 - r, 2 + r * 2, 1); }
+    for (let r = 0; r < 4; r++) { ctx.fillRect(x + 2 - r, m - 9 + r, 2 + r * 2, 1); ctx.fillRect(x + 2 - r, m + 8 - r, 2 + r * 2, 1); } // (b66: 4 rows, a wider arrow head)
     // vines wrapping it
     ctx.fillStyle = '#2f9a3a';
     for (let y = C + 3; y < F - 3; y += 3) ctx.fillRect(x + Math.round(2.5 + Math.sin(y / 5 + o.x) * 3.5), y, 1, 2);

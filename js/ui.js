@@ -1968,7 +1968,7 @@
       FF.audio.setVolumes({ sfx: s.sfx, ui: s.ui });
       persist();
     }));
-    $$('#setList [data-rg]').forEach((r) => (r.onchange = () => sound(r.dataset.rg === 'ui' ? 'ui' : 'coin')));
+    $$('#setList [data-rg]').forEach((r) => (r.onchange = () => sound(r.dataset.rg === 'ui' ? 'ui' : 'flip') /* b66: test the SFX volume with the flip, not the quietest sound (coin) */));
     $$('#setList [data-act2]').forEach((b) => (b.onclick = () => {
       if (b.dataset.act2 === 'saveOut' || b.dataset.act2 === 'saveIn') { sound('ui'); showCode(b.dataset.act2); return; }
       if (b.dataset.act2 === 'hand') s.hand = s.hand === 'left' ? 'right' : 'left';
