@@ -388,9 +388,8 @@
     // v13 (b64, Amir: 'the second part is a bit boring'): v12 stretched so much that taps/min stayed flat (~58) after
     // minute 2 — no build-up. Now the top speed comes at ~stage 15 and the stretch is gentler, so the pace keeps climbing
     13: { gap: 26, stretch: true, book: true, smooth: true, lens: true, dense: true, damp: 0.75, full: true, fit: true, taps: true, wide: true, topX: 120000, tfPow: 0.6 },
-    // v14 (b66, "make one tap more fun"): v13's road + CLOSE SHAVE coins (x3) right before every 3rd spike group,
-    // and (Amir: 'too many shapes do what spikes do') spikes are 2 of every 3 hazard groups instead of 1 in 5
-    14: { gap: 26, stretch: true, book: true, smooth: true, lens: true, dense: true, damp: 0.75, full: true, fit: true, taps: true, wide: true, topX: 120000, tfPow: 0.6, risk: true, spiky: true }
+    // v14 (b66, "make one tap more fun"): v13's road + CLOSE SHAVE coins (x3) right before every 3rd spike group
+    14: { gap: 26, stretch: true, book: true, smooth: true, lens: true, dense: true, damp: 0.75, full: true, fit: true, taps: true, wide: true, topX: 120000, tfPow: 0.6, risk: true }
   };
   FF.GEN_V = 14;
   // ---- endless growth: stages every 300m, each one can bring a twist
@@ -1129,7 +1128,7 @@
   // v10: every stage walks through all the beat looks before repeating one (spikes last), from a different start each stage
   Level.prototype.fitLook = function (x, rng) {
     const st = this.stX ? this.stX.length : 1;
-    if (this.lookSt !== st) { this.lookSt = st; this.lookN = 0; const a = ['block', 'mace', 'crystal', 'ember']; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } this.lookOrder = this.gen.spiky ? [].concat(...a.map((l) => ['spike', 'spike', l])) : a.concat('spike'); } // (v14: spikes are 2 of every 3 hazards; v10-v13: 1 in 5)
+    if (this.lookSt !== st) { this.lookSt = st; this.lookN = 0; const a = ['block', 'mace', 'crystal', 'ember']; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } this.lookOrder = a.concat('spike'); }
     return this.lookOrder[this.lookN++ % this.lookOrder.length];
   };
   const LOOK_CYCLE = ['spike', 'block', 'spike', 'mace', 'crystal', 'spike', 'ember'];

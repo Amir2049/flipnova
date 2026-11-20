@@ -1578,6 +1578,9 @@
   };
   Game.prototype.drawHBlock = function (ctx, o, x, t) {
     x = Math.round(x);
+    // b66 (Amir: more of the hazards should LOOK like spikes): about 1 in 5 ground looks is drawn as spikes.
+    // Drawing only — same object, same hitbox (the spike art is never smaller than it), the game is unchanged.
+    if (o.look && ((Math.floor(o.x) * 2654435761) >>> 0) % 5 === 0) { FF.drawSpikes(ctx, x, o.side === 'top' ? o.y : o.y + o.h, o.w, o.side === 'top' ? 'down' : 'up'); return; }
     if (o.look && o.look !== 'block') { this.drawLookHazard(ctx, o, x, t); return; }
     const top = o.side === 'top';
     ctx.fillStyle = '#3a0814';
