@@ -832,6 +832,8 @@
   Game.prototype.takeCoin = function (o) {
     o.taken = true;
     this.coinsTaken++;
+    const ck = o.fork ? o.fork + o.lane : ''; // b66: per set, for the "all coins" star (see Level.add)
+    (this.coinGot || (this.coinGot = {}))[ck] = (this.coinGot[ck] || 0) + 1;
     const val = (o.gold ? 5 : 1) * (this.mod === 'goldrush' ? 2 : 1);
     this.coins += val;
     this.addScore(o.gold ? 50 : 10);
@@ -1009,6 +1011,8 @@
       coins: this.coins,
       rifts: this.rifts || 0,
       coinsTaken: this.coinsTaken,
+      // b66: all coins = every plain coin + one whole lane of every fork (both lanes can't be run in one deathless pass)
+      coinsAll: this.L.allCoins(this.coinGot || {}),
       coinTotal: this.L.coinTotal || 0,
       greats: this.greats || 0, bestNerve: this.bestNerve || 0, secs: Math.floor(this.runT || 0), // (v8 missions)
       perfects: this.perfects,

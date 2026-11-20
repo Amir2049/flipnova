@@ -539,9 +539,24 @@
     return FF.clamp(x / this.gen.dLen, 0, 1);
   };
 
+  // b66: the "all coins" star — every plain coin, plus one whole lane of every fork (a fork's lanes are split by a solid
+  // slab, so a deathless run can only take one). got = { '': plain taken, 'f3r': risky lane of fork f3 taken, ... }
+  Level.prototype.allCoins = function (got) {
+    const sets = this.coinSets || {};
+    if ((got[''] || 0) < (sets[''] || 0)) return false;
+    const forks = {};
+    for (const k in sets) if (k) (forks[k.slice(0, -1)] || (forks[k.slice(0, -1)] = [])).push(k);
+    return Object.values(forks).every((ks) => ks.some((k) => (got[k] || 0) >= sets[k]));
+  };
   Level.prototype.add = function (o) {
     if (o.w === undefined) o.w = 0;
-    if (o.t === 'coin') this.coinTotal = (this.coinTotal || 0) + 1;
+    if (o.t === 'coin') {
+      this.coinTotal = (this.coinTotal || 0) + 1;
+      // b66: a fork's two lanes can't both be run without dying, so for the "all coins" star each fork counts one lane
+      const ck = o.fork ? o.fork + o.lane : '';
+      const cs = this.coinSets || (this.coinSets = {});
+      cs[ck] = (cs[ck] || 0) + 1;
+    }
     if (o.t === 'dash') (this.dashes || (this.dashes = [])).push(o);
     if (o.t === 'wind') (this.winds || (this.winds = [])).push(o);
     this.objs.push(o);
@@ -919,7 +934,7 @@
     if (c[st]) return c[st];
     list = this.withBeats(list);
     const tmp = Object.create(this);
-    tmp.objs = []; tmp.dashes = []; tmp.winds = null; tmp.coinTotal = 0; tmp.groupId = 0; tmp.riftCount = this.riftCount || 0;
+    tmp.objs = []; tmp.dashes = []; tmp.winds = null; tmp.coinTotal = 0; tmp.coinSets = {}; tmp.groupId = 0; tmp.riftCount = this.riftCount || 0;
     tmp.opts = Object.assign({}, this.opts, { noHints: true });
     tmp.rng = FF.mulberry32((this.opts.seed || 1) * 13 + st * 7);
     const d = this.stageDef(this.genX).hard;
@@ -1334,6 +1349,7 @@
     const gap = (70 - 14 * d) * k;
     let surf = 0;
     let gems = ++this.groupId;
+    const fid = 'f' + gems; // b66: the fork's coins are tagged by lane (r = risky, s = safe) for the "all coins" star
     for (let x = sx + 50 * k; x < sx + len - 40 * k; x += gap) {
       if (riskUpper) {
         if (surf === 0) this.add({ t: 'spike', x, y: top, w: 16, dir: 'up' });
@@ -1342,12 +1358,16 @@
         if (surf === 0) this.add({ t: 'spike', x, y: F, w: 16, dir: 'up' });
         else this.add({ t: 'spike', x, y: bot, w: 16, dir: 'down' });
       }
-      this.add({ t: 'coin', x: x + 8, y: riskUpper ? (C + top) / 2 : (bot + F) / 2, gold: true, group: gems });
+      this.add({ t: 'coin', x: x + 8, y: riskUpper ? (C + top) / 2 : (bot + F) / 2, gold: true, group: gems, fork: fid, lane: 'r' });
       surf ^= 1;
     }
     // safe lane: plain coins
     const sy = riskUpper ? F - 6 : C + 6;
+    const n0 = this.objs.length;
     this.coinLine(sx + 30 * k, sy, 8, 26 * k);
+    for (let i = n0; i < this.objs.length; i++) if (this.objs[i].t === 'coin') { // re-file the safe lane's coins under the fork
+      const o = this.objs[i], cs = this.coinSets; cs[''] -= 1; o.fork = fid; o.lane = 's'; cs[fid + 's'] = (cs[fid + 's'] || 0) + 1;
+    }
     return 60 * k + len + 30 * k;
   };
 
