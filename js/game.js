@@ -200,15 +200,16 @@
     // Was this flip a Perfect? (simulate "no flip" — would we have died very soon?)
     const qualifies = p.grounded || this.time - this.lastFlipT > 0.3;
     const graded = this.graded();
+    const feel = graded || (this.mode === 'campaign' && !this.boss); // b66: the Adventure gets the grade FEEDBACK too (no points: its scores stay as they were)
     let perfect = false, grade = 0; // grade (Endless/Daily on rules v8): 2 GREAT, 1 GOOD — every saving tap answers you
     if (qualifies) {
-      const tNo = Phys.timeToDeath(p, this.L, this.time, graded ? 0.75 : 0.3);
+      const tNo = Phys.timeToDeath(p, this.L, this.time, feel ? 0.75 : 0.3);
       if (tNo !== null && tNo <= 0.26) {
         const q = Phys.clone(p);
         Phys.flipState(q);
         const tYes = Phys.timeToDeath(q, this.L, this.time, 0.3);
         perfect = tYes === null;
-      } else if (graded && tNo !== null) {
+      } else if (feel && tNo !== null) {
         const q = Phys.clone(p);
         Phys.flipState(q);
         if (Phys.timeToDeath(q, this.L, this.time, 0.3) === null) grade = tNo <= 0.45 ? 2 : 1;
@@ -266,15 +267,24 @@
       if (this.perfStreak >= 5) this.emit('ach', 'perfect_rhythm');
     } else {
       this.perfStreak = 0;
-      if (grade === 2) { // GREAT: late enough to count — a small ring, combo, a little FLOW
+      if (grade === 2 && !graded) { // b66: Adventure — the same look and sound, nothing scored
+        this.popup('GREAT', '#9be7ff', 12);
+        this.rings.push({ x: p.x + 6, y: p.y + 6, t: 0, life: 0.22, r: 16, col: '#9be7ff' });
+        this.sfx('great');
+      } else if (grade === 1 && !graded) {
+        this.rings.push({ x: p.x + 6, y: p.y + 6, t: 0, life: 0.16, r: 10, col: '#cfd6ff' });
+        this.sfx('good');
+      } else if (grade === 2) { // GREAT: late enough to count — a small ring, combo, a little FLOW
         this.skill('GREAT', '#9be7ff', 12, 0.08);
         this.greats++;
         this.rings.push({ x: p.x + 6, y: p.y + 6, t: 0, life: 0.22, r: 16, col: '#9be7ff' });
+        this.sfx('great'); // b66: GREAT is heard, not only seen
         this.flowAdd(0.12);
         this.nerveHit();
       } else if (grade === 1) { // GOOD: safe and early — a quiet ring, a few points, no text
         this.addScore(4);
         this.rings.push({ x: p.x + 6, y: p.y + 6, t: 0, life: 0.16, r: 10, col: '#cfd6ff' });
+        this.sfx('good');
         this.nerveBreak();
       }
     }
@@ -302,7 +312,7 @@
     this.flash = 1; this.flashCol = T[2];
     this.shake = Math.max(this.shake, this.settings.reduceFx ? 0.08 : 0.22);
     this.burst(this.p.x + 6, this.p.y + 6, [T[2], '#ffffff', COL.coin], 24, 110, 2);
-    this.sfx(this.nerve >= 25 ? 'record' : 'frenzy');
+    this.sfx('nerveTier', { tier: NERVE.indexOf(T) }); // b66: a sound that grows with each tier
     this.buzz(25);
   };
   Game.prototype.nerveBreak = function () {

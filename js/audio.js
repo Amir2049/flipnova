@@ -177,6 +177,21 @@
       thump(b, { f0: 140, f1: 55, dur: 0.07, gain: 0.35 });
       thump(b, { f0: 90, f1: 60, dur: 0.04, gain: 0.12, wave: 'square', lp: 600 });
     },
+    // b66: the tap grades answer by ear too (noise and clicks only, quieter than PERFECT)
+    good(b) { click(b, { f: 2400, gain: 0.18, dur: 0.012 }); },
+    great(b) {
+      click(b, { f: 3000, gain: 0.3, dur: 0.014 });
+      click(b, { f: 4200, gain: 0.22, dur: 0.012, delay: 0.035 });
+      noise(b, { f0: 3500, f1: 6500, q: 2, dur: 0.06, gain: 0.18 });
+    },
+    // b66: each NERVE tier sounds bigger than the last (was 'frenzy' for tiers 1-2 and 'record' for 3-4)
+    nerveTier(b, o) {
+      const n = Math.max(0, Math.min(3, (o && o.tier) || 0));
+      thump(b, { f0: 140 - n * 15, f1: 45, dur: 0.16 + n * 0.04, gain: 0.35 + n * 0.08 });
+      noise(b, { f0: 900, f1: 5000 + n * 1500, q: 1.3, dur: 0.18 + n * 0.05, gain: 0.3 + n * 0.06, a: 0.02 });
+      for (let i = 0; i <= n; i++) click(b, { f: 2600 + i * 500, gain: 0.25, dur: 0.012, delay: 0.06 + i * 0.05 });
+      if (n >= 2) noise(b, { buf: A.crackle, type: 'highpass', f0: 2500, dur: 0.25, gain: 0.3, delay: 0.08 });
+    },
     perfect(b) {
       click(b, { f: 5000, gain: 0.7, dur: 0.015 });
       noise(b, { type: 'highpass', f0: 7000, q: 0.5, dur: 0.14, gain: 0.35, delay: 0.01 });
