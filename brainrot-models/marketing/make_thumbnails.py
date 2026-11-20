@@ -298,7 +298,133 @@ def icon():
     caption(p, [("HEIST", FONT, 92, (255, 214, 60), (0.5, 0.88), "mm")])
 
 
-SHOTS = {"tomb": thumb_tomb, "egyptian": thumb_egyptian, "all20": thumb_all20, "icon": icon}
+# ---------------------------------------------------------------- v2: design-critique fixes
+def point(loc, energy, color, radius=0.5):
+    bpy.ops.object.light_add(type="POINT", location=loc)
+    l = bpy.context.object.data
+    l.energy = energy
+    l.color = L.lin(color)[:3]
+    l.shadow_soft_size = radius
+
+
+def night_sky():
+    desert(sky_low=(40, 60, 140), sky_high=(10, 12, 45))
+    star = mat("SkyStar", (255, 255, 240), rough=0.3, bump=0, emit=8.0)
+    rnd = random.Random(2)
+    for _ in range(140):
+        a, e = rnd.uniform(-1.2, 1.2), rnd.uniform(0.12, 0.7)
+        r = 280
+        ball((r * math.sin(a) * math.cos(e), r * math.cos(a) * math.cos(e), r * math.sin(e)), rnd.uniform(0.3, 0.8), star, seg=6, ring=4)
+    L.objs.clear()
+    bpy.context.scene.world.node_tree.nodes["Background"].inputs[1].default_value = 0.5
+
+
+def flying_coins(center, n, seed=5):
+    gold = mat("Coin", (255, 205, 60), (220, 160, 30), rough=0.25, bump=0.02, coat=0.8)
+    rnd = random.Random(seed)
+    for _ in range(n):
+        x = center[0] + rnd.uniform(-6, 6)
+        y = center[1] + rnd.uniform(-3, 2)
+        z = center[2] + rnd.uniform(0, 7)
+        cyl((x, y, z), 0.38, 0.1, gold, rot=(rnd.uniform(0, 3), rnd.uniform(0, 3), 0), verts=18)
+    L.objs.clear()
+
+
+def postfx(path, sat=1.25, contrast=1.12, vignette=0.55):
+    from PIL import Image, ImageEnhance, ImageFilter, ImageChops, ImageDraw
+    im = Image.open(path).convert("RGB")
+    im = ImageEnhance.Color(im).enhance(sat)
+    im = ImageEnhance.Contrast(im).enhance(contrast)
+    im = im.filter(ImageFilter.UnsharpMask(radius=2, percent=60, threshold=2))
+    W, H = im.size
+    mask = Image.new("L", (W, H), 0)
+    d = ImageDraw.Draw(mask)
+    d.ellipse((-W * 0.25, -H * 0.3, W * 1.25, H * 1.3), fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(W // 8))
+    dark = Image.new("RGB", (W, H), (0, 0, 0))
+    im = Image.composite(im, Image.blend(im, dark, vignette), mask)
+    im.save(path)
+
+
+def big_title(path, text, size, cy, rotate=-4, top=(255, 236, 90), bottom=(255, 140, 20)):
+    """Huge gradient title with a thick dark outline and a 3D drop, slightly tilted."""
+    from PIL import Image, ImageDraw, ImageFont
+    im = Image.open(path).convert("RGBA")
+    W, H = im.size
+    f = ImageFont.truetype(FONT, size)
+    stroke = size // 7
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    for k in range(stroke, 0, -2):  # extruded dark depth
+        d.text((W / 2 + k * 0.5, cy + k), text, font=f, anchor="mm", fill=(60, 20, 10, 255), stroke_width=stroke, stroke_fill=(30, 8, 20, 255))
+    d.text((W / 2, cy), text, font=f, anchor="mm", fill=(0, 0, 0, 255), stroke_width=stroke, stroke_fill=(25, 10, 35, 255))
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).text((W / 2, cy), text, font=f, anchor="mm", fill=255)
+    box = mask.getbbox()
+    grad = Image.new("RGBA", (W, H))
+    gd = ImageDraw.Draw(grad)
+    for y in range(box[1], box[3] + 1):
+        t = (y - box[1]) / max(1, box[3] - box[1])
+        c = tuple(int(a + (b - a) * t) for a, b in zip(top, bottom))
+        gd.line([(0, y), (W, y)], fill=c + (255,))
+    layer.paste(grad, (0, 0), mask)
+    # glossy highlight on the upper third of the letters
+    hl = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(hl).rectangle((0, box[1], W, box[1] + (box[3] - box[1]) * 0.35), fill=70)
+    from PIL import ImageChops
+    hl = ImageChops.multiply(hl, mask)
+    layer.paste(Image.new("RGBA", (W, H), (255, 255, 255, 255)), (0, 0), hl)
+    layer = layer.rotate(rotate, resample=Image.BICUBIC, center=(W / 2, cy))
+    im.alpha_composite(layer)
+    im.convert("RGB").save(path)
+
+
+def thumb_tomb_v2():
+    L.reset()
+    night_sky()
+    sun(30, 160, 0.6, (120, 150, 255))  # cold moonlight from behind = rim light
+    pyramid((-30, 95), 60, (150, 130, 110))
+    pyramid((40, 130), 45, (140, 120, 105))
+    sarcophagus((0.0, 5.5, 0))
+    point((0, 5.5, 2.6), 4500, (255, 190, 80), radius=1.5)      # treasure glow up-lighting the hero
+    point((-6, -10, 6), 1200, (255, 220, 170), radius=3)       # warm key from the front-left
+    point((9, 2, 7), 2500, (90, 200, 255), radius=2)           # cyan rim on the right
+    creature("KosharyDragon", (-1.0, 0.5, 0.2), yaw=18, scale=1.45)
+    mummy((6.0, -5.0, 0), yaw=-55, s=1.35)
+    flying_coins((0, 0, 1.5), 34)
+    coins((0, -6), 30, 9, seed=4)
+    camera((-1.5, -19, 2.2), (0.3, 0, 4.3), lens=28)
+    cam = bpy.context.scene.camera.data
+    cam.dof.use_dof = True
+    cam.dof.focus_distance = 19.5
+    cam.dof.aperture_fstop = 4.0
+    bpy.context.scene.view_settings.view_transform = "AgX"
+    p = os.path.join(OUT, "thumbnail_1_tomb_raid_v2.png")
+    render(p, 1920, 1080, samples=64)
+    postfx(p)
+    big_title(p, "TOMB RAID!", 175, 930)
+
+
+def icon_v2():
+    L.reset()
+    night_sky()
+    sun(30, 160, 0.6, (120, 150, 255))
+    point((0, -3, 2.0), 1500, (255, 190, 80), radius=1.0)
+    point((5, 2, 7), 1800, (90, 200, 255), radius=2)
+    point((-5, -6, 6), 700, (255, 225, 180), radius=2)
+    pyramid((0, 60), 35, (150, 130, 110))
+    creature("KosharyDragon", (0, 0, 0), yaw=22, scale=1.0)
+    flying_coins((2.5, 1.5, 3.5), 8, seed=11)
+    camera((-0.2, -6.6, 4.7), (0.35, -1.6, 4.5), lens=36)
+    p = os.path.join(OUT, "icon_v2.png")
+    render(p, 512, 512, samples=96)
+    postfx(p, sat=1.3, vignette=0.45)
+
+
+SHOTS_V2 = {"tomb2": thumb_tomb_v2, "icon2": icon_v2}
+
+
+SHOTS = {"tomb": thumb_tomb, "egyptian": thumb_egyptian, "all20": thumb_all20, "icon": icon, **SHOTS_V2}
 if __name__ == "__main__":
     which = sys.argv[-3]
     for k in (SHOTS if which == "all" else which.split(",")):
