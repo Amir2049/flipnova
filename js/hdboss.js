@@ -256,7 +256,10 @@
   let unboundSaid = false, curF = null;
   let wbuf = null, wbx = null, wTick = -1, wKey = '';
   // the quality governor: a phone that can't keep up gets a lighter picture, then the pixel fight (never a laggy one)
-  const Q = { level: 0, acc: 0, n: 0, last: 0, slow: 0 };
+  // b66: phones (touch / the Android app) start one step lighter (a 640 px backing store, same look): measured at a 4x
+  // throttled CPU the full-size HD intro reached 216 ms frames and the fight p95 33 ms before the governor caught up
+  const PHONE = (() => { try { return !!window.AndroidBridge || window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } })();
+  const Q = { level: PHONE ? 1 : 0, acc: 0, n: 0, last: 0, slow: 0 };
   function tyrantState(f, bolt) {
     const t = f.t, A = f.anim || { kind: 'idle', hits: [] }, mode = f.mode, el = t - (f.modeT0 || 0), bs = f.bossScreen();
     const s = ST; s.dmg = 1 - f.hp / f.hpMax; s.ph = f.phase || 0; s.A = A;

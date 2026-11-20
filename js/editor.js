@@ -131,7 +131,7 @@
       const parts = raw.split('|');
       if (parts[0] !== 'FF1' || parts.length < 6) return null;
       const lv = E.blank();
-      lv.name = decodeURIComponent(parts[1]).slice(0, 24);
+      lv.name = decodeURIComponent(parts[1]).slice(0, 20); // b66: same 20 as the name box (24 silently cut on the first edit)
       lv.world = FF.worldById(parts[2]).id;
       lv.speed = FF.clamp(parseInt(parts[3], 10) || 120, 90, 170);
       lv.len = FF.clamp((parseInt(parts[4], 10) || 200) * GRID, 400, MAX_LEN);
@@ -141,7 +141,7 @@
         if (!k) continue;
         const [xs, ys] = tok.slice(1).split('.');
         const it = { k, x: FF.clamp(parseInt(xs, 10) * GRID, START_SAFE, lv.len) };
-        if (ys !== undefined) it.y = FF.clamp(parseInt(ys, 10), C, F);
+        if (ys !== undefined) { const y = parseInt(ys, 10); if (isFinite(y)) it.y = FF.clamp(y, C, F); } // b66: a garbled y gave NaN
         if (isFinite(it.x)) lv.items.push(it);
         if (lv.items.length >= MAX_ITEMS) break;
       }

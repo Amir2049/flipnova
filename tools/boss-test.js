@@ -29,6 +29,14 @@ const SHOTS = process.argv[2] || '';
   const fresh = async (initSave) => {
     const ctx = await b.newContext({ viewport: { width: 960, height: 540 } });
     await ctx.route(/supabase\.co/, (r) => r.abort());
+    // b66: the fight's seed comes from the week, and the checks below (dims, tunnel time) were tuned on one week's road:
+    // pin the clock to that week so the test doesn't change result every Friday
+    await ctx.addInitScript(() => {
+      const RD = Date, off = Date.parse('2026-11-19T12:00:00Z') - RD.now();
+      function D(...a) { return a.length ? new RD(...a) : new RD(RD.now() + off); }
+      D.prototype = RD.prototype; D.now = () => RD.now() + off; D.UTC = RD.UTC; D.parse = RD.parse;
+      window.Date = D;
+    });
     if (initSave) await ctx.addInitScript((s) => { try { if (!localStorage.getItem('flipfrenzy.v1')) localStorage.setItem('flipfrenzy.v1', s); } catch (e) { /* */ } }, JSON.stringify(initSave));
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errs.push(e.message));
