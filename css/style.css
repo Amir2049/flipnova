@@ -290,23 +290,6 @@ html[dir=ltr] .tagline, html[dir=ltr] body { font-family: 'Cairo', 'Segoe UI', s
 .tool.cat b { font-size: calc(var(--u) * 7); }
 
 /* ---------- Adventure ---------- */
-#storyBox { background: rgba(5,6,13,.96); justify-content: flex-start; padding: calc(var(--u) * 5) calc(var(--u) * 8); gap: calc(var(--u) * 3); }
-.storyList { display: flex; gap: calc(var(--u) * 3); width: 100%; flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; padding: calc(var(--u) * 2) calc(var(--u) * 1); scroll-snap-type: x proximity; }
-.stCard { position: relative; flex: 1 0 calc(var(--u) * 40); max-width: calc(var(--u) * 56); display: flex; flex-direction: column; border: calc(var(--u) * .6) solid #33276a; background: #120d26; color: #fff; font-family: inherit; padding: 0; cursor: pointer; text-align: start; scroll-snap-align: center; overflow: hidden; transition: transform .12s, border-color .12s; }
-.stCard canvas { width: 100%; flex: 1; min-height: 0; object-fit: cover; image-rendering: pixelated; display: block; background: #000; }
-.stCard .stN { position: absolute; top: 0; inset-inline-start: 0; background: #ffd23f; color: #1a1030; font-weight: 900; font-size: calc(var(--u) * 3.6); padding: calc(var(--u) * .8) calc(var(--u) * 2); }
-.stCard .stTxt { padding: calc(var(--u) * 2) calc(var(--u) * 2.4); display: flex; flex-direction: column; gap: calc(var(--u) * .6); line-height: 1.15; }
-.stCard b { font-size: calc(var(--u) * 4.1); font-weight: 900; line-height: 1.1; min-height: calc(var(--u) * 9); }
-.stCard small { font-size: calc(var(--u) * 3.4); color: #b8a6ff; min-height: calc(var(--u) * 8); }
-.stCard .stGo { font-size: calc(var(--u) * 4); font-weight: 900; padding: calc(var(--u) * 1.6) 0; text-align: center; background: linear-gradient(180deg, #ff5a8a, #ff7a3c); }
-.stCard.done { border-color: #3fdc7a; } .stCard.done .stGo { background: linear-gradient(180deg, #1f8a4a, #14562f); }
-.stCard.cine .stGo { background: linear-gradient(180deg, #7b4dff, #4b23b8); }
-.stCard.lock, .stCard.soon { cursor: default; } .stCard.lock canvas, .stCard.soon canvas { filter: brightness(.45) saturate(.5); }
-.stCard.lock .stGo, .stCard.soon .stGo { background: #241c48; color: #8a80b8; }
-.stCard.next { border-color: #ffd23f; animation: bossGlow 2.8s ease-in-out infinite; }
-.stCard:not(.lock):not(.soon):hover { transform: translateY(calc(var(--u) * -1)); }
-.stCard .stRe { position: absolute; top: 0; inset-inline-end: 0; background: rgba(5,6,13,.75); color: #fff; border: 0; font: inherit; font-weight: 900; font-size: calc(var(--u) * 3.4); padding: calc(var(--u) * 1) calc(var(--u) * 2); cursor: pointer; }
-.storyLine { margin: 0; font-size: calc(var(--u) * 4); color: #b8a6ff; text-align: center; min-height: calc(var(--u) * 6); }
 #camp { background: rgba(5,6,13,.94); justify-content: flex-start; padding: calc(var(--u) * 5) calc(var(--u) * 12); gap: calc(var(--u) * 3); }
 .campHead { display: flex; align-items: center; gap: calc(var(--u) * 4); width: 100%; }
 .campHead h2 { flex: 1; text-align: center; }
@@ -565,6 +548,8 @@ html[dir=rtl] .hpIcon::before { clip-path: polygon(100% 0, 0 50%, 100% 100%); }
 .mini:active { transform: translateY(calc(var(--u) * 1)); }
 .minis .updBtn { margin: 0; height: calc(var(--u) * 10); padding: 0 calc(var(--u) * 3); flex-direction: row; gap: calc(var(--u) * 2); border-radius: 0; }
 #home.newbie .minis .mini { display: none; }
+/* b66: the Level Maker / Zen buttons draw 20-22 px tall on phones; an invisible hit area makes the finger target ~44 px without changing the look */
+.minis .mini { position: relative; } .minis .mini::after { content: ''; position: absolute; inset: calc(var(--u) * -6) calc(var(--u) * -1.5); }
 #home .vsBanner { max-width: calc(var(--u) * 168); border-radius: 0; flex: none; padding: calc(var(--u) * 1.6) calc(var(--u) * 4); }
 #home .vsBanner:not(.hidden) ~ .doors { display: none; } /* a friend's challenge: just PLAY it (Adventure / Daily come back after) */
 #home:not(.hidden) .hero > * { animation: rise .5s var(--spring) both; }
@@ -746,9 +731,6 @@ html[dir=rtl] .evCard.weekBoss.mini2 .evTag { letter-spacing: 0; }
 .doors .evCard.weekBoss .evTitle, .doors .evCard.weekBoss .evRank, .doors .evCard.weekBoss .evGo { display: none; }
 
 /* b46: the prologue film */
-#filmBox{position:fixed;inset:0;z-index:9000;background:#000;display:flex;align-items:center;justify-content:center}
-#filmBox video{width:100%;height:100%;object-fit:contain;background:#000}
-#filmBox .filmSkip{position:absolute;top:max(12px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right));font:700 14px/1 system-ui,sans-serif;letter-spacing:2px;color:#e8e0cc;background:rgba(0,0,0,.45);border:1px solid rgba(232,224,204,.35);border-radius:999px;padding:10px 16px;cursor:pointer}
 
 /* 🛒 today's shop */
 .rarityHead.r-shop { color: #ffd23f; }

@@ -28,7 +28,8 @@ const PORT = 8798;
     FF.save.stageDraft.stages[1].name = 'MY STAGE';
     const ownerOk = await FF.Online.ownerCheck('test-code'), ownerBad = await FF.Online.ownerCheck('AMIR-KING-0000');
     const wrong = await FF.Online.publishBook('nope', FF.save.stageDraft);
-    const ok = await FF.Online.publishBook('test-code', FF.save.stageDraft);
+    // b66: like the real Publish button (stagemaker.js), the book carries a `stamp` — unstamped books are ignored (online.js BOOK_MIN_STAMP)
+    const ok = await FF.Online.publishBook('test-code', Object.assign(JSON.parse(JSON.stringify(FF.save.stageDraft)), { stamp: Date.now() }));
     return { ownerOk, ownerBad, wrong, ok, id: FF.BOOK.id, name: FF.BOOK.stages[1].name };
   });
   // a friend opens the game: the new book arrives without any update

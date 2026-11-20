@@ -11,6 +11,10 @@ const path = require('path');
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto('file://' + root + '/index.html');
   await page.waitForTimeout(1200);
+  // b66: the Level Maker button is hidden for new players (build 33, until 5 runs or stage 3) — play as a returning player
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('flipfrenzy.v1') || '{}'); Object.assign(s, { runs: 6, tutDone: 1 }); localStorage.setItem('flipfrenzy.v1', JSON.stringify(s)); });
+  await page.reload();
+  await page.waitForTimeout(1200);
   console.log('featured:', await page.evaluate(() => FF.Editor.FEATURED.map((l) => l.name + ' ' + JSON.stringify(FF.Editor.verify(l)))));
   await page.click('[data-act=levels]');
   await page.waitForTimeout(300);

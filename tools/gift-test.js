@@ -32,6 +32,8 @@ const PORT = 8798;
   page.on('dialog', (d) => { errs.push('DIALOG ' + d.message()); d.dismiss(); });
   await page.goto(base + '/index.html'); await page.waitForTimeout(3200); // let the daily-streak toasts pass
   const redeem = async (code) => {
+    // b66: toasts queue (build 35: one at a time), so clear the last answer's toast before the next code
+    await page.evaluate(() => document.querySelectorAll('#toasts .toast').forEach((t) => t.remove()));
     await page.evaluate((url) => { FF.save.onlineOverride = { url, key: 'test-key' }; FF.UI.act('settings'); }, base);
     await page.click('#settings [data-act=redeem]');
     await page.fill('#codeText', code);

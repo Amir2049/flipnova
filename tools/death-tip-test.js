@@ -29,11 +29,27 @@ const path = require('path');
       out.causes[c] = (out.causes[c] || 0) + 1;
       if (o.t === 'hblock' && o.look) { out.lookDeaths++; if (!/^look_(floor|ceil)$/.test(c)) out.wrong.push(seed + ':' + c); }
     }
+    // b66: the three b61 worlds (sandstorm wind, nebula gravity fields, jungle totems): start inside each of their stages
+    out.newWorld = {};
+    FF.BOOK.stages.forEach((st, i) => {
+      if (!['desert', 'nebula', 'jungle'].includes(st.world)) return;
+      for (let k = 0; k < 25; k++) {
+        const seed = 1000 + i * 50 + k;
+        const g = new FF.Game({ mode: 'endless', seed, startX: i * FF.Level.STAGE_LEN + 60, silent: true, settings: {}, callbacks: {}, seen: {} });
+        const rng = FF.mulberry32(seed * 13 + 5);
+        for (let j = 0; j < 120 * 40 && !g.dead; j++) { if (rng() < 0.03) g.pendingFlip = true; g.tick(FF.STEP); }
+        if (!g.dead) continue;
+        const c = g.dead.cause, o = g.dead.obj || {};
+        out.newWorld[st.world + ':' + c] = (out.newWorld[st.world + ':' + c] || 0) + 1;
+        out.causes[c] = (out.causes[c] || 0) + 1;
+        if (o.t === 'hblock' && o.look) { out.lookDeaths++; if (!/^look_(floor|ceil)$/.test(c)) out.wrong.push(st.world + ':' + seed + ':' + c); }
+      }
+    });
     for (const c of Object.keys(out.causes)) for (const L of ['ar', 'en']) if (!FF.UI.whyText(L, c)) out.missingTip.push(L + ':' + c);
     return out;
   });
   console.log(JSON.stringify(r, null, 1));
-  const pass = r.runs > 100 && r.lookDeaths > 0 && !r.wrong.length && !r.missingTip.length && !errs.length;
+  const pass = r.runs > 100 && Object.keys(r.newWorld || {}).length > 0 && r.lookDeaths > 0 && !r.wrong.length && !r.missingTip.length && !errs.length;
   console.log(pass ? 'DEATH TIP TEST PASSED' : 'DEATH TIP TEST FAILED', errs);
   await b.close();
   process.exit(pass ? 0 : 1);

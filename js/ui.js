@@ -117,19 +117,6 @@
     bossNewPct: '⚔️ New best damage this week!', bossSkin: '✦ INFINITY VOID unlocked — it is yours, equip it in Characters', needBoss: 'Defeat the Weekly Boss', shopToday: "TODAY'S SHOP · new in {h}h", shopDeal: '-30%', bundle: 'BUNDLE ×3', bundleDone: 'Bundle bought!', needNerve: 'Reach NERVE 40 (NOVA)', needSecs: 'Survive 180 s in Endless', earnSkin: '✦ Earned: {n}', bossHow: 'Flip through glowing seals to strike · a last-moment dodge = COUNTER + time-shield',
     bossCounters: 'counters', bossSeals: 'seals', bossEquip: '✦ INFINITY VOID equipped'
   });
-  // 📖 build 43: the STORY, chapter 1 (MINO and PALE NIRO)
-  Object.assign(T.en, {
-    story: 'STORY', storyTitle: 'THE BROKEN CORE', storyWinT: 'NIRO IS FREE!', stPro: 'PROLOGUE', stCh: 'CHAPTER {n}', stWatch: '▶ WATCH', stPlay: '▶ PLAY', stAgain: '✓ PLAY AGAIN', stSoon: 'COMING SOON', stLock: '🔒 FINISH CHAPTER {n}', stRe: '🎬 STORY',
-    stProg: '{a} / 5 shards', stLine: 'Five went down. Four fell. Bring them back, one by one.', storyNext: 'ONE SHARD RETURNED · the next chapter is open',
-    storySkin: '✦ NIRO and PALE NIRO unlocked — equip them in Characters', needStory: 'Finish Story chapter 1', needStoryPlay: 'Start the Story',
-    storyHow: 'His turn: three knocks, and the strike lands on the third. Your turn: tap as each gold ring closes to knock back.', storyKnocks: 'knocks back'
-  });
-  Object.assign(T.ar, {
-    story: 'القصة', storyTitle: 'النواة المكسورة', storyWinT: 'نيرو اتحرر!', stPro: 'المقدمة', stCh: 'الفصل {n}', stWatch: '▶ اتفرّج', stPlay: '▶ العب', stAgain: '✓ العب تاني', stSoon: 'قريب', stLock: '🔒 خلّص الفصل {n}', stRe: '🎬 القصة',
-    stProg: '{a} / 5 شظايا', stLine: 'خمسة نزلوا. أربعة وقعوا. رجّعهم واحد واحد.', storyNext: 'شظية رجعت · الفصل اللي بعده اتفتح',
-    storySkin: '✦ نيرو ونيرو الباهت بقوا بتوعك — لبسهم من الشخصيات', needStory: 'خلّص الفصل الأول من القصة', needStoryPlay: 'ابدأ القصة',
-    storyHow: 'دوره: تلات دقّات والضربة على التالتة. دورك: اضغط لما كل حلقة دهبي تقفل عشان تردّ الدقّة.', storyKnocks: 'دقّة رديتها'
-  });
   Object.assign(T.ar, {
     bossCard: 'الزعيم', bossName: 'الطاغية القرمزي', bossVs: 'إنفينيتي ڤويد ضد الطاغية القرمزي', bossLeft: '⏳ {t}', bossNone: '٣ قلوب ونقطة حفظ كل مرحلة. اقلب جوه الأختام المنوّرة عشان تضرب.',
     bossBestT: '🏆 أحسن وقت: {t}', bossBestP: '⚔️ أحسن ضرب: {p}%', bossWins: 'هزمته {n} مرة', bossRwP2: 'المرحلة ٢', bossRwP3: 'المرحلة ٣', bossRwWin: 'اهزمه', bossLocal: 'نتايج الزعيم محفوظة على جهازك بس',
@@ -464,7 +451,6 @@
   }
 
   function refreshHome() {
-    { const el = $('#storyTag'); if (el) { const c = STORY.find((x) => storyOpen(x) && !storyDone(x)), L = lang(); el.textContent = c ? (c.n ? t('stCh').replace('{n}', c.n) : t('stPro')) + ' · ' + c[L][0] : t('stProg').replace('{a}', 2); } }
     $('#home').classList.toggle('newbie', (save.runs || 0) < 5 && (save.bestStage || 1) < 3); // build 33: fewer choices until stage 3
     $('#homeBest').textContent = save.best ? '★ \u2066' + save.best + '\u2069' + (save.bestStage > 1 ? ' · ' + t('stageLbl') + save.bestStage : '') : '';
     $('#homeCoins').textContent = save.coins;
@@ -480,7 +466,7 @@
       if ($('#dailyBest')) $('#dailyBest').textContent = (save.daily.date === today && save.daily.best ? '★ ' + save.daily.best + (rx ? ' · ' : '') : rx ? '' : t('dailyNew')) + (rx ? TW_ICON[rx.mod] + ' ' + t('dm_' + rx.mod) : ''); }
     weekCard();
     bossCard();
-    setTimeout(() => { weekRefresh(); lastWeekCard(); }, 400);
+    // b66: the weekly RUN is gone (the Weekly Boss is the weekly challenge): no week-board fetch, no last-week card
     const lv = levelInfo();
     $('#lvlTxt').textContent = 'LV ' + lv.level;
     $('#lvlBar').style.width = Math.round(lv.frac * 100) + '%';
@@ -703,9 +689,6 @@
     setTimeout(() => toast(t('weekNew')), 2000);
     return true;
   }
-  function startWeekly() {
-    startGame('endless', { seed: FF.weekInfo().seed, weekly: true });
-  }
   // a week's verified runs (read only, from the rows the world board already has). w = FF.weekInfo(...) of that week
   async function loadWeek(w) {
     const rows = await FF.Online.weekTop(w.start);
@@ -834,24 +817,6 @@
   UI.whyText = (L, cause) => (WHY[L] || {})[cause] || ''; // b66: tools/death-tip-test.js checks every death has a tip
   function bossEnd(res) {
     if (res.replay || !res.boss) return;
-    if (res.boss.id === 'tyrant' && UI.lastOpts && UI.lastOpts.story === 'tyrant') { // 📖 chapter 1 keeps its own record too
-      save.storyCh1Intro = 1;
-      if (res.boss.win) {
-        if (!save.storyCh1) { save.storyCh1 = 1; res.storyNext = true; }
-        if (!save.bossWin) { save.bossWin = 1; save.owned.ivoid = 1; res.bossUnlocked = true; setTimeout(() => { toast(t('bossSkin')); sound('unlock'); }, 1200); }
-      }
-      return;
-    }
-    if (res.boss.id === 'niro') { // 📖 the story keeps its own record (never the weekly boss's)
-      const r = res.boss;
-      save.storyIntro = 1; save.storyTries = (save.storyTries || 0) + 1;
-      if (r.win) {
-        const tm = Math.round(r.time * 10) / 10;
-        if (!save.storyBest || tm < save.storyBest) save.storyBest = tm;
-        if (!save.storyWin) { save.storyWin = 1; save.owned.niro = 1; save.owned.paleniro = 1; res.storyUnlocked = true; setTimeout(() => { toast(t('storySkin')); sound('unlock'); }, 1200); }
-      } else if (r.pct > (save.storyPct || 0)) save.storyPct = r.pct;
-      return;
-    }
     const b = bossSave(), r = res.boss;
     b.tries++;
     bossRewards(res);
@@ -937,34 +902,6 @@
       persist();
       if (!el.classList.contains('hidden')) fill();
     } catch (e) { /* offline: the last rank this device saw stays */ }
-  }
-  async function renderWeekly(el) {
-    const req = ++boardReq;
-    const st = $('#boardStatus');
-    const w = FF.weekInfo(), ws = weekSave();
-    el.innerHTML = '';
-    const tw = FF.weekTwistOf(w.key);
-    const note = '<p class="note">' + (tw ? TW_ICON[tw] + ' <b>' + t('tw_' + tw) + '</b> — ' + t('twd_' + tw) + '<br>' : '') + t('weekNote') + ' · ' + t('weekLeft').replace('{t}', fmtLeft(w.left)) + '</p>';
-    const myDev = FF.Online.deviceId();
-    const mine = ws.best ? { id: 'dev:' + myDev, name: playerName(), skin: save.skin, s: ws.best, d: ws.dist, st: ws.stage, pre: '' } : null;
-    const show = (list, msg) => {
-      boardRows(el, list, 'dev:' + myDev, 50);
-      el.insertAdjacentHTML('afterbegin', note);
-      st.textContent = msg;
-    };
-    if (window.FF_LINK) { show(mine ? [mine] : [], t('onLink')); return; }
-    if (!FF.Online.enabled()) { show(mine ? [mine] : [], t('onOff')); return; }
-    st.textContent = t('onLoad');
-    let rows;
-    try { rows = await loadWeek(w); } catch (e) {
-      if (req === boardReq) show(mine ? [mine] : [], t('onFail') + ' (' + String(e.message || e).slice(0, 60) + ')');
-      return;
-    }
-    if (req !== boardReq) return;
-    UI.weekList = rows; UI.weekAt = Date.now();
-    const { list, myI } = weekRank(rows);
-    const rk = ws.rank && ws.of ? ' · ' + t('weekRank').replace('{r}', ws.rank).replace('{n}', ws.of) : '';
-    show(list, (ws.rival ? t('weekRival').replace('{n}', ws.rival.name).replace('{s}', ws.rival.s) : myI === 0 ? t('weekTop') : t('onOk')) + rk);
   }
   UI.weekSave = weekSave;
   // world boards: fetch, then re-play every entry here and show only the ones that reproduce
@@ -1089,7 +1026,6 @@
     $('#boardStatus').classList.toggle('hidden', !online);
     if (!online) boardReq++;
     if (boardTab === 'world') renderOnline(el, 'endless');
-    else if (boardTab === 'worldWeek') renderWeekly(el);
     else if (boardTab === 'worldDaily') renderOnline(el, 'daily-' + FF.todayKey());
     else if (boardTab === 'friends') renderFriends(el);
     else if (boardTab === 'runs') boardRows(el, save.scores, null, 20);
@@ -1326,7 +1262,6 @@
       else if (save.daily.date === FF.todayKey() && save.daily.ghost) opts.ghost = save.daily.ghost;
     }
     if (mode === 'endless' && !opts.replay) opts.bestX = save.bestX || 0; // 🏁 the flag where your longest run ended
-    if (mode === 'endless' && !opts.replay && !opts.weekly && opts.seed && opts.seed === FF.weekInfo().seed) opts.weekly = true; // a friend's link to the week road is the week road
     if (mode === 'endless' && opts.weekly && !opts.replay) { // 🗓 this week's road: your week flag + the 🎯 rival's flag + a ghost
       const ws = weekSave();
       opts.seed = FF.weekInfo().seed;
@@ -1339,15 +1274,7 @@
       else if (ws.ghost && ws.ghost.length) opts.ghost = ws.ghost;
     }
     if (mode === 'endless' || mode === 'daily') opts.soonFirst = !save.soonDone; // the ending shows the gift the first time
-    if (mode === 'boss' && !opts.replay && opts.story === 'tyrant') { // 📖 chapter 1: the Tyrant, on the story's own road
-      const ULTS = { ivoid: 1, bwarden: 1, wshinobi: 1, ctyrant: 1, jackpot: 1 };
-      Object.assign(opts, { seed: (FF.hashStr('story-tyrant') % 2000000000) + 1, boss: 'tyrant', skin: 'ivoid', trail: 'ivoid', introSeen: !!save.storyCh1Intro, heroOwned: !!save.bossWin, ultSkin: ULTS[save.skin] ? save.skin : 'generic' });
-      delete opts.startX;
-    } else if (mode === 'boss' && !opts.replay && opts.story) { // 📖 chapter 3: you ARE MINO, and the boss is your brother
-      save.storyPlay = 1;
-      Object.assign(opts, { seed: (FF.hashStr('story-niro') % 2000000000) + 1, boss: 'niro', skin: 'mino', introSeen: !!save.storyIntro, heroOwned: !!save.storyWin, ultSkin: 'generic' });
-      delete opts.startX;
-    } else if (mode === 'boss' && !opts.replay) { // ⚔️ you ARE the Infinity Void in the duel (the reward lets you wear it everywhere)
+    if (mode === 'boss' && !opts.replay) { // ⚔️ you ARE the Infinity Void in the duel (the reward lets you wear it everywhere)
       const bw = FF.bossWeek();
       // b42: the ULTIMATE follows the skin you wear (a generic finisher for the others)
       const ULTS = { ivoid: 1, bwarden: 1, wshinobi: 1, ctyrant: 1, jackpot: 1 };
@@ -1483,7 +1410,6 @@
     }
     else if (type === 'world') { /* banner is drawn in-canvas */ }
     else if (type === 'banner') stageBanner(data); // Arabic stage name over the canvas
-    else if (type === 'bossPhase') storyFlash(data);
     else if ((type === 'bossBanner' || type === 'bossLine') && lang() === 'ar') { // ⚔️ the fight's lines in Arabic (the pixel font is Latin only)
       stageBanner(type === 'bossBanner' ? '<b>' + data.titleAr + '</b>' + (data.subAr ? '<span>' + data.subAr + '</span>' : '') : '<span>' + data.ar + '</span>');
       clearTimeout(UI.bossBanT);
@@ -1491,138 +1417,8 @@
     }
   }
 
-  // 📖 build 43: the story's cinematics (js/story.js). The fight pauses while one plays; each mid-fight memory plays the
-  // first time only, the truth after the first win.
-  function cine(id, done) {
-    if (id === 'prologue' && !UI.noFilm) { playFilm(done, () => { UI.noFilm = true; cine(id, done); }); return; }
-    if (!FF.Story) { done(); return; }
-    try { FF.Story.play(id, { lang: lang(), muted: !!(save.settings && (save.settings.muted || !save.settings.sfx)), ctx: FF.audio.ctx || null }, done); } catch (e) { done(); }
-  }
-  // 🎬 b46: the prologue is a real narrated film now (made by tools/trailer/video.js -> video/prologue-en.mp4).
-  // A device that can't play it gets the canvas prologue instead, without a word.
-  function playFilm(done, fallback) {
-    let src = 'video/prologue-en.mp4';
-    const v = document.createElement('video');
-    if (!v.canPlayType || !v.canPlayType('video/mp4; codecs="avc1.4d401f, mp4a.40.2"')) { fallback(); return; }
-    if (window.FF_FILM_B64) { // the one-file build carries the film inside itself
-      if (!UI.filmUrl) { const s = atob(window.FF_FILM_B64), b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); UI.filmUrl = URL.createObjectURL(new Blob([b], { type: 'video/mp4' })); }
-      src = UI.filmUrl;
-    }
-    const box = document.createElement('div'), skip = document.createElement('button');
-    box.id = 'filmBox'; v.setAttribute('playsinline', ''); v.playsInline = true; v.preload = 'auto'; v.src = src;
-    v.muted = !!(save.settings && save.settings.muted);
-    skip.className = 'filmSkip'; skip.textContent = lang() === 'ar' ? 'تخطّي ›' : 'SKIP ›';
-    box.appendChild(v); box.appendChild(skip); document.body.appendChild(box);
-    let over = false;
-    const end = (ok) => {
-      if (over) return; over = true; UI.film = null;
-      try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* already gone */ }
-      box.remove(); if (ok) done(); else fallback();
-    };
-    v.addEventListener('ended', () => end(true));
-    v.addEventListener('error', () => end(false));
-    skip.addEventListener('click', (e) => { e.stopPropagation(); sound('ui'); end(true); });
-    const p = v.play(); if (p && p.catch) p.catch(() => end(false));
-    UI.film = { end, video: v };
-  }
-  const STORY_MID = { tyrant: { 1: 'ch1mid' }, niro: { 1: 'fb1', 2: 'fb2' } };
-  function storyFlash(d) {
-    const g = UI.game;
-    if (!g || !g.opts.story || g.replay) return;
-    const id = (STORY_MID[d.boss] || {})[d.phase], seen = save.storySeen || (save.storySeen = {});
-    if (!id || seen[id]) return;
-    seen[id] = 1; persist();
-    g.paused = true;
-    cine(id, () => { if (UI.game === g && !UI.screen) g.paused = false; }); // (if the app was hidden meanwhile, the pause menu keeps it paused)
-  }
-  // 📖 b44: THE STORY in order. The prologue, then a chapter per boss; chapters not built yet show as COMING SOON.
-  const STORY = [
-    { id: 'pro', cine: ['prologue'], art: ['prologue', 2.5, 110], en: ['THE BROKEN CORE', 'How it all began'], ar: ['النواة المكسورة', 'الحكاية من أولها'] },
-    { id: 'ch1', n: 1, boss: 'tyrant', cine: ['ch1intro', 'ch1mid', 'ch1end'], art: ['prologue', 29.6, 0], en: ['THE CRIMSON TYRANT', 'The guard who carried everything alone'], ar: ['الطاغية القرمزي', 'الحارس اللي شال كل حاجة لوحده'] },
-    { id: 'ch2', n: 2, soon: 1, art: ['prologue', 29.6, 80], en: ['THE STILL HOUR', 'The teacher who stopped time'], ar: ['الساعة الواقفة', 'المعلّم اللي وقّف الزمن'] },
-    { id: 'ch3', n: 3, boss: 'niro', need: 1, cine: ['intro', 'fb1', 'fb2', 'truth'], art: ['prologue', 29.6, 240], en: ['PALE NIRO', 'The brother who forgot'], ar: ['نيرو الباهت', 'الأخ اللي نسي'] },
-    { id: 'ch4', n: 4, soon: 1, art: ['prologue', 29.6, 160], en: ['THE HOURLESS', 'The mapmaker with no hours left'], ar: ['اللي من غير ساعة', 'راسمة الخرايط اللي خلصت ساعاتها'] },
-    { id: 'ch5', n: 5, soon: 1, art: ['truth', 40.4, 192], en: ['THE GRAY', 'The voice inside the Core'], ar: ['الرمادي', 'الصوت اللي جوه النواة'] }
-  ];
-  const storyDone = (c) => (c.id === 'pro' ? !!(save.storySeen && save.storySeen.prologue) : c.boss === 'tyrant' ? !!save.storyCh1 : c.boss === 'niro' ? !!save.storyWin : false);
-  const storyOpen = (c) => !c.soon && (!c.need || !!save.storyCh1 || !!save.storyPlay || !!save.storyWin);
-  function cineSeq(list, done) { const q = list.slice(); const next = () => { const id = q.shift(); if (!id) { done(); return; } cine(id, next); }; next(); }
-  function storyArt(cv, a) { // a still from the story itself: [scene, time, crop x] (an 80-wide column of the 320x148 frame)
-    if (!FF.Story || !a) return;
-    try { const b = storyArt.b || (storyArt.b = FF.makeCanvas(320, 148)); FF.Story.frame(a[0], a[1], 'en', b); const g2 = cv.getContext('2d'); g2.imageSmoothingEnabled = false; g2.drawImage(b, a[2], 13, 80, 110, 0, 0, cv.width, cv.height); } catch (e) { /* art only */ }
-  }
-  function renderStory() {
-    const L = lang(), box = $('#storyList'); box.innerHTML = '';
-    const shards = (save.storyCh1 ? 1 : 0) + (save.storyWin ? 1 : 0);
-    $('#storyProg').textContent = t('stProg').replace('{a}', shards); $('#storyLine').textContent = t('stLine');
-    const nextId = (STORY.find((c) => storyOpen(c) && !storyDone(c)) || {}).id;
-    STORY.forEach((c) => {
-      const done = storyDone(c), open = storyOpen(c), el = document.createElement('button');
-      el.className = 'stCard' + (c.soon ? ' soon' : !open ? ' lock' : done ? ' done' : '') + (c.id === 'pro' ? ' cine' : '') + (c.id === nextId ? ' next' : '');
-      el.dataset.ch = c.id;
-      const go = c.soon ? t('stSoon') : !open ? t('stLock').replace('{n}', c.need) : c.id === 'pro' ? t('stWatch') : done ? t('stAgain') : t('stPlay');
-      el.innerHTML = '<canvas width="80" height="110"></canvas><span class="stN"></span><span class="stTxt"><b></b><small></small></span><span class="stGo"></span>';
-      el.querySelector('.stN').textContent = c.n ? t('stCh').replace('{n}', c.n) : t('stPro');
-      el.querySelector('b').textContent = c[L][0]; el.querySelector('small').textContent = c[L][1]; el.querySelector('.stGo').textContent = go;
-      storyArt(el.querySelector('canvas'), c.art);
-      if (c.boss && done) { const re = document.createElement('span'); re.className = 'stRe'; re.textContent = t('stRe'); re.addEventListener('click', (e) => { e.stopPropagation(); sound('ui'); cineSeq(c.cine, () => {}); }); el.appendChild(re); }
-      el.addEventListener('click', () => {
-        if (c.soon || !open) { sound('uiBack'); return; }
-        sound('ui');
-        const seen = save.storySeen || (save.storySeen = {});
-        if (c.id === 'pro') { cine('prologue', () => { seen.prologue = 1; persist(); renderStory(); }); return; }
-        const first = c.cine[0], begin = () => (c.boss === 'niro' && FF.BossLevel ? playNiroLevel() : c.boss === 'tyrant' && FF.TyrantLevel ? playTyrantLevel() : startGame('boss', { story: c.boss }));
-        if (seen[first]) begin(); else { seen[first] = 1; persist(); cine(first, begin); }
-      });
-      box.appendChild(el);
-    });
-    const nx = box.querySelector('.next'); if (nx && nx.scrollIntoView) try { nx.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (e) { /* */ }
-  }
-  // 🎮 b46: chapter 3 is a hand-made BOSS LEVEL (js/bosslevel.js): three acts, then the truth after the first win.
-  function playNiroLevel() {
-    save.storyPlay = 1; save.storyIntro = 1; save.storyTries = (save.storyTries || 0) + 1; persist();
-    FF.BossLevel.play({ lang: lang(), muted: !!(save.settings && save.settings.muted), ctx: FF.audio.ctx || null }, (r) => {
-      const back = () => { renderStory(); show('storyBox'); };
-      if (!r || !r.win) { persist(); back(); return; }
-      if (!save.storyBest || r.time < save.storyBest) save.storyBest = r.time;
-      if (r.rank && (!save.storyRank || 'SABCD'.indexOf(r.rank) < 'SABCD'.indexOf(save.storyRank))) save.storyRank = r.rank;
-      const first = !save.storyWin;
-      if (first) { save.storyWin = 1; save.owned.niro = 1; save.owned.paleniro = 1; }
-      persist();
-      if (first) cine('truth', () => { back(); toast(t('storySkin')); sound('unlock'); }); else back();
-    });
-  }
-  // ❤️ b47: chapter 1 is a hand-made BOSS LEVEL too (js/tyrantlevel.js): four acts on his heartbeat, his past between them
-  function playTyrantLevel() {
-    save.storyCh1Intro = 1; persist();
-    const seen = save.storySeen || (save.storySeen = {});
-    const between = (id, done) => { if (seen[id]) { done(); return; } seen[id] = 1; persist(); cine(id, done); }; // his past plays once (the chapter card can replay it)
-    FF.TyrantLevel.play({ lang: lang(), muted: !!(save.settings && (save.settings.muted || save.settings.sfx === false)), ctx: FF.audio.ctx || null, cine: between }, (r) => {
-      const back = () => { renderStory(); show('storyBox'); };
-      if (!r || !r.win) { persist(); back(); return; }
-      if (!save.ch1Best || r.time < save.ch1Best) save.ch1Best = r.time;
-      if (r.rank && (!save.ch1Rank || 'SABCD'.indexOf(r.rank) < 'SABCD'.indexOf(save.ch1Rank))) save.ch1Rank = r.rank;
-      const first = !save.storyCh1; let unlocked = false;
-      if (first) save.storyCh1 = 1;
-      if (!save.bossWin) { save.bossWin = 1; save.owned.ivoid = 1; unlocked = true; }
-      persist();
-      const end = () => { back(); if (unlocked) { toast(t('bossSkin')); sound('unlock'); } };
-      if (first) cine('ch1end', end); else end();
-    });
-  }
-  function startStory() {
-    FF.audio.init();
-    try { if (FF.Story && FF.Story.warm && FF.audio.ctx) FF.Story.warm(FF.audio.ctx); } catch (e) { /* the first cinematic then loads its echo itself */ }
-    renderStory(); show('storyBox');
-    const seen = save.storySeen || (save.storySeen = {});
-    if (!seen.prologue) cine('prologue', () => { seen.prologue = 1; persist(); renderStory(); }); // the saga opens with its beginning
-  }
   function onEnd(res) {
     const g = UI.game;
-    if (res.mode === 'boss' && res.boss && res.boss.win && !res.replay && !res.told) { // 📖 a chapter's ending plays after its first win
-      const ch = res.boss.id === 'niro' ? (!save.storyWin && 'truth') : (UI.lastOpts && UI.lastOpts.story === 'tyrant' && !save.storyCh1 && 'ch1end');
-      if (ch) { res.told = 1; cine(ch, () => onEnd(res)); return; }
-    }
     hideHint();
     if (res.tutorial) {
       // 🎓 the first run is done: from now on the real game
@@ -1808,15 +1604,13 @@
     if (res.vsPast) $('#overGoal').innerHTML += '<br><small>' + t('vsOld').replace('{n}', res.vsRes ? res.vsRes.name : '?') + '</small>';
     if (res.mode === 'boss' && res.boss) {
       const r = res.boss;
-      const st = r.id === 'niro';
-      $('#overTitle').textContent = r.win ? t(st ? 'storyWinT' : 'bossWinT') : t('bossLoseT');
+      $('#overTitle').textContent = r.win ? t('bossWinT') : t('bossLoseT');
       $('#overTitle').style.color = r.win ? '#ffd23f' : '#ff5a6e';
       $('#overScore').textContent = r.win ? FF.fmtBossTime(r.time) : r.pct + '%';
       sub.className = 'sub' + (res.bossNew ? ' new' : '');
       sub.innerHTML = (r.win ? t('bossResWin').replace('{t}', FF.fmtBossTime(r.time)) : t('bossResLose').replace('{p}', r.pct).replace('{ph}', r.phase)) + (res.bossNew ? ' · ' + t(res.bossNew) : '');
-      $('#overStats').innerHTML = [st ? ['◉', (r.stats.answers || 0) + ' ' + t('storyKnocks')] : ['◎', r.stats.orbs + ' ' + t('bossSeals')], ['✦', r.stats.counters + ' ' + t('bossCounters')], ['⏱', FF.fmtBossTime(Math.max(0, r.time))]].map((c) => '<span class="chip"><i>' + c[0] + '</i>' + c[1] + '</span>').join('');
-      $('#overGoal').innerHTML = st ? (res.storyUnlocked ? t('storySkin') + '<br>' : '') + '<small>' + t('storyHow') + '</small>'
-        : (res.storyNext ? '<b>' + t('storyNext') + '</b><br>' : '') + (res.bossUnlocked ? t('bossSkin') + '<br>' : '') + '<small>' + t('bossHow') + '<br>' + t('bossLocal') + '</small>';
+      $('#overStats').innerHTML = [['◎', r.stats.orbs + ' ' + t('bossSeals')], ['✦', r.stats.counters + ' ' + t('bossCounters')], ['⏱', FF.fmtBossTime(Math.max(0, r.time))]].map((c) => '<span class="chip"><i>' + c[0] + '</i>' + c[1] + '</span>').join('');
+      $('#overGoal').innerHTML = (res.bossUnlocked ? t('bossSkin') + '<br>' : '') + '<small>' + t('bossHow') + '<br>' + t('bossLocal') + '</small>';
     }
     const vb = $('#overVs');
     vb.classList.toggle('hidden', !res.card);
@@ -2664,9 +2458,7 @@
     deathReplay: () => deathReplay(),
     shareClip: () => { FF.Online.count('share'); shareClip(); },
     daily: () => (needsTutorial() ? startTutorial() : startGame('daily')),
-    weekly: () => (needsTutorial() ? startTutorial() : startWeekly()),
     boss: () => (needsTutorial() ? startTutorial() : startGame('boss')),
-    story: () => (needsTutorial() ? startTutorial() : startStory()),
     weekLastGo: () => { $('#weekLast').classList.add('hidden'); ACT.boss(); }, // build 37: this week's challenge is the boss duel
     weekLastClose: () => { $('#weekLast').classList.add('hidden'); },
     zen: () => startGame('zen'),
@@ -2717,7 +2509,6 @@
   };
   // Android back button (called from the APK wrapper). Returns true when handled.
   UI.back = function () {
-    if (UI.film) { UI.film.end(true); return true; } // b46: back skips the prologue film
     if (FF.MAKER_APP) {
       if (UI.game && !UI.screen && !UI.game.ended) { UI.pause(); return true; }
       if (UI.screen === 'pause') { UI.act('resume'); return true; }

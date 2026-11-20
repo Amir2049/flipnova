@@ -125,7 +125,9 @@ const SHOTS = process.argv[2] || '';
       bossWin: FF.save.bossWin, unlocked: FF.isUnlocked(FF.skinById('ivoid')), trail: FF.isUnlocked(FF.trailById('ivoid')), week: Object.assign({}, FF.save.boss),
       title: document.querySelector('#overTitle').textContent, sub: document.querySelector('#overBest').textContent, goal: document.querySelector('#overGoal').textContent,
       inputs: FF.UI.lastRes && FF.UI.lastRes.inputs, seed: g.seed, introSeen: !!g.opts.introSeen, oldKept: FF.save.best === 4200 && FF.save.owned.cat === 1 && FF.save.skin === 'cat',
-      fxIds: Object.keys(FF.BOSS_FX || {}).filter((id) => !FF.BOSS_FX[id].owner || FF.BOSS_FX[id].owner === 'tyrant'), // (b44: another boss's own effects are checked by its own test) fxNamed: Object.values(FF.BOSS_FX || {}).every((d) => d.name && Object.keys(d).some((k) => typeof d[k] === 'function')),
+      fxIds: Object.keys(FF.BOSS_FX || {}).filter((id) => !FF.BOSS_FX[id].owner || FF.BOSS_FX[id].owner === 'tyrant'), // (b44: another boss's own effects are checked by its own test)
+      fxNamed: Object.values(FF.BOSS_FX || {}).every((d) => d.name && Object.keys(d).some((k) => typeof d[k] === 'function')),
+      hd: !!(B.hdOn && B.hdOn()), fxLayers: Object.fromEntries(Object.entries(FF.BOSS_FX || {}).map(([k, d]) => [k, Object.fromEntries(Object.keys(d).filter((l) => typeof d[l] === 'function').map((l) => [l, 1]))])),
       fxSeen: Object.assign({}, B.fxSeen), fxDrawn: Object.keys(B.fxDrawn || {}), dims: B.dims.join('>'), hits: B.stats.hits, hearts: B.hearts,
       b42: { clash: Object.assign({}, B.stats.clash), ults: B.stats.ults || 0, qte: B.stats.qte || 0, chase: B.stats.kinds.chase || 0, negInputs: (FF.UI.lastRes && FF.UI.lastRes.inputs || []).filter((v) => v < 0).length },
       tun: Object.assign({}, B.tunStats), near: B.stats.nearMiss || 0, paints: B.paints,
@@ -265,7 +267,15 @@ const SHOTS = process.argv[2] || '';
   const seenAll = Object.assign({}, won.fxSeen, lost.fxSeen, lost.cp.fxSeen, { clashLose: 1 }), drawnAll = new Set([...won.fxDrawn, ...lost.fxDrawn, ...lost.cp.fxDrawn, ...lost.clashL.drawn]);
   const fxMissing = won.fxIds.filter((id) => !seenAll[id] || !drawnAll.has(id));
   console.log('fx', { registered: won.fxIds.length, started: Object.keys(seenAll).length, drawn: drawnAll.size, missing: fxMissing, names: won.fxIds.join(',') });
-  ok.fx = won.fxIds.length >= 20 && won.fxNamed && fxMissing.length === 0 && drawnAll.size >= 20;
+  // b66: since b47 the Tyrant is painted by the HD painter (js/hdboss.js) by default. It draws its own sky, sun/moon,
+  // embers and clones, so the pixel painters of these effects (sky / between / back / behind / body layers) don't run
+  // and don't mark fxDrawn. Every effect must still START, and every one the pixel renderer owns on the layers the
+  // HD frame keeps (mid / boss / top / front / post) must be drawn. (Run with settings.hdBoss = false for full pixel cover.)
+  const HD_LAYERS = ['mid', 'boss', 'top', 'front', 'post'];
+  const hdOwned = (id) => !Object.keys(won.fxLayers[id] || {}).some((l) => HD_LAYERS.includes(l));
+  const fxMissingHd = fxMissing.filter((id) => !(won.hd && hdOwned(id)));
+  console.log('fx (HD frame: painted by hdboss.js)', fxMissing.filter((id) => !fxMissingHd.includes(id)).join(','));
+  ok.fx = won.fxIds.length >= 20 && won.fxNamed && Object.keys(seenAll).length >= won.fxIds.length && fxMissingHd.length === 0 && drawnAll.size >= 20;
   await shot(Bp.page, 'lost');
   console.log('defeat cinematic', lost.defeat);
   console.log('defeat skip', lost.skip);

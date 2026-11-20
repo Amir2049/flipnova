@@ -98,7 +98,7 @@ const ok = (cond, msg) => { console.log((cond ? '  ✓ ' : '  ✗ ') + msg); if 
   const expect = ['langToggle', 'board', 'skins', 'missionsBox', 'settings', 'play', 'camp', 'boss', 'levels', 'zen'];
   ok(expect.every((a) => acts.includes(a)), 'home shows ' + expect.join(', ') + ' (got ' + acts.join(', ') + ')');
   // build 37: a lighter home — no Daily Remix door, no separate weekly-run button (the boss duel IS the weekly challenge)
-  ok(!acts.includes('daily') && !acts.includes('weekly') && acts.length <= 11 && acts.includes('story'), 'no Daily / weekly-run entries on the home, the STORY door is there (' + acts.length + ' actions; b43: +story)');
+  ok(!acts.includes('daily') && !acts.includes('weekly') && acts.length <= 11 && !acts.includes('story'), 'no Daily / weekly-run / Story entries on the home (b66: the Story is gone) (' + acts.length + ' actions; b43: +story)');
   const check = {
     play: () => FF.UI.game && FF.UI.game.mode === 'endless' && !FF.UI.screen,
     boss: () => FF.UI.game && FF.UI.game.mode === 'boss',

@@ -88,7 +88,6 @@
       return;
     }
     // b46: a full-screen film or the boss level covers everything: draw nothing underneath (no lag)
-    if (UI.film || (FF.BossLevel && FF.BossLevel.active())) { requestAnimationFrame(frame); return; }
     // build 36: with no run on, the menus sit on the living background (FF.HomeBg) instead of the bot demo
     if (!UI.game && FF.HomeBg && !FF.MAKER_APP) {
       FF.HomeBg.render(ctx, dt);
@@ -172,8 +171,15 @@
       else UI.pause();
     } else if (k === 'Enter' && UI.screen === 'over') UI.act('again');
   });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { UI.pause(); if (UI.film) UI.film.video.pause(); } else if (UI.film) UI.film.video.play().catch(() => {}); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) UI.pause(); });
   window.addEventListener('blur', () => UI.pause());
+  // b66: turning the phone to portrait mid-run shows the "turn your phone" screen (CSS) — pause the run too,
+  // or it kept playing unseen behind that screen and the player crashed without seeing why
+  try {
+    const portrait = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
+    const onTurn = () => { if (portrait.matches) UI.pause(); };
+    if (portrait.addEventListener) portrait.addEventListener('change', onTurn); else if (portrait.addListener) portrait.addListener(onTurn);
+  } catch (e) { /* old browser: the CSS screen still shows */ }
   document.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // offline / installable (only over http(s))
