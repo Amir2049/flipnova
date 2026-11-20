@@ -9,11 +9,13 @@ Style rules (kept simple on purpose):
 import math
 import os
 
+import numpy as np
 import bpy
 import bmesh  # noqa: F401  (available once bpy is imported; used by creature scripts)
 from mathutils import Vector
 
 TEX = 1024
+DETAIL = 1.7  # how strong the surface texture is (bump), 1 = flat and simple
 MAX_TRIS = 18000
 objs = []
 _metas = []
@@ -66,7 +68,7 @@ def mat(name, base, base2=None, rough=0.45, scale=8.0, bump=0.12, kind="noise", 
     nt.links.new(ramp.outputs["Color"], b.inputs["Base Color"])
     if bump:
         bp = nt.nodes.new("ShaderNodeBump")
-        bp.inputs["Strength"].default_value = bump
+        bp.inputs["Strength"].default_value = min(1.0, bump * DETAIL)
         nt.links.new(fac, bp.inputs["Height"])
         nt.links.new(bp.outputs["Normal"], b.inputs["Normal"])
     m.diffuse_color = lin(base)
@@ -145,6 +147,8 @@ def surf(body, origin, direction, inset=0.04):
         return Vector(origin), -Vector(direction).normalized()
     loc = mw @ loc
     normal = (inv.transposed().to_3x3() @ normal).normalized()
+    if normal.dot(Vector(direction)) > 0:  # lathe/solidified meshes can have inward normals
+        normal = -normal
     return loc - normal * inset, normal
 
 
@@ -221,15 +225,27 @@ def lathe(profile, m, steps=40, bands=None):
 
 
 # ---------------------------------------------------------------- shared accessories
-def real_eye(body, origin, direction, size, iris_rgb=(120, 80, 40)):
+def real_eye(body, origin, direction, size, iris_rgb=(120, 80, 40), lid="skin"):
     """White eyeball, coloured iris and pupil, set into the skin. No cartoon shine."""
     sclera = mat("Sclera", (255, 255, 255), (235, 232, 228), rough=0.1, bump=0, coat=1.0)
     iris = mat(f"Iris{iris_rgb}", iris_rgb, [c * 0.6 for c in iris_rgb], rough=0.05, bump=0, coat=1.0)
     pupil = mat("Pupil", (12, 10, 8), (0, 0, 0), rough=0.05, bump=0, coat=1.0)
+    if lid == "skin":
+        lid = body.data.materials[0] if body.data.materials else None
     p, n = surf(body, origin, direction, inset=size * 0.55)
     look = Vector(n)
     face = look.to_track_quat("Z", "Y").to_euler()
     ball(p, size, sclera)
+    if lid is not None:
+        # Upper and lower eyelids in the creature's own skin so the eye sits in the face.
+        for keep, k in ((lambda co, R: co.y > R * 0.32, 1.13), (lambda co, R: co.y < -R * 0.72, 1.08)):
+            R = size * k
+            o = ball(p + look * size * 0.02, R, lid, rot=face, seg=20, ring=12)
+            bm = bmesh.new()
+            bm.from_mesh(o.data)
+            bmesh.ops.delete(bm, geom=[v for v in bm.verts if not keep(v.co, R)], context="VERTS")
+            bm.to_mesh(o.data)
+            bm.free()
     # Iris and pupil are thin discs lying on the eyeball, so the eye reads as real, not googly.
     ball(p + look * size * 0.9, size * 0.55, iris, scale=(1, 1, 0.3), rot=face)
     ball(p + look * size * 1.0, size * 0.26, pupil, scale=(1, 1, 0.3), rot=face)
@@ -312,8 +328,11 @@ def finalize(name, out, ground_rgb=(110, 185, 90)):
     scene.render.engine = "CYCLES"
     scene.cycles.device = "CPU"
     scene.cycles.samples = 8
+    world = bpy.data.worlds.new("W")
+    scene.world = world
+    world.light_settings.distance = 0.8
     images = {}
-    for kind, colorspace in (("Color", "sRGB"), ("Normal", "Non-Color")):
+    for kind, colorspace in (("AO", "Non-Color"), ("Color", "sRGB"), ("Normal", "Non-Color")):
         img = bpy.data.images.new(f"{name}_{kind}", TEX, TEX)
         img.colorspace_settings.name = colorspace
         for m in model.data.materials:
@@ -326,7 +345,17 @@ def finalize(name, out, ground_rgb=(110, 185, 90)):
         scene.render.bake.use_pass_indirect = False
         scene.render.bake.use_pass_color = True
         scene.render.bake.margin = 4
-        bpy.ops.object.bake(type="DIFFUSE" if kind == "Color" else "NORMAL")
+        scene.cycles.samples = 48 if kind == "AO" else 8
+        bpy.ops.object.bake(type={"AO": "AO", "Color": "DIFFUSE", "Normal": "NORMAL"}[kind])
+        if kind == "AO":
+            images[kind] = img
+            continue
+        if kind == "Color":
+            # Darken creases and contact areas: gives the depth of a hand-painted game texture.
+            c = np.array(img.pixels[:], dtype=np.float32).reshape(-1, 4)
+            a = np.array(images["AO"].pixels[:], dtype=np.float32).reshape(-1, 4)[:, :1]
+            c[:, :3] *= 0.45 + 0.55 * a
+            img.pixels[:] = c.ravel()
         img.filepath_raw = os.path.join(out, f"{name}_{kind}.png")
         img.file_format = "PNG"
         img.save()
@@ -357,8 +386,6 @@ def finalize(name, out, ground_rgb=(110, 185, 90)):
     gm.use_nodes = True
     gm.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = lin(ground_rgb)
     g.data.materials.append(gm)
-    world = bpy.data.worlds.new("W")
-    scene.world = world
     world.use_nodes = True
     world.node_tree.nodes["Background"].inputs[0].default_value = lin((120, 180, 255))
     world.node_tree.nodes["Background"].inputs[1].default_value = 0.7

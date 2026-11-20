@@ -138,6 +138,10 @@ def disco_dumpling():
         body.curve((0.55 * sx, -0.15, 0.7), (0.65 * sx, -0.25, 0.35), (0.7 * sx, -0.4, 0.22), 5, 0.34, 0.3)
         body.curve((1.1 * sx, 0, 1.3), (1.6 * sx, -0.2, 1.8), (1.7 * sx, -0.3, 2.4), 7, 0.34, 0.3)
     d = body.mesh(dough)
+    for i in range(7):
+        x = -0.9 + 0.3 * i
+        p, _ = surf(d, (x, 0, 8), (0, 0, -1), 0.08)
+        ball(p, 1.0, dough, scale=(0.1, 0.32, 0.26), rot=(0, math.radians(12 * (i - 3)), 0), seg=14, ring=8)
     for sx in (-1, 1):
         real_eye(d, (0.38 * sx, -6, 1.42), (0, 1, 0), 0.18, iris_rgb=(80, 50, 30))
     top, _ = surf(d, (0, 0, 8), (0, 0, -1), 0.0)
@@ -237,7 +241,8 @@ def royal_noodle():
     wood = mat("Chopstick", (205, 160, 95), (175, 125, 70), rough=0.6, scale=15, bump=0.05)
     ruby = mat("Ruby", (220, 30, 50), rough=0.1, bump=0, coat=1.0)
     gold = GOLD()
-    c = lathe([(0, 0), (0.95, 0), (1.25, 2.4), (1.32, 2.45), (1.24, 2.5), (1.15, 2.42)], cup, bands=[(0.95, 1.55, band)])
+    c = lathe([(0, 0), (0.95, 0), (1.01, 0.5), (1.07, 0.95), (1.1, 1.25), (1.14, 1.55), (1.2, 2.0), (1.25, 2.4), (1.32, 2.45), (1.24, 2.5), (1.15, 2.42)],
+              cup, bands=[(0.95, 1.55, band)])
     nood = Meta("Noodles", resolution=0.07)
     for i in range(7):
         a0 = i * 2 * math.pi / 7
@@ -339,20 +344,27 @@ def thunder_sloth():
 def crystal_croissant():
     pastry = mat("Croissant", (228, 168, 82), (190, 115, 45), rough=0.35, scale=7, bump=0.12, coat=0.3)
     crystal = mat("Crystal", (130, 235, 255), (80, 190, 240), rough=0.05, bump=0, coat=1.0, emit=0.6)
-    body = Meta("Croissant")
-    n = 21
+    # Layered pastry: separate overlapping rolls along a crescent, so the creases show.
+    segs = []
+    n = 9
     for i in range(n):
         t = i / (n - 1)
-        a = math.radians(-115 + 230 * t)
-        r = 0.55 + 0.75 * math.sin(math.pi * t) + (0.1 if i % 3 == 0 else 0)
-        body.ball((1.7 * math.sin(a), 0.4 - 1.1 * math.cos(a), 1.1), r * 1.6)
+        a = math.radians(-110 + 220 * t)
+        pos = (2.0 * math.sin(a), 0.7 - 1.5 * math.cos(a), 1.0)
+        tang = math.atan2(1.5 * math.sin(a), 2.0 * math.cos(a))
+        w = 0.42 + 0.7 * math.sin(math.pi * t)
+        segs.append(ball(pos, 1.0, pastry, scale=(0.62, w, w * 0.85), rot=(0, 0, tang), seg=24, ring=14))
+    legs = Meta("CroissantLegs")
     for sx in (-1, 1):
-        body.curve((0.5 * sx, -0.5, 0.6), (0.55 * sx, -0.6, 0.35), (0.6 * sx, -0.7, 0.2), 4, 0.42, 0.38)
-    c = body.mesh(pastry)
+        legs.curve((0.5 * sx, -0.75, 0.6), (0.55 * sx, -0.85, 0.35), (0.6 * sx, -0.95, 0.2), 4, 0.42, 0.38)
+    legs.mesh(pastry)
+    c = segs[n // 2]
     for sx in (-1, 1):
-        real_eye(c, (0.35 * sx, -6, 1.3), (0, 1, 0), 0.19, iris_rgb=(90, 55, 25))
-    for i, (x, h) in enumerate(((-1.2, 0.8), (-0.6, 1.1), (0.0, 1.35), (0.6, 1.05), (1.2, 0.85))):
-        p, nrm = surf(c, (x, 0.6, 8), (0, 0, -1), 0.15)
+        real_eye(c, (0.35 * sx, -6, 1.15), (0, 1, 0), 0.19, iris_rgb=(90, 55, 25))
+    for idx, h in ((2, 0.8), (3, 1.1), (4, 1.35), (5, 1.05), (6, 0.85)):
+        seg = segs[idx]
+        x, y = seg.location.x, seg.location.y
+        p, nrm = surf(seg, (x, y, 8), (0, 0, -1), 0.15)
         d = Vector((x * 0.25, 0.15, 1)).normalized()
         bpy.ops.mesh.primitive_cone_add(vertices=6, radius1=0.24, radius2=0.0, depth=h, location=tuple(p + d * h / 2))
         o = bpy.context.object
@@ -368,12 +380,16 @@ def galaxy_jellyfish():
     body = Meta("Jelly")
     body.el((0, 0, 3.7), 2.7, size=(0.85, 0.85, 0.55))
     b = body.mesh(bell)
+    for i in range(18):
+        a = math.radians(20 * i)
+        p, _ = surf(b, (1.15 * math.cos(a), 1.15 * math.sin(a), -4), (0, 0, 1), 0.05)
+        ball(p, 0.2, mat("JellyFrill", (200, 140, 255), (160, 100, 235), rough=0.3, bump=0.02, emit=0.2), scale=(1, 1, 0.6), seg=10, ring=6)
     tent = Meta("Tentacles", resolution=0.07)
     for i in range(8):
         a = math.radians(22.5 + 45 * i)
         ca, sa = math.cos(a), math.sin(a)
         side = Vector((-sa, ca, 0)) * 0.5
-        tent.curve((0.95 * ca, 0.95 * sa, 3.2), (1.15 * ca + side.x, 1.15 * sa + side.y, 1.7), (1.0 * ca, 1.0 * sa, 0.15), 16, 0.3, 0.16)
+        tent.curve((0.95 * ca, 0.95 * sa, 3.2), (1.15 * ca + side.x, 1.15 * sa + side.y, 1.7), (1.0 * ca, 1.0 * sa, 0.15), 26, 0.32, 0.22)
     for i in range(4):
         a = math.radians(90 * i)
         tent.curve((0.3 * math.cos(a), 0.3 * math.sin(a), 3.1), (0.6 * math.cos(a), 0.6 * math.sin(a), 2.0), (0.4 * math.cos(a), 0.4 * math.sin(a), 0.6), 12, 0.45, 0.3)
