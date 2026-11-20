@@ -1288,7 +1288,26 @@
             ctx.fillRect(Math.round(x), o.y, Math.round(o.w), 1);
             ctx.fillRect(Math.round(x), o.y + o.h - 1, Math.round(o.w), 1);
             ctx.fillRect(Math.round(x), o.y, 1, o.h);
-          } else FF.drawPhaseRect(ctx, x, o.y, Math.round(o.w), o.h, o.phase, active && !o.ghost, t);
+          } else {
+            FF.drawPhaseRect(ctx, x, o.y, Math.round(o.w), o.h, o.phase, active && !o.ghost, t);
+            // b66: players didn't get the blue / purple walls. A wall that blocks YOU right now says so: FLIP + an arrow
+            // to the side you must flip to (drawing only, reads the player, writes nothing)
+            if (o.kind === 'wall' && active && !o.ghost && this.p && !this.boss && this.mode !== 'demo') {
+              const ahead = o.x - (this.p.x + PW);
+              if (ahead > 0 && ahead < 170) {
+                const up = this.p.grav > 0, cx = x + Math.round(o.w / 2), a = this.settings.reduceFx ? 1 : 0.7 + 0.3 * Math.sin(t * 10);
+                const ty = up ? F - 22 : C + 12; // next to the player's own surface, where the eye already is
+                ctx.globalAlpha = a;
+                font.draw(ctx, 'FLIP', cx, ty, { color: '#ffffff', align: 'center', outline: '#05060d' });
+                for (let r = 0; r < 6; r++) { // a chunky white arrow toward the side that lets you through
+                  const yy = up ? ty - 3 - r : ty + 10 + r, half = 6 - r;
+                  ctx.fillStyle = '#05060d'; ctx.fillRect(cx - half - 1, yy - 1, half * 2 + 2, 3);
+                }
+                for (let r = 0; r < 6; r++) { const yy = up ? ty - 3 - r : ty + 10 + r, half = 6 - r; ctx.fillStyle = '#ffffff'; ctx.fillRect(cx - half, yy, half * 2, 1); }
+                ctx.globalAlpha = 1;
+              }
+            }
+          }
           break;
         }
         case 'spike':
