@@ -844,8 +844,13 @@
     this.coinsTaken++;
     const ck = o.fork ? o.fork + o.lane : ''; // b66: per set, for the "all coins" star (see Level.add)
     (this.coinGot || (this.coinGot = {}))[ck] = (this.coinGot[ck] || 0) + 1;
-    const val = (o.gold ? 5 : 1) * (this.mod === 'goldrush' ? 2 : 1);
+    const val = (o.gold ? 5 : o.risk ? 3 : 1) * (this.mod === 'goldrush' ? 2 : 1);
     this.coins += val;
+    if (o.risk) { // v14 CLOSE SHAVE: you stayed until the last moment
+      this.popup('CLOSE SHAVE x3', COL.coin, 15);
+      this.burst(o.x, o.y, [COL.coin, '#ffffff'], this.settings.reduceFx ? 4 : 9, 70, 1);
+      this.sfx('great'); this.buzz(8);
+    }
     this.addScore(o.gold ? 50 : 10);
     this.sfx(o.gold ? 'gem' : 'coin');
     this.burst(o.x, o.y, o.gold ? [COL.gold, '#fff'] : [COL.coin, COL.coinLight], o.gold ? 8 : 4, 40);

@@ -387,9 +387,11 @@
     12: { gap: 26, stretch: true, book: true, smooth: true, lens: true, dense: true, damp: 0.75, full: true, fit: true, taps: true, wide: true, topX: 180000 },
     // v13 (b64, Amir: 'the second part is a bit boring'): v12 stretched so much that taps/min stayed flat (~58) after
     // minute 2 — no build-up. Now the top speed comes at ~stage 15 and the stretch is gentler, so the pace keeps climbing
-    13: { gap: 26, stretch: true, book: true, smooth: true, lens: true, dense: true, damp: 0.75, full: true, fit: true, taps: true, wide: true, topX: 120000, tfPow: 0.6 }
+    13: { gap: 26, stretch: true, book: true, smooth: true, lens: true, dense: true, damp: 0.75, full: true, fit: true, taps: true, wide: true, topX: 120000, tfPow: 0.6 },
+    // v14 (b66, "make one tap more fun"): v13's road + CLOSE SHAVE coins (x3) right before every 3rd spike group
+    14: { gap: 26, stretch: true, book: true, smooth: true, lens: true, dense: true, damp: 0.75, full: true, fit: true, taps: true, wide: true, topX: 120000, tfPow: 0.6, risk: true }
   };
-  FF.GEN_V = 13;
+  FF.GEN_V = 14;
   // ---- endless growth: stages every 300m, each one can bring a twist
   Level.STAGE_LEN = 3000; // a new stage (and a new world) every 300m
   Level.MODS = ['none', 'lowgrav', 'heavy', 'turbo', 'goldrush', 'tight'];
@@ -1035,6 +1037,9 @@
   Level.prototype.spikes = function (x, side, n) {
     this.lastSpike = side; // (v8: after spikes on one side you're on the other — the next beat starts there)
     const y = side === 'floor' ? F : C;
+    // v14 CLOSE SHAVE: every 3rd spike group has a x3 coin just before it, on its own surface — you only get it if you
+    // stay until the last moment (a GREAT / PERFECT-late flip). Optional, no rng used, so the road is v13's road.
+    if (this.gen.risk && x > 600 && (this.shaveN = (this.shaveN || 0) + 1) % 3 === 0) this.add({ t: 'coin', x: x - 18, y: side === 'floor' ? F - 6 : C + 6, risk: true });
     return this.add({ t: 'spike', x, y, w: n * 8, dir: side === 'floor' ? 'up' : 'down' });
   };
   Level.prototype.wall = function (x, phase) {

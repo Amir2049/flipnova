@@ -9,9 +9,9 @@
   const TABLE = 'ff_scores';
   const VKEY = 'flipfrenzy.verified.v1';
   // bump when physics or level generation change: older proofs belong to an older 'season' and are hidden quietly
-  O.PROOF_V = 16; // 16: rules v13 (the pace keeps climbing in part 2, b64); // 15: rules v12 (late-speed stretch in every stage, b62); // 14: rules v11 (5-7 tap beats, three new worlds, b61); // 13: rules v10 (stages keep their book length, b60); // 11: Endless/Daily rules v8 (beats, tap grades, landing near miss); 12: rules v9 (gentler speed climb)
+  O.PROOF_V = 17; // 17: rules v14 (CLOSE SHAVE x3 coins, b66); // 16: rules v13 (the pace keeps climbing in part 2, b64); // 15: rules v12 (late-speed stretch in every stage, b62); // 14: rules v11 (5-7 tap beats, three new worlds, b61); // 13: rules v10 (stages keep their book length, b60); // 11: Endless/Daily rules v8 (beats, tap grades, landing near miss); 12: rules v9 (gentler speed climb)
   // which Endless rules a proof was played under (see FF.GEN)
-  O.genOf = (v) => (v >= 16 ? 13 : v >= 15 ? 12 : v >= 14 ? 11 : v >= 13 ? 10 : v >= 12 ? 9 : v >= 11 ? 8 : v >= 10 ? 7 : v >= 9 ? 6 : v >= 5 ? 5 : v >= 4 ? 4 : 3);
+  O.genOf = (v) => (v >= 17 ? 14 : v >= 16 ? 13 : v >= 15 ? 12 : v >= 14 ? 11 : v >= 13 ? 10 : v >= 12 ? 9 : v >= 11 ? 8 : v >= 10 ? 7 : v >= 9 ? 6 : v >= 5 ? 5 : v >= 4 ? 4 : 3);
   // v5 runs are played on the stage book (js/stages.js); a run made on a different book can't be replayed here
   // v5/v6 proofs only name their book; from v7 a proof carries the whole book, so it replays whatever is published later
   O.bookOk = (pr) => !pr || pr.v < 5 || pr.v >= 7 || pr.b === FF.BOOK.id;

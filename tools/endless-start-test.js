@@ -80,7 +80,7 @@ const fs = require('fs');
   console.log(JSON.stringify(r, null, 1));
   const v7ok = r.v7.spill === 0 && r.v7.finShort === 0 && r.v7.ownMissing === 0 && r.v7.st3 >= 4 && r.v7.firstMove < 5 && r.v7.st1len < 2600;
   const v6bad = r.v6.spill > 0 && r.v6.finShort > 0; // the bug really is there in the old rules (the test can fail)
-  const pass = v7ok && v6bad && r.slower === 0 && r.start.v > 115 && r.start.banner && r.start.meterHidden && r.start.gen === 13 &&
+  const pass = v7ok && v6bad && r.slower === 0 && r.start.v > 115 && r.start.banner && r.start.meterHidden && r.start.gen === 14 &&
     r.oldOk.every(Boolean) && !r.oldFake.some(Boolean) && r.newOk && !errs.length;
   console.log(pass ? 'ENDLESS START TEST PASSED' : 'ENDLESS START TEST FAILED', { v7ok, v6bad, net }, errs);
   await b.close();
