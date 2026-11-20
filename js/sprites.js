@@ -933,16 +933,6 @@
   FF.drawSpikes = function (ctx, x, y, w, dir) {
     x = Math.round(x);
     const n = Math.max(1, Math.round(w / 8));
-    // b66: spikes read as danger on every world: a red glow on the surface under them and a dark outline round each one
-    ctx.fillStyle = 'rgba(255,40,60,0.22)'; ctx.fillRect(x - 2, dir === 'up' ? y - 11 : y + 8, n * 8 + 4, 3);
-    for (let i = 0; i < n; i++) {
-      const sx = x + i * 8;
-      for (let r = 0; r < 8; r++) {
-        const half = (r >> 1) + 1, yy = dir === 'up' ? y - 8 + r : y + 7 - r;
-        px(ctx, sx + 4 - half - 1, yy, half * 2 + 2, 1, '#05060d');
-      }
-      px(ctx, sx + 3, dir === 'up' ? y - 9 : y + 8, 2, 1, '#05060d'); // (the outline over the tip)
-    }
     for (let i = 0; i < n; i++) {
       const sx = x + i * 8;
       for (let r = 0; r < 8; r++) {
@@ -950,7 +940,7 @@
         const x0 = sx + 4 - half;
         const ww = half * 2;
         const yy = dir === 'up' ? y - 8 + r : y + 7 - r;
-        px(ctx, x0, yy, ww, 1, r < 2 ? '#ffd0d6' : C.hazard); // (b66: a bright tip)
+        px(ctx, x0, yy, ww, 1, C.hazard);
         px(ctx, x0, yy, 1, 1, FF.cbMode ? '#ffffff' : C.hazardLight);
         px(ctx, x0 + ww - 1, yy, 1, 1, FF.cbMode ? '#ffffff' : C.hazardDark);
       }
