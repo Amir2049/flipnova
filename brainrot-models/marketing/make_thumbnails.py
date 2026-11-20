@@ -254,11 +254,11 @@ def thumb_egyptian():
     pyramid((0, 140), 70)
     names = ["MolokhiaKraken", "AstroSphinx", "KosharyDragon", "NilePhoenix", "ShawarmaSultan",
              "FulMoon", "BasbousaCat", "PharaohFalafel"]
-    spots = [(-15, 6, 30), (-8, 7, 20), (0, 8.5, 0), (8, 7, -20), (15, 6, -30),
-             (-11, -2, 18), (0, -2.5, 0), (11, -2, -18)]
+    spots = [(-21, 9, 25), (-11, 10, 12), (0, 11, 0), (11, 10, -12), (21, 9, -25),
+             (-14, -1, 15), (0, -2, 0), (14, -1, -15)]
     for n, (x, y, yaw) in zip(names, spots):
         creature(n, (x, y, 0), yaw=yaw)
-    camera((0, -26, 7), (0, 3, 3.0), lens=30)
+    camera((0, -30, 8), (0, 4, 3.0), lens=28)
     p = os.path.join(OUT, "thumbnail_2_egyptian_brainrots.png")
     render(p, 1920, 1080)
     caption(p, [("EGYPTIAN BRAINROTS", FONT, 120, (255, 214, 60), (0.5, 0.1), "mm"),
@@ -275,11 +275,11 @@ def thumb_all20():
              "ShawarmaSultan", "KosharyDragon"]
     rows = [names[0:7], names[7:14], names[14:20]]
     for r, row in enumerate(rows):
-        y = 16 - 8 * r
+        y = 22 - 11 * r
         for i, n in enumerate(row):
-            x = (i - (len(row) - 1) / 2) * 6.2
+            x = (i - (len(row) - 1) / 2) * 8.5
             creature(n, (x, y, 0), yaw=-x * 1.4, scale=0.95)
-    camera((0, -30, 13), (0, 7, 2.5), lens=30)
+    camera((0, -36, 17), (0, 9, 1.5), lens=26)
     p = os.path.join(OUT, "thumbnail_3_collect_all_20.png")
     render(p, 1920, 1080)
     caption(p, [("COLLECT ALL 20!", FONT, 130, (255, 214, 60), (0.5, 0.1), "mm")])
