@@ -69,15 +69,20 @@ def node_mat(name, base, base2=None, rough=0.5, scale=8.0, bump=0.3, kind="noise
     return m
 
 
-SCALES = node_mat("Scales", (60, 140, 70), (20, 60, 35), rough=0.35, scale=18, bump=0.6, kind="scales", sss=0.05, coat=0.3)
-BELLY = node_mat("BellyPlates", (215, 190, 120), (150, 120, 70), rough=0.5, scale=6, bump=0.4)
-HORN = node_mat("Horn", (235, 220, 190), (120, 95, 70), rough=0.4, scale=4, bump=0.5)
-EYE = node_mat("Eye", (255, 190, 30), (200, 80, 0), rough=0.05, scale=3, bump=0.0, coat=1.0)
+SCALES = node_mat("Scales", (75, 205, 85), (35, 135, 60), rough=0.4, scale=11, bump=0.22, kind="scales", sss=0.05, coat=0.3)
+BELLY = node_mat("BellyPlates", (255, 228, 150), (225, 185, 110), rough=0.5, scale=6, bump=0.15)
+HORN = node_mat("Horn", (255, 240, 205), (205, 175, 120), rough=0.35, scale=4, bump=0.2)
+EYE = node_mat("Iris", (255, 190, 30), (215, 110, 0), rough=0.05, scale=3, bump=0.0, coat=1.0)
+SCLERA = node_mat("Sclera", (255, 255, 255), (235, 230, 225), rough=0.1, scale=3, bump=0.0, coat=1.0)
+SHOE = node_mat("Sneaker", (250, 250, 250), (225, 225, 230), rough=0.45, scale=30, bump=0.1)
+SOLE = node_mat("Sole", (235, 235, 240), (200, 200, 205), rough=0.6, scale=20, bump=0.1)
+STRIPE = node_mat("SneakerStripe", (30, 110, 235), (20, 80, 200), rough=0.4, scale=10, bump=0.0)
+HEEL = node_mat("HeelTab", (230, 40, 40), (190, 25, 25), rough=0.4, scale=10, bump=0.0)
 PUPIL = node_mat("Pupil", (10, 8, 6), (0, 0, 0), rough=0.05, bump=0.0, coat=1.0)
-MEMBRANE = node_mat("Membrane", (120, 60, 40), (60, 30, 25), rough=0.6, scale=5, bump=0.3, sss=0.2)
-CLAY = node_mat("Clay", (175, 85, 45), (110, 50, 25), rough=0.45, scale=6, bump=0.25, coat=0.4)
-GLAZE = node_mat("BlueGlaze", (30, 80, 160), (15, 40, 90), rough=0.15, scale=10, bump=0.1, coat=1.0)
-RICE = node_mat("RiceLentils", (225, 200, 160), (120, 80, 45), rough=0.7, scale=40, bump=0.8)
+MEMBRANE = node_mat("Membrane", (245, 110, 60), (200, 70, 40), rough=0.55, scale=5, bump=0.1, sss=0.2)
+CLAY = node_mat("Clay", (235, 115, 50), (200, 85, 35), rough=0.35, scale=6, bump=0.08, coat=0.6)
+GLAZE = node_mat("BlueGlaze", (40, 120, 240), (25, 85, 200), rough=0.15, scale=10, bump=0.05, coat=1.0)
+RICE = node_mat("RiceLentils", (245, 222, 175), (165, 115, 65), rough=0.7, scale=40, bump=0.35)
 PASTA = node_mat("Pasta", (240, 190, 100), (200, 140, 60), rough=0.4, scale=12, bump=0.2)
 SAUCE = node_mat("Sauce", (190, 30, 15), (110, 10, 5), rough=0.15, scale=6, bump=0.2, coat=0.6)
 CHICK = node_mat("Chickpea", (220, 180, 110), (170, 130, 70), rough=0.6, scale=20, bump=0.3)
@@ -194,8 +199,10 @@ def horn(base, direction, length, r, m, segs=6, curl=0.0):
 # Reptile eyes: amber with slit pupils, under the brow ridge.
 for sx in (-1, 1):
     p, n = surf((4 * sx, -1.45, 4.95), (-sx, 0.15, 0), inset=0.1)
-    ball(tuple(p), 0.24, EYE, scale=(0.75, 1, 0.8))
-    ball(tuple(p + n * 0.14), 0.17, PUPIL, scale=(0.3, 0.3, 1.0))
+    # Real-looking eyes: white eyeball, amber iris, round pupil (no cartoon shine).
+    ball(tuple(p), 0.27, SCLERA, scale=(0.8, 1, 0.85))
+    ball(tuple(p + n * 0.16), 0.15, EYE, scale=(0.45, 0.9, 0.9))
+    ball(tuple(p + n * 0.21), 0.075, PUPIL, scale=(0.4, 0.9, 0.9))
     p, n = surf((0.25 * sx, -6, 4.65), (0, 1, 0))
     ball(tuple(p), 0.08, PUPIL, scale=(1, 0.6, 0.6))  # nostrils
     # Swept-back horns rooted in the skull.
@@ -209,12 +216,20 @@ for sx in (-1, 1):
         p, _ = surf((3 * sx, y, 4.38), (-sx, 0, 0), inset=0.05)
         horn(tuple(p), (0, 0, -1), 0.24, 0.065, TEETH, segs=2)
     # Claws on all four feet (front feet hang over the rim, back feet on the ground).
-    # Claws rooted on the tip of each foot (found by casting a ray at the leg's end).
-    for end, d in (((1.6 * sx, -2.4, 1.55), (0, -0.4, -1)), ((2.8 * sx, 1.0, 0.3), (0, -1, -0.3))):
-        ex, ey, ez = end
-        for t in (-1, 0, 1):
-            p, _ = surf((ex + 0.14 * t, ey - 4, ez - 0.05), (0, 1, 0), inset=0.06)
-            horn(tuple(p), (0.2 * t + d[0], d[1], d[2]), 0.42, 0.075, HORN, segs=3)
+    # Claws on the front feet hanging over the rim.
+    ex, ey, ez = 1.6 * sx, -2.4, 1.55
+    for t in (-1, 0, 1):
+        p, _ = surf((ex + 0.14 * t, ey - 4, ez - 0.05), (0, 1, 0), inset=0.06)
+        horn(tuple(p), (0.2 * t, -0.4, -1), 0.42, 0.075, HORN, segs=3)
+    # The brainrot gag: brand-new sneakers on the back feet.
+    fx = 2.8 * sx
+    ball((fx, 0.7, 0.36), 0.5, SHOE, scale=(0.85, 1.45, 0.62), seg=20, ring=12)
+    ball((fx, 0.66, 0.09), 0.5, SOLE, scale=(0.9, 1.55, 0.2), seg=20, ring=8)
+    ball((fx, 1.12, 0.62), 0.3, SHOE, scale=(0.9, 0.7, 0.7))  # ankle collar
+    ball((fx + 0.36 * sx, 0.7, 0.36), 0.5, STRIPE, scale=(0.08, 0.9, 0.3), rot=(math.radians(-15), 0, 0))
+    ball((fx, 1.38, 0.55), 0.18, HEEL, scale=(0.8, 0.4, 1.0))
+    for k in range(3):
+        ball((fx, 0.25 + 0.2 * k, 0.62 + 0.04 * k), 0.12, SOLE, scale=(2.0, 0.3, 0.25))  # laces
 # Open mouth sliver.
 ball((0, -2.3, 4.32), 0.5, MOUTH, scale=(0.8, 1.35, 0.14))
 # Spines down the neck.
@@ -411,19 +426,19 @@ bpy.ops.mesh.primitive_plane_add(size=80, location=(0, 0, 0))
 g = bpy.context.object
 gm = bpy.data.materials.new("Ground")
 gm.use_nodes = True
-gm.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = lin((200, 170, 120))
+gm.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = lin((110, 185, 90))
 g.data.materials.append(gm)
 world = bpy.data.worlds.new("W")
 scene.world = world
 world.use_nodes = True
-world.node_tree.nodes["Background"].inputs[0].default_value = lin((150, 185, 230))
+world.node_tree.nodes["Background"].inputs[0].default_value = lin((120, 180, 255))
 world.node_tree.nodes["Background"].inputs[1].default_value = 0.7
 bpy.ops.object.light_add(type="SUN", rotation=(math.radians(38), math.radians(12), math.radians(-40)))
-bpy.context.object.data.energy = 4.0
+bpy.context.object.data.energy = 3.2
 bpy.context.object.data.angle = math.radians(4)
 size = max(model.dimensions)
 target = Vector((0, 0, model.dimensions.z * 0.45))
-bpy.ops.object.camera_add(location=target + Vector((0.55, -0.8, 0.28)).normalized() * size * 2.6)
+bpy.ops.object.camera_add(location=target + Vector((0.55, -0.8, 0.28)).normalized() * size * 2.0)
 cam = bpy.context.object
 cam.rotation_euler = (target - cam.location).to_track_quat("-Z", "Y").to_euler()
 cam.data.lens = 55
@@ -431,8 +446,7 @@ scene.camera = cam
 scene.cycles.samples = 64
 scene.cycles.use_denoising = True
 scene.render.resolution_x = scene.render.resolution_y = 1000
-scene.view_settings.view_transform = "AgX"
-scene.view_settings.look = "AgX - Punchy"
+scene.view_settings.view_transform = "Standard"
 scene.render.filepath = os.path.join(OUT, f"{NAME}_preview.png")
 bpy.ops.render.render(write_still=True)
 
