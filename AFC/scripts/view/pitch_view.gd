@@ -1,0 +1,600 @@
+class_name PitchView
+extends Node3D
+## Pitch (markings drawn by a shader, so they stay sharp), goals with nets, ad boards, stands with a crowd, lights.
+
+var pitch: Pitch
+var nets: Array[MeshInstance3D] = []
+var net_shake := [0.0, 0.0]
+
+const GRASS_SHADER := """
+shader_type spatial;
+uniform vec2 size = vec2(105.0, 68.0);
+uniform float box_d = 16.5;
+uniform float box_w = 40.3;
+uniform float six_d = 5.5;
+uniform float six_w = 18.32;
+uniform float circle_r = 9.15;
+uniform float spot_d = 11.0;
+uniform vec3 grass_a : source_color = vec3(0.13, 0.25, 0.07);
+uniform vec3 grass_b : source_color = vec3(0.19, 0.33, 0.1);
+uniform float wet = 0.0;
+varying vec3 wpos;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+float noise(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+float ln(float d, float w) { float aa = fwidth(d) * 1.2; return 1.0 - smoothstep(w * 0.5 - aa, w * 0.5 + aa, abs(d)); }
+void fragment() {
+	vec2 p = wpos.xz;
+	float hl = size.x * 0.5;
+	float hw = size.y * 0.5;
+	float stripes = 18.0;
+	float sp = fract((p.x + hl) / size.x * stripes * 0.5);
+	float s = smoothstep(0.49, 0.51, sp) - smoothstep(0.99, 1.0, sp);
+	// mowed grass leans one way per stripe: which stripe looks light depends on where the camera looks from
+	vec3 vdir = normalize(wpos - CAMERA_POSITION_WORLD);
+	float lean = mix(1.0, -1.0, s) * clamp(vdir.x * 1.6, -1.0, 1.0);
+	vec3 col = mix(grass_a, grass_b, 0.5 + 0.5 * mix(-1.0, 1.0, s) * 0.8 + lean * 0.45);
+	col *= 0.93 + 0.12 * noise(p * 0.9) + 0.05 * noise(p * 6.0) + 0.04 * noise(p * 31.0);
+	// worn turf: goal mouths and the centre spot
+	vec2 qq = vec2(abs(p.x), p.y);
+	float wear = exp(-pow(length((qq - vec2(hl - 3.0, 0.0)) / vec2(3.5, 4.5)), 2.0)) + 0.5 * exp(-pow(length(p / 3.0), 2.0));
+	col = mix(col, vec3(0.33, 0.33, 0.2), clamp(wear, 0.0, 1.0) * 0.35);
+	float inside = step(abs(p.x), hl + 0.1) * step(abs(p.y), hw + 0.1);
+	col *= mix(0.85, 1.0, inside);
+	float lw = 0.12;
+	float L = 0.0;
+	L = max(L, ln(abs(p.x) - hl, lw) * step(abs(p.y), hw + lw));
+	L = max(L, ln(abs(p.y) - hw, lw) * step(abs(p.x), hl + lw));
+	L = max(L, ln(p.x, lw) * step(abs(p.y), hw));
+	L = max(L, ln(length(p) - circle_r, lw));
+	L = max(L, 1.0 - smoothstep(0.16, 0.2, length(p)));
+	vec2 q = vec2(abs(p.x), p.y);
+	L = max(L, ln(q.x - (hl - box_d), lw) * step(abs(q.y), box_w * 0.5));
+	L = max(L, ln(abs(q.y) - box_w * 0.5, lw) * step(hl - box_d, q.x) * step(q.x, hl));
+	L = max(L, ln(q.x - (hl - six_d), lw) * step(abs(q.y), six_w * 0.5));
+	L = max(L, ln(abs(q.y) - six_w * 0.5, lw) * step(hl - six_d, q.x) * step(q.x, hl));
+	L = max(L, 1.0 - smoothstep(0.1, 0.14, length(q - vec2(hl - spot_d, 0.0))));
+	L = max(L, ln(length(q - vec2(hl - spot_d, 0.0)) - circle_r, lw) * step(q.x, hl - box_d));
+	L = max(L, ln(length(vec2(hl - q.x, hw - abs(q.y))) - 1.0, lw) * step(hl - 1.0, q.x) * step(hw - 1.0, abs(q.y)));
+	col = mix(col, vec3(0.86), L * 0.92);
+	ALBEDO = col * (1.0 - 0.18 * wet);
+	ROUGHNESS = 0.92 - 0.45 * wet;
+	SPECULAR = 0.2;
+}
+"""
+
+
+
+
+func build(p: Pitch) -> void:
+	pitch = p
+	_ground()
+	for side in [-1.0, 1.0]:
+		_goal(side)
+	if p.walls:
+		_cage()
+	else:
+		_boards()
+	_stands()
+
+
+func _ground() -> void:
+	var mi := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(pitch.length + 24.0, pitch.width + 24.0)
+	pm.subdivide_width = 4
+	pm.subdivide_depth = 4
+	mi.mesh = pm
+	var sm := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = GRASS_SHADER
+	sm.shader = sh
+	sm.set_shader_parameter("size", Vector2(pitch.length, pitch.width))
+	sm.set_shader_parameter("box_d", pitch.box_depth)
+	sm.set_shader_parameter("box_w", pitch.box_width)
+	sm.set_shader_parameter("six_d", pitch.six_depth)
+	sm.set_shader_parameter("six_w", pitch.six_width)
+	sm.set_shader_parameter("circle_r", pitch.circle_radius)
+	sm.set_shader_parameter("spot_d", pitch.penalty_spot)
+	grass_mat = sm
+	mi.material_override = sm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+func _goal(side: float) -> void:
+	var hl := pitch.half_l()
+	var gw := pitch.goal_width
+	var gh := pitch.goal_height
+	var gd := pitch.goal_depth
+	var white := StandardMaterial3D.new()
+	white.albedo_color = Color(0.96, 0.96, 0.96)
+	white.roughness = 0.35
+	var r := pitch.post_radius
+	var x := side * (hl + r)
+	for z in [-gw * 0.5 - r, gw * 0.5 + r]:
+		var post := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = r
+		cm.bottom_radius = r
+		cm.height = gh + r
+		post.mesh = cm
+		post.material_override = white
+		post.position = Vector3(x, (gh + r) * 0.5, z)
+		add_child(post)
+	var bar := MeshInstance3D.new()
+	var bm := CylinderMesh.new()
+	bm.top_radius = r
+	bm.bottom_radius = r
+	bm.height = gw + 2 * r
+	bar.mesh = bm
+	bar.material_override = white
+	bar.rotation_degrees = Vector3(90, 0, 0)
+	bar.position = Vector3(x, gh + r, 0)
+	add_child(bar)
+	# back frame
+	for z in [-gw * 0.5, gw * 0.5]:
+		var bp := MeshInstance3D.new()
+		var c2 := CylinderMesh.new()
+		c2.top_radius = 0.025
+		c2.bottom_radius = 0.025
+		c2.height = gh * 0.8
+		bp.mesh = c2
+		bp.material_override = white
+		bp.position = Vector3(side * (hl + gd), gh * 0.4, z)
+		add_child(bp)
+	# net: roof, back, sides
+	var net_mat := StandardMaterial3D.new()
+	net_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	net_mat.alpha_scissor_threshold = 0.5
+	net_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	net_mat.albedo_texture = _net_texture()
+	net_mat.uv1_triplanar = true
+	net_mat.uv1_scale = Vector3(4, 4, 4)
+	net_mat.albedo_color = Color(0.95, 0.95, 0.95)
+	var net := MeshInstance3D.new()
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var a := Vector3(side * hl, gh, -gw * 0.5)
+	var b := Vector3(side * hl, gh, gw * 0.5)
+	var c := Vector3(side * (hl + gd), gh * 0.8, gw * 0.5)
+	var d := Vector3(side * (hl + gd), gh * 0.8, -gw * 0.5)
+	var e := Vector3(side * (hl + gd), 0, gw * 0.5)
+	var f := Vector3(side * (hl + gd), 0, -gw * 0.5)
+	var g := Vector3(side * hl, 0, gw * 0.5)
+	var h := Vector3(side * hl, 0, -gw * 0.5)
+	_quad(st, a, b, c, d)      # roof
+	_quad(st, d, c, e, f)      # back
+	_quad(st, b, g, e, c)      # side
+	_quad(st, a, d, f, h)      # side
+	st.generate_normals()
+	net.mesh = st.commit()
+	net.material_override = net_mat
+	net.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(net)
+	nets.append(net)
+
+
+func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+	for v in [a, b, c, a, c, d]:
+		st.add_vertex(v)
+
+
+func _net_texture() -> ImageTexture:
+	var img := Image.create(64, 64, true, Image.FORMAT_RGBA8)
+	img.fill(Color(1, 1, 1, 0))
+	for i in 64:
+		for k in [0, 1, 32, 33]:
+			img.set_pixel(i, k, Color(1, 1, 1, 1))
+			img.set_pixel(k, i, Color(1, 1, 1, 1))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+func _boards() -> void:
+	var hl := pitch.half_l()
+	var hw := pitch.half_w()
+	var texts := ["AFC", "PLAY ON", "AFC ARENA", "FAIR PLAY", "GOAL!", "AFC"]
+	var colors := [Color(0.78, 1.0, 0.24), Color(1.0, 0.42, 0.17), Color(0.1, 0.14, 0.28), Color(0.2, 0.8, 0.9)]
+	var n := 0
+	for side in [-1.0, 1.0]:
+		var z: float = side * (hw + 4.0)
+		var x := -hl
+		while x < hl:
+			_board(Vector3(x + 5.0, 0.45, z), Vector3(0, 0 if side > 0 else 180, 0), 10.0, texts[n % texts.size()], colors[n % colors.size()])
+			x += 10.0
+			n += 1
+	for side in [-1.0, 1.0]:
+		var x2: float = side * (hl + 4.5)
+		for z2 in [-hw + 5.0, -hw + 15.0, hw - 15.0, hw - 5.0]:
+			_board(Vector3(x2, 0.45, z2), Vector3(0, -90 * side, 0), 10.0, texts[n % texts.size()], colors[n % colors.size()])
+			n += 1
+
+
+## Hara Street: low painted walls all round (the ball plays off them) and a fence above.
+func _cage() -> void:
+	var hl := pitch.half_l()
+	var hw := pitch.half_w()
+	var gw := pitch.goal_width * 0.5
+	var paint := [Color(0.78, 1.0, 0.24), Color(1.0, 0.42, 0.17), Color(0.2, 0.8, 0.9), Color(0.95, 0.3, 0.6), Color(1.0, 0.85, 0.2)]
+	var words := ["HARA", "STREET", "AFC", "NO RULES", "SKILL", "HARA"]
+	var n := 0
+	var h := 1.1
+	# side walls
+	for side in [-1.0, 1.0]:
+		var x := -hl
+		while x < hl - 0.01:
+			var w := minf(6.0, hl - x)
+			var wh := h if side < 0.0 else 0.7
+			_wall(Vector3(x + w * 0.5, wh * 0.5, side * (hw + 0.15)), Vector3(w, wh, 0.3), paint[n % paint.size()], words[n % words.size()] if side < 0.0 else "", side < 0.0)
+			x += w
+			n += 1
+	# end walls either side of the goal
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			var len := hw - gw
+			_wall(Vector3(sx * (hl + 0.15), h * 0.5, sz * (gw + len * 0.5)), Vector3(0.3, h, len), paint[n % paint.size()], "", false)
+			n += 1
+	# chain-link fence above the walls
+	var fence := StandardMaterial3D.new()
+	fence.albedo_texture = _net_texture()
+	fence.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	fence.cull_mode = BaseMaterial3D.CULL_DISABLED
+	fence.uv1_scale = Vector3(pitch.length / 2.0, 2.0, 1.0)
+	fence.albedo_color = Color(0.75, 0.78, 0.82)
+	var fh := 3.2
+	var post_mat := StandardMaterial3D.new()
+	post_mat.albedo_color = Color(0.25, 0.27, 0.3)
+	post_mat.metallic = 0.5
+	for side in [-1.0]:   # no fence on the camera side
+		var fm := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(pitch.length + 0.6, fh)
+		fm.mesh = q
+		fm.material_override = fence
+		fm.position = Vector3(0, h + fh * 0.5, side * (hw + 0.15))
+		fm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(fm)
+		var x := -hl
+		while x <= hl + 0.01:
+			var post := MeshInstance3D.new()
+			var cm := CylinderMesh.new()
+			cm.top_radius = 0.06
+			cm.bottom_radius = 0.06
+			cm.height = h + fh
+			post.mesh = cm
+			post.material_override = post_mat
+			post.position = Vector3(x, (h + fh) * 0.5, side * (hw + 0.32))
+			add_child(post)
+			x += 6.0
+	for sx in [-1.0, 1.0]:
+		var fm2 := MeshInstance3D.new()
+		var q2 := QuadMesh.new()
+		q2.size = Vector2(pitch.width + 0.6, fh)
+		fm2.mesh = q2
+		fm2.material_override = fence
+		fm2.rotation_degrees = Vector3(0, 90, 0)
+		fm2.position = Vector3(sx * (hl + 0.15 + pitch.goal_depth), h + fh * 0.5, 0)
+		fm2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(fm2)
+
+
+func _wall(pos: Vector3, size: Vector3, color: Color, text: String, far: bool) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color.darkened(0.15)
+	mat.roughness = 0.85
+	mi.material_override = mat
+	mi.position = pos
+	add_child(mi)
+	if text != "":
+		var l := Label3D.new()
+		l.text = text
+		l.font_size = 96
+		l.pixel_size = 0.006
+		l.modulate = Color(0.06, 0.07, 0.1)
+		l.outline_size = 0
+		l.position = pos + Vector3(0, 0, 0.16 if far else -0.16)
+		l.rotation_degrees = Vector3(0, 0 if far else 180, 0)
+		add_child(l)
+
+
+func _board(pos: Vector3, rot: Vector3, width: float, text: String, color: Color) -> void:
+	var root := Node3D.new()
+	root.position = pos
+	root.rotation_degrees = rot
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(width, 0.9, 0.12)
+	mi.mesh = bm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.emission_enabled = true
+	mat.emission = color * 0.35
+	mi.material_override = mat
+	root.add_child(mi)
+	var lb := Label3D.new()
+	lb.text = text
+	lb.font_size = 72
+	lb.pixel_size = 0.006
+	lb.position = Vector3(0, 0, -0.07)
+	lb.rotation_degrees = Vector3(0, 180, 0)
+	lb.modulate = Color(0.05, 0.05, 0.08) if color.get_luminance() > 0.5 else Color(1, 1, 1)
+	lb.outline_size = 0
+	root.add_child(lb)
+	add_child(root)
+
+
+const FAN_SHADER := """
+shader_type spatial;
+uniform float excite = 0.0;
+varying vec3 shirt;
+varying float part;
+varying float skin;
+varying float rowh;
+void vertex() {
+	rowh = MODEL_MATRIX[3].y;
+	float id = INSTANCE_CUSTOM.x;
+	part = UV.x;
+	skin = INSTANCE_CUSTOM.y;
+	shirt = COLOR.rgb;
+	float e = clamp(excite, 0.0, 1.0);
+	// arms go up when the crowd gets going
+	if (part > 1.5 && part < 2.5) {
+		float sx = sign(VERTEX.x);
+		float raise = clamp(e * 1.6 - id * 0.6, 0.0, 1.0) * (0.75 + 0.25 * sin(TIME * 7.0 + id * 31.0));
+		raise = max(raise, step(0.93, id) * (0.5 + 0.5 * sin(TIME * 2.0 + id * 9.0)));
+		vec2 rel = vec2(VERTEX.x - sx * 0.2, VERTEX.y - 1.33);
+		float a = raise * 2.7 * sx;
+		rel = vec2(rel.x * cos(a) - rel.y * sin(a), rel.x * sin(a) + rel.y * cos(a));
+		VERTEX.x = rel.x + sx * 0.2;
+		VERTEX.y = rel.y + 1.33;
+	}
+	// bouncing: a few always sway, everybody jumps after a goal
+	float hop = max(0.0, sin(TIME * (2.2 + 5.0 * e) + id * 40.0));
+	VERTEX.y += hop * (0.015 + 0.3 * e * step(0.25, id));
+	VERTEX.x += sin(TIME * 1.3 + id * 17.0) * 0.03;
+}
+void fragment() {
+	vec3 sk = mix(vec3(0.33, 0.21, 0.14), vec3(0.86, 0.66, 0.52), skin);
+	vec3 c = part > 0.5 && part < 1.5 ? sk : shirt;
+	if (part > 2.5) c = vec3(0.1, 0.1, 0.12);
+	float g = dot(c, vec3(0.3, 0.59, 0.11));
+	c = mix(vec3(g), c, 0.72);
+	ALBEDO = c * (1.0 - 0.5 * clamp((rowh - 1.5) / 14.0, 0.0, 1.0));
+	ROUGHNESS = 0.9;
+}
+"""
+
+var crowd_mat: ShaderMaterial
+var grass_mat: ShaderMaterial
+var quality := 1
+var excite := 0.0
+var excite_target := 0.15
+
+
+func _stands() -> void:
+	var hl := pitch.half_l()
+	var hw := pitch.half_w()
+	var sm := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = FAN_SHADER
+	sm.shader = sh
+	crowd_mat = sm
+	var concrete := StandardMaterial3D.new()
+	concrete.albedo_color = Color(0.3, 0.31, 0.34)
+	concrete.roughness = 0.95
+	var steps := StandardMaterial3D.new()
+	steps.vertex_color_use_as_albedo = true
+	steps.roughness = 0.9
+	var fan := _fan_mesh()
+	# the far side and both ends (no stand on the camera side: the broadcast camera sits there)
+	_tier(Vector3(0, 0, -hw - 7.5), pitch.length + 34.0, 180.0, steps, concrete, fan, 0)
+	_tier(Vector3(hl + 9.0, 0, 0), pitch.width + 24.0, 90.0, steps, concrete, fan, 1)
+	_tier(Vector3(-hl - 9.0, 0, 0), pitch.width + 24.0, -90.0, steps, concrete, fan, 2)
+	_floodlights()
+
+
+## A low-poly supporter: shirt body, head, arms that can be raised (UV.x tags the part for the shader).
+func _fan_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_box(st, Vector3(-0.2, 0.8, -0.12), Vector3(0.2, 1.36, 0.12), 0.0, false)
+	_box(st, Vector3(-0.1, 1.38, -0.11), Vector3(0.1, 1.62, 0.11), 1.0, false)
+	_box(st, Vector3(0.2, 0.9, -0.06), Vector3(0.3, 1.35, 0.06), 2.0, true)
+	_box(st, Vector3(-0.3, 0.9, -0.06), Vector3(-0.2, 1.35, 0.06), 2.0, true)
+	_box(st, Vector3(-0.18, 0.3, -0.1), Vector3(0.18, 0.8, 0.1), 3.0, true)
+	st.generate_normals()
+	return st.commit()
+
+
+func _box(st: SurfaceTool, lo: Vector3, hi: Vector3, part: float, open_ends: bool) -> void:
+	var c := [Vector3(lo.x, lo.y, lo.z), Vector3(hi.x, lo.y, lo.z), Vector3(hi.x, hi.y, lo.z), Vector3(lo.x, hi.y, lo.z),
+		Vector3(lo.x, lo.y, hi.z), Vector3(hi.x, lo.y, hi.z), Vector3(hi.x, hi.y, hi.z), Vector3(lo.x, hi.y, hi.z)]
+	var faces := [[4, 5, 6, 7], [1, 0, 3, 2], [5, 1, 2, 6], [0, 4, 7, 3], [7, 6, 2, 3]]
+	if not open_ends:
+		faces.append([0, 1, 5, 4])
+	for f in faces:
+		for k in [0, 1, 2, 0, 2, 3]:
+			st.set_uv(Vector2(part, 0))
+			st.add_vertex(c[f[k]])
+
+
+func _tier(pos: Vector3, length: float, yaw: float, steps_mat: Material, concrete: Material, fan: Mesh, which: int) -> void:
+	var root := Node3D.new()
+	root.position = pos
+	root.rotation_degrees = Vector3(0, yaw, 0)
+	add_child(root)
+	var rows := 26
+	var tread := 0.85
+	var rise := 0.55
+	var base := 1.3
+	# stepped terraces, seats in blocks of colour
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hl := length * 0.5
+	var block_cols := [Color(0.09, 0.16, 0.36), Color(0.12, 0.13, 0.16)]
+	for r in rows:
+		var z0 := r * tread
+		var y0 := base + r * rise
+		var col: Color = block_cols[(r / 6) % 2]
+		st.set_color(col.darkened(0.25))
+		_quad3(st, Vector3(-hl, y0 - rise, z0), Vector3(hl, y0 - rise, z0), Vector3(hl, y0, z0), Vector3(-hl, y0, z0))
+		st.set_color(col)
+		_quad3(st, Vector3(-hl, y0, z0), Vector3(hl, y0, z0), Vector3(hl, y0, z0 + tread), Vector3(-hl, y0, z0 + tread))
+	var depth := rows * tread
+	var top := base + rows * rise
+	st.set_color(Color(0.18, 0.19, 0.22))
+	_quad3(st, Vector3(-hl, top, depth), Vector3(hl, top, depth), Vector3(hl, top + 3.0, depth), Vector3(-hl, top + 3.0, depth))
+	st.generate_normals()
+	var terr := MeshInstance3D.new()
+	terr.mesh = st.commit()
+	terr.material_override = steps_mat
+	terr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(terr)
+	# front wall
+	var wall := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(length, base + 0.2, 0.4)
+	wall.mesh = bm
+	wall.position = Vector3(0, (base + 0.2) * 0.5 - 0.55, -0.2)
+	wall.material_override = concrete
+	root.add_child(wall)
+	# roof: a thin slab sloping up toward the pitch, a coloured fascia on its front edge
+	var roof := MeshInstance3D.new()
+	var rm := BoxMesh.new()
+	rm.size = Vector3(length + 2.0, 0.35, depth * 0.85)
+	roof.mesh = rm
+	roof.position = Vector3(0, top + 7.0, depth * 0.55)
+	roof.rotation_degrees = Vector3(-6, 0, 0)
+	roof.material_override = concrete
+	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	root.add_child(roof)
+	var fascia := MeshInstance3D.new()
+	var fm := BoxMesh.new()
+	fm.size = Vector3(length + 2.0, 1.4, 0.3)
+	fascia.mesh = fm
+	fascia.position = Vector3(0, top + 7.4, depth * 0.55 - depth * 0.425)
+	var fmat := StandardMaterial3D.new()
+	fmat.albedo_color = Color(0.06, 0.08, 0.16)
+	fmat.emission_enabled = true
+	fmat.emission = Color(0.78, 1.0, 0.24) * 0.25
+	fascia.material_override = fmat
+	root.add_child(fascia)
+	for x in range(-int(hl), int(hl) + 1, 24):
+		var col := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.35
+		cm.bottom_radius = 0.35
+		cm.height = top + 7.0
+		col.mesh = cm
+		col.position = Vector3(x, (top + 7.0) * 0.5, depth + 0.3)
+		col.material_override = concrete
+		root.add_child(col)
+	# the people
+	var occupancy: float = [0.45, 0.72, 0.9][clampi(quality, 0, 2)]
+	var spacing := 0.62
+	var per_row := int(length / spacing)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1234 + which
+	var xforms: Array[Transform3D] = []
+	var cols: Array[Color] = []
+	var customs: Array[Color] = []
+	var home := Color(0.85, 0.12, 0.2)
+	var away := Color(0.1, 0.6, 0.75)
+	for r in rows:
+		for i in per_row:
+			if rng.randf() > occupancy:
+				continue
+			var x := -hl + (i + 0.5) * spacing + rng.randf_range(-0.12, 0.12)
+			var y := base + r * rise
+			var z := r * tread + 0.45
+			var sc := rng.randf_range(0.9, 1.08)
+			var basis := Basis(Vector3.UP, PI + rng.randf_range(-0.25, 0.25)).scaled(Vector3(sc, sc, sc))
+			xforms.append(Transform3D(basis, Vector3(x, y - 0.3, z)))
+			var away_end := which == 2 and x > -hl * 0.2
+			var c := home if not away_end else away
+			var roll := rng.randf()
+			if roll < 0.25:
+				c = Color(0.92, 0.92, 0.92)
+			elif roll < 0.42:
+				c = Color.from_hsv(rng.randf(), 0.35, rng.randf_range(0.15, 0.6))
+			cols.append(c.darkened(rng.randf_range(0.0, 0.3)))
+			customs.append(Color(rng.randf(), rng.randf(), 0, 0))
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.use_custom_data = true
+	mm.mesh = fan
+	mm.instance_count = xforms.size()
+	for k in xforms.size():
+		mm.set_instance_transform(k, xforms[k])
+		mm.set_instance_color(k, cols[k])
+		mm.set_instance_custom_data(k, customs[k])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.material_override = crowd_mat
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mmi)
+
+
+func _quad3(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+	for v in [a, c, b, a, d, c]:
+		st.add_vertex(v)
+
+
+func _floodlights() -> void:
+	var hl := pitch.half_l()
+	var hw := pitch.half_w()
+	var pole_mat := StandardMaterial3D.new()
+	pole_mat.albedo_color = Color(0.55, 0.57, 0.6)
+	pole_mat.metallic = 0.6
+	pole_mat.roughness = 0.4
+	var lamp_mat := StandardMaterial3D.new()
+	lamp_mat.albedo_color = Color(1, 1, 0.95)
+	lamp_mat.emission_enabled = true
+	lamp_mat.emission = Color(1.0, 0.98, 0.9)
+	lamp_mat.emission_energy_multiplier = 3.0
+	for sx in [-1.0, 1.0]:
+		var base := Vector3(sx * (hl + 20.0), 0, -hw - 26.0)
+		var pole := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.45
+		cm.bottom_radius = 0.8
+		cm.height = 46.0
+		pole.mesh = cm
+		pole.position = base + Vector3(0, 23.0, 0)
+		pole.material_override = pole_mat
+		add_child(pole)
+		var head := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(8.0, 4.0, 0.6)
+		head.mesh = bm
+		head.position = base + Vector3(0, 46.0, 0)
+		head.look_at_from_position(head.position, Vector3(0, 0, 0), Vector3.UP)
+		head.material_override = lamp_mat
+		add_child(head)
+
+
+func set_excitement(v: float) -> void:
+	excite = maxf(excite, clampf(v, 0.0, 1.0))
+
+
+## The crowd follows the game: louder and on its feet near the goals, settles down otherwise.
+func update_crowd(dt: float, ball_x: float) -> void:
+	var near := clampf((absf(ball_x) - pitch.half_l() * 0.45) / (pitch.half_l() * 0.5), 0.0, 1.0)
+	excite_target = 0.12 + 0.3 * near
+	excite = move_toward(excite, excite_target, dt * (0.25 if excite > excite_target else 0.6))
+	if crowd_mat:
+		crowd_mat.set_shader_parameter("excite", excite)
+
+
+func set_wet(v: float) -> void:
+	if grass_mat:
+		grass_mat.set_shader_parameter("wet", v)
