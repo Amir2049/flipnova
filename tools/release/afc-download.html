@@ -1,0 +1,176 @@
+<title>AFC Download</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Changa:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap">
+<style>
+/* Layout: one stadium-night column, the download button is the whole point; build notes underneath. */
+:root {
+  --night: #070c1a;
+  --panel: #0e1730;
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #eef3ff;
+  --muted: #9fb0d4;
+  --volt: #c8ff3d;
+  --volt-ink: #0b1406;
+  --cyan: #33dbf2;
+  --bad: #ff6b5e;
+  --display: "Changa", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --body: "IBM Plex Sans Arabic", "Changa", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html, body { background: var(--night); color: var(--text); }
+body {
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.7;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background:
+    radial-gradient(120% 60% at 85% -10%, rgba(51, 219, 242, 0.16), transparent 60%),
+    radial-gradient(90% 50% at 0% 0%, rgba(200, 255, 61, 0.1), transparent 60%),
+    var(--night);
+  min-height: 100%;
+}
+main { max-width: 620px; margin: 0 auto; padding-block: 28px 48px; display: grid; gap: 22px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo {
+  font-family: var(--display); font-weight: 800; font-size: 28px; color: var(--volt-ink);
+  background: var(--volt); padding: 2px 18px; transform: skewX(-12deg); border-radius: 4px; direction: ltr;
+}
+.logo span { display: inline-block; transform: skewX(12deg); }
+.tag { color: var(--muted); font-size: 14px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(30px, 8vw, 44px); line-height: 1.15; margin: 0; text-wrap: balance; }
+h1 .v { color: var(--volt); direction: ltr; unicode-bidi: isolate; }
+.lead { color: var(--muted); margin: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 14px; }
+.meta b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+button#get {
+  font-family: var(--display); font-weight: 800; font-size: 22px;
+  color: var(--volt-ink); background: var(--volt); border: 0; border-radius: 40px;
+  padding: 16px 28px; cursor: pointer; width: 100%;
+  box-shadow: 0 8px 30px rgba(200, 255, 61, 0.25);
+}
+button#get:disabled { opacity: 0.6; cursor: default; }
+button#get:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+.bar { height: 10px; background: rgba(255, 255, 255, 0.08); border-radius: 10px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--volt)); transition: width 0.2s; }
+#status { font-size: 15px; min-height: 1.7em; margin: 0; }
+#status.err { color: var(--bad); }
+h2 { font-family: var(--display); font-weight: 700; font-size: 22px; margin: 0; }
+ol { margin: 0; padding-inline-start: 22px; display: grid; gap: 6px; }
+ol li::marker { color: var(--volt); font-family: var(--display); font-weight: 700; }
+ul.news { margin: 0; padding-inline-start: 20px; display: grid; gap: 6px; }
+code { direction: ltr; unicode-bidi: isolate; font-family: ui-monospace, monospace; font-size: 14px; color: var(--cyan); }
+.foot { color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<main dir="rtl" lang="ar">
+  <div class="brand"><div class="logo"><span>AFC</span></div><div class="tag">لعبة الكورة بتاعتنا</div></div>
+
+  <h1>نزّل <span class="v" id="ver">AFC {{VERSION}}</span></h1>
+  <p class="lead">من هنا بتنزل اللعبة مهما كان حجمها، حتى لو أكبر من 30 ميجا اللي الشات بيقبلها.</p>
+
+  <section class="card" aria-labelledby="dl-h">
+    <div class="meta">
+      <span>النسخة <b id="m-ver">{{VERSION}}</b></span>
+      <span>الحجم <b id="m-size">{{SIZE_MB}} MB</b></span>
+      <span>الملف <b id="m-file">AFC-{{VERSION}}.zip</b></span>
+    </div>
+    <button id="get" type="button">تحميل اللعبة</button>
+    <div class="bar" aria-hidden="true"><i id="fill"></i></div>
+    <p id="status" role="status" aria-live="polite">جاهز للتحميل.</p>
+  </section>
+
+  <section class="card" aria-labelledby="how-h">
+    <h2 id="how-h">التسطيب</h2>
+    <ol>
+      <li>دوس <b>تحميل اللعبة</b> واستنى لحد ما الشريط يكمل، وبعدين وافق على حفظ الملف.</li>
+      <li>افتح تطبيق <b>Files</b> وادخل على <b>Downloads</b>.</li>
+      <li>دوس على <code id="h-zip">AFC-{{VERSION}}.zip</code> واختار <b>Extract</b> (فك الضغط).</li>
+      <li>دوس على <code id="h-apk">AFC-{{VERSION}}.apk</code> وبعدين <b>Install</b>. هتتسطب فوق النسخة القديمة من غير ما حاجة تتمسح.</li>
+    </ol>
+  </section>
+
+  <section class="card" aria-labelledby="new-h">
+    <h2 id="new-h">الجديد في النسخة دي</h2>
+    <ul class="news" id="news">
+{{NEWS}}
+    </ul>
+  </section>
+
+  <p class="foot">الصفحة دي بتتحدّث مع كل نسخة جديدة على نفس الرابط.</p>
+</main>
+
+<script>
+// The build is published next to this page as base64 text parts (published files have a size cap and only text and
+// media types are served); they are decoded and joined here into one zip that holds the APK (Android installs only
+// files named .apk, and a page can offer a .zip for saving).
+const BUILD = {{BUILD}};
+
+const $ = (id) => document.getElementById(id);
+const btn = $("get"), fill = $("fill"), status = $("status");
+$("ver").textContent = "AFC " + BUILD.version;
+$("m-ver").textContent = BUILD.version;
+$("m-size").textContent = (BUILD.size / 1048576).toFixed(1) + " MB";
+$("m-file").textContent = BUILD.zip;
+$("h-zip").textContent = BUILD.zip;
+$("h-apk").textContent = BUILD.apk;
+
+let downloads = null;
+let built = null;
+if (window.claude && window.claude.use) {
+  window.claude.use("downloads").then((d) => { downloads = d; if (!d) say("التحميل مش متاح في الشاشة دي. افتح الرابط في claude.ai.", true); });
+} else {
+  say("افتح الصفحة دي من claude.ai عشان التحميل يشتغل.", true);
+}
+
+function say(t, err) { status.textContent = t; status.classList.toggle("err", !!err); }
+
+function decode(text, out) {
+  const step = 4 * 262144;
+  for (let i = 0; i < text.length; i += step) {
+    const bin = atob(text.slice(i, i + step));
+    const u = new Uint8Array(bin.length);
+    for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
+    out.push(u);
+  }
+}
+
+async function fetchPart(url, done, total) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("part " + url + " " + r.status);
+  const t = (await r.text()).replace(/\s+/g, "");
+  done.n += t.length;
+  fill.style.width = Math.min(100, (done.n / total) * 100).toFixed(1) + "%";
+  say("بيحمّل... " + Math.round((done.n / total) * 100) + "%");
+  return t;
+}
+
+btn.addEventListener("click", async () => {
+  if (!downloads) { say("التحميل مش متاح في الشاشة دي. افتح الرابط في claude.ai.", true); return; }
+  btn.disabled = true;
+  try {
+    if (!built) {
+      const done = { n: 0 };
+      const all = [];
+      for (const p of BUILD.parts) decode(await fetchPart(p, done, BUILD.textSize), all);
+      built = new Blob(all);
+      if (built.size !== BUILD.size) throw new Error("size " + built.size);
+    }
+    fill.style.width = "100%";
+    say("اتجمّع الملف. وافق على الحفظ...");
+    await downloads.save({ filename: BUILD.zip, data: built });
+    say("اتحفظ " + BUILD.zip + ". كمّل خطوات التسطيب تحت.");
+  } catch (e) {
+    const code = e && e.code;
+    if (code === "declined") say("الحفظ اتلغى. دوس تحميل اللعبة تاني لما تكون جاهز.", true);
+    else if (code === "rate_limited") say("في طلب حفظ مفتوح. استنى ثواني وجرّب تاني.", true);
+    else if (code === "too_large") say("الملف أكبر من المسموح في الشاشة دي. افتح الرابط من المتصفح.", true);
+    else say("حصلت مشكلة في التحميل. جرّب تاني، ولو فضلت ابعتلي صورة من الرسالة دي: " + (code || (e && e.message) || e), true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
