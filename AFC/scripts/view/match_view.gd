@@ -38,6 +38,11 @@ var intro := false
 var intro_t := 0.0
 
 
+func _exit_tree() -> void:
+	if sim:
+		sim.dispose()
+
+
 func start(config: Dictionary) -> void:
 	cfg = config
 	opts = config.get("opts", {})
