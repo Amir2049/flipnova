@@ -111,6 +111,16 @@ func setup(team_defs: Array, formation_defs: Array, human_team: int, kind: Strin
 	_setup_kickoff(0)
 
 
+## Breaks the MatchSim <-> TeamAI reference cycle (both are RefCounted, so without this a finished match, with its
+## 22 players and both AIs, is never freed: every match played in a session stayed in memory).
+func dispose() -> void:
+	for t in teams:
+		var ai = t.get("ai")
+		if ai:
+			ai.m = null
+		t["ai"] = null
+
+
 ## Gameplay preset + sliders: applied to every player's derived numbers (and again after substitutions).
 func apply_style(preset: String, sl: Dictionary) -> void:
 	style = preset

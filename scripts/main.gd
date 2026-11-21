@@ -143,7 +143,7 @@ func _play(config: Dictionary, ctx: Dictionary) -> void:
 	_set_screen(null)
 	# 11-a-side matches (kick off, career, cup) are played by the football engine (Google Research Football, native)
 	context["swapped"] = false
-	if ["friendly", "career", "cup"].has(ctx.get("type", "friendly")) and not config.get("street", false) and EngineMatchView.available():
+	if ["friendly", "career", "cup"].has(ctx.get("type", "friendly")) and not config.get("street", false) and EngineMatchView.can_play():
 		var ec := config.duplicate()
 		if int(ec.get("human_team", 0)) == 1:
 			# the engine's human always plays on its first team: swap the clubs round (and the result back after)
@@ -1411,6 +1411,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _notification(what: int) -> void:
+	# a call, the home button or the screen turning off: stop the match (it kept running in the background)
+	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		if match_view and is_instance_valid(match_view) and (match_view is EngineMatchView or match_view.hud.visible) \
+				and not match_view.paused:
+			match_view.set_paused(true)
+		Profile.flush()
+		return
 	# Android back: pause / resume a match, otherwise the previous screen
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		if match_view and (match_view is EngineMatchView or match_view.hud.visible):

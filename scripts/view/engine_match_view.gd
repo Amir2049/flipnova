@@ -103,6 +103,16 @@ static func available() -> bool:
 	return ClassDB.class_exists("GFEngine")
 
 
+static func data_dir() -> String:
+	return OS.get_user_data_dir() + "/gfdata"
+
+
+## The library is loaded AND every data file it reads is on disk. Starting the engine without its data crashes
+## the app the moment PLAY is pressed, so matches use the built-in engine (MatchView) when this is false.
+static func can_play() -> bool:
+	return available() and GFData.prepare(data_dir())
+
+
 ## Why the engine is missing (from Godot's log: the extension or dlopen error), for the screen.
 static func load_error() -> String:
 	if available():
@@ -235,7 +245,7 @@ func start(config: Dictionary) -> void:
 	reader = InputReader.new()
 	reader.pad = config.get("pad", {}) if not config.get("pad", {}).is_empty() else Profile.PAD_PRESETS["PES"].duplicate()
 	# the engine
-	var dir := OS.get_user_data_dir() + "/gfdata"
+	var dir := data_dir()
 	GFData.unpack(dir)
 	engine = ClassDB.instantiate("GFEngine")
 	match_seconds = float(config.get("half_minutes", 4.0)) * 120.0

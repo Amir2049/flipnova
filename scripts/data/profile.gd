@@ -3,6 +3,8 @@ extends Node
 ## career and cup saves, practice records. Stored as JSON in user://profile.json.
 
 const PATH := "user://profile.json"
+const TMP := "user://profile.json.tmp"
+const BAK := "user://profile.json.bak"
 const VERSION := 6
 
 const ATTACK_ACTIONS := [["pass", "Short pass"], ["shoot", "Shoot"], ["lob", "Lob / cross"], ["through", "Through ball"],
@@ -36,6 +38,7 @@ const DEFAULT_SETTINGS := {
 }
 
 var data := {}
+var _save_pending := false
 
 
 func _ready() -> void:
@@ -45,12 +48,12 @@ func _ready() -> void:
 func load_profile() -> void:
 	data = {"version": VERSION, "settings": DEFAULT_SETTINGS.duplicate(true), "pad": PAD_PRESETS["PES"].duplicate(true),
 		"squads": {}, "career": {}, "cup": {}, "records": {}}
-	if not FileAccess.file_exists(PATH):
-		return
-	var f := FileAccess.open(PATH, FileAccess.READ)
-	if f == null:
-		return
-	var d = JSON.parse_string(f.get_as_text())
+	# the main file, else the copy kept from the save before it (a save cut off half way leaves broken JSON)
+	var d = _read_json(PATH)
+	if not d is Dictionary:
+		d = _read_json(BAK)
+		if d is Dictionary:
+			push_warning("Profile: profile.json was unreadable, restored the backup")
 	if not d is Dictionary:
 		return
 	for k in ["squads", "career", "cup", "records"]:
@@ -80,10 +83,66 @@ func load_profile() -> void:
 			data["pad"][k] = int(v) if (v is float or v is int) else str(v)
 
 
+func _read_json(path: String):
+	if not FileAccess.file_exists(path):
+		return null
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return null
+	return JSON.parse_string(f.get_as_text())
+
+
+## Writes the profile safely: into a temporary file first, then swaps it in, keeping the previous save as a backup.
+## A crash or a killed app in the middle of a save can then never leave the only copy broken.
 func save() -> void:
-	var f := FileAccess.open(PATH, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(data))
+	_save_pending = false
+	var f := FileAccess.open(TMP, FileAccess.WRITE)
+	if f == null:
+		push_error("Profile: cannot write " + TMP)
+		return
+	f.store_string(JSON.stringify(data))
+	f.flush()
+	var err := f.get_error()
+	f.close()
+	if err != OK:
+		push_error("Profile: write failed (%d), the old save is kept" % err)
+		return
+	var tmp_abs := ProjectSettings.globalize_path(TMP)
+	var abs := ProjectSettings.globalize_path(PATH)
+	if FileAccess.file_exists(PATH):
+		DirAccess.copy_absolute(abs, ProjectSettings.globalize_path(BAK))
+	if DirAccess.rename_absolute(tmp_abs, abs) != OK:
+		# some file systems refuse to rename over a file: remove it first (the backup holds it)
+		DirAccess.remove_absolute(abs)
+		DirAccess.rename_absolute(tmp_abs, abs)
+
+
+## Many small changes in a row (a slider being dragged) become one write a moment later.
+func save_soon() -> void:
+	if _save_pending:
+		return
+	_save_pending = true
+	if not is_inside_tree():
+		save()
+		return
+	get_tree().create_timer(0.6, true, false, true).timeout.connect(func():
+		if _save_pending:
+			save())
+
+
+## Writes now if a save is waiting (the app going to the background, closing).
+func flush() -> void:
+	if _save_pending:
+		save()
+
+
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_PREDELETE]:
+		flush()
+
+
+func _exit_tree() -> void:
+	flush()
 
 
 func get_s(key: String):
@@ -91,8 +150,11 @@ func get_s(key: String):
 
 
 func set_s(key: String, value) -> void:
+	var old = data["settings"].get(key)
+	if typeof(old) == typeof(value) and old == value:
+		return
 	data["settings"][key] = value
-	save()
+	save_soon()
 
 
 func squads() -> Dictionary:
