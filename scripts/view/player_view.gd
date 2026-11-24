@@ -101,7 +101,6 @@ static func dress(model: Node3D, k: Dictionary, number: int, is_gk: bool, rng: R
 	if kit_shade:
 		kit_mat.detail_enabled = true
 		kit_mat.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
-		kit_mat.detail_uv_layout = BaseMaterial3D.DETAIL_UV_1
 		kit_mat.detail_albedo = kit_shade
 	kit_mat.normal_scale = 0.5
 	var hair_meshes: Array[MeshInstance3D] = []
