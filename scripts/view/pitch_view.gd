@@ -426,6 +426,29 @@ func _box(st: SurfaceTool, lo: Vector3, hi: Vector3, part: float, open_ends: boo
 			st.add_vertex(c[f[k]])
 
 
+const STAND_SECTION := "res://assets/stadium/stand_section.glb"   # tools/blender/make_stadium.py
+const FLOODLIGHT := "res://assets/stadium/floodlight.glb"
+const SECTION_LEN := 12.0
+
+
+## The Blender stand: 12 m sections (terraces, seats, aisle, roof, baked shading) side by side, stretched a little so
+## a whole number of them fills `length`. Same rows / tread / rise as the code-built stand below.
+func _blender_stand(root: Node3D, length: float) -> bool:
+	if not ResourceLoader.exists(STAND_SECTION):
+		return false
+	var scene: PackedScene = load(STAND_SECTION)
+	var n := maxi(1, int(ceil(length / SECTION_LEN)))
+	var sx := length / (n * SECTION_LEN)
+	for i in n:
+		var sec := scene.instantiate() as Node3D
+		sec.position = Vector3(-length * 0.5 + (i + 0.5) * SECTION_LEN * sx, 0, 0)
+		sec.scale = Vector3(sx, 1, 1)
+		root.add_child(sec)
+		for mi in sec.find_children("*", "MeshInstance3D", true, false):
+			(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return true
+
+
 func _tier(pos: Vector3, length: float, yaw: float, steps_mat: Material, concrete: Material, fan: Mesh, which: int) -> void:
 	var root := Node3D.new()
 	root.position = pos
@@ -435,6 +458,9 @@ func _tier(pos: Vector3, length: float, yaw: float, steps_mat: Material, concret
 	var tread := 0.85
 	var rise := 0.55
 	var base := 1.3
+	if _blender_stand(root, length):
+		_crowd(root, length, rows, tread, rise, base, fan, which)
+		return
 	# stepped terraces, seats in blocks of colour
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -497,7 +523,12 @@ func _tier(pos: Vector3, length: float, yaw: float, steps_mat: Material, concret
 		col.position = Vector3(x, (top + 7.0) * 0.5, depth + 0.3)
 		col.material_override = concrete
 		root.add_child(col)
-	# the people
+	_crowd(root, length, rows, tread, rise, base, fan, which)
+
+
+## The people on a stand's terraces (one MultiMesh, the crowd shader animates them).
+func _crowd(root: Node3D, length: float, rows: int, tread: float, rise: float, base: float, fan: Mesh, which: int) -> void:
+	var hl := length * 0.5
 	var occupancy: float = [0.45, 0.72, 0.9][clampi(quality, 0, 2)]
 	var spacing := 0.62
 	var per_row := int(length / spacing)
@@ -561,8 +592,17 @@ func _floodlights() -> void:
 	lamp_mat.emission_enabled = true
 	lamp_mat.emission = Color(1.0, 0.98, 0.9)
 	lamp_mat.emission_energy_multiplier = 3.0
+	var tower: PackedScene = load(FLOODLIGHT) if ResourceLoader.exists(FLOODLIGHT) else null
 	for sx in [-1.0, 1.0]:
 		var base := Vector3(sx * (hl + 20.0), 0, -hw - 26.0)
+		if tower:
+			# the Blender tower: lamp head faces its -z, turned toward the centre spot
+			var t := tower.instantiate() as Node3D
+			t.position = base
+			add_child(t)
+			var to_c := (Vector3.ZERO - base)
+			t.rotation.y = atan2(to_c.x, to_c.z) + PI
+			continue
 		var pole := MeshInstance3D.new()
 		var cm := CylinderMesh.new()
 		cm.top_radius = 0.45
