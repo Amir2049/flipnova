@@ -17,8 +17,8 @@ uniform float circle_r = 9.15;
 uniform float spot_d = 11.0;
 // measured against EA FC 27 broadcast frames (grass hue 65-90 deg, saturation 0.66-0.73, luminance spread 20-25):
 // a yellower, richer green than before (hue ~101, sat 0.54, spread 17), stripes with more contrast
-uniform vec3 grass_a : source_color = vec3(0.14, 0.26, 0.035);
-uniform vec3 grass_b : source_color = vec3(0.23, 0.37, 0.05);
+uniform vec3 grass_a : source_color = vec3(0.13, 0.24, 0.032);
+uniform vec3 grass_b : source_color = vec3(0.21, 0.345, 0.045);   // ~8 % darker: FC frames sit at luminance ~127
 uniform float wet = 0.0;
 // the main stand behind the camera (not drawn) still throws its roof's shadow across the near part of the pitch
 uniform vec3 sun_to = vec3(0.0, 1.0, 0.0);   // direction from the ground toward the sun
@@ -107,6 +107,8 @@ func build(p: Pitch) -> void:
 	else:
 		_boards()
 	_stands()
+	if not p.walls:
+		_pitchside()
 
 
 func _ground() -> void:
@@ -742,6 +744,81 @@ func _floodlights() -> void:
 		head.look_at_from_position(head.position, Vector3(0, 0, 0), Vector3.UP)
 		head.material_override = lamp_mat
 		add_child(head)
+
+
+## Match-day people around the pitch: photographers behind the goal lines, stewards along the far touchline,
+## TV cameras on tripods. Same cards as the crowd (Blender renders), one MultiMesh.
+func _pitchside() -> void:
+	if not crowd_cards or crowd_mat == null:
+		return
+	var hl := pitch.half_l()
+	var hw := pitch.half_w()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var xf: Array[Transform3D] = []
+	var cu: Array[Color] = []
+	var cam_mat := StandardMaterial3D.new()
+	cam_mat.albedo_color = Color(0.05, 0.05, 0.06)
+	cam_mat.roughness = 0.5
+	for side in [-1.0, 1.0]:
+		# photographers: a line behind each goal line, either side of the goal, facing the pitch
+		var z := -hw + 3.0
+		while z < hw - 3.0:
+			if absf(z) > pitch.goal_width * 0.5 + 2.0:
+				var pos := Vector3(side * (hl + 2.2 + rng.randf_range(0.0, 0.8)), -0.05, z)
+				# a card seen edge-on is a sliver: turned toward the broadcast side (+z), a little across
+				var b := Basis(Vector3.UP, -side * 0.45 + rng.randf_range(-0.2, 0.2)).scaled(Vector3.ONE * rng.randf_range(0.82, 0.92))
+				xf.append(Transform3D(b, pos))
+				cu.append(Color(rng.randf(), 0.0, 0, 0))
+				if rng.randf() < 0.4:
+					var lens := MeshInstance3D.new()
+					var bm := BoxMesh.new()
+					bm.size = Vector3(0.35, 0.25, 0.25)
+					lens.mesh = bm
+					lens.material_override = cam_mat
+					lens.position = pos + Vector3(-side * 0.35, 1.45, 0)
+					add_child(lens)
+			z += rng.randf_range(1.2, 2.6)
+	# stewards and staff along the far touchline, in front of the boards, facing the crowd now and then
+	var x := -hl + 4.0
+	while x < hl - 4.0:
+		var pos2 := Vector3(x, -0.05, -hw - 2.3)
+		var yaw := rng.randf_range(-0.25, 0.25)
+		xf.append(Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * rng.randf_range(0.85, 0.95)), pos2))
+		cu.append(Color(rng.randf(), 0.0, 0, 0))
+		x += rng.randf_range(7.0, 13.0)
+	# TV cameras on tripods at the corners of the far side
+	for sx in [-1.0, 1.0]:
+		var tri := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.03
+		cm.bottom_radius = 0.35
+		cm.height = 1.4
+		tri.mesh = cm
+		tri.material_override = cam_mat
+		tri.position = Vector3(sx * (hl - 12.0), 0.7, -hw - 3.2)
+		add_child(tri)
+		var body := MeshInstance3D.new()
+		var bm2 := BoxMesh.new()
+		bm2.size = Vector3(0.7, 0.45, 0.4)
+		body.mesh = bm2
+		body.material_override = cam_mat
+		body.position = tri.position + Vector3(0, 0.9, 0)
+		add_child(body)
+	var q := QuadMesh.new()
+	q.size = Vector2(1.37, 2.05)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = q
+	mm.instance_count = xf.size()
+	for k in xf.size():
+		mm.set_instance_transform(k, xf[k])
+		mm.set_instance_custom_data(k, cu[k])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.material_override = crowd_mat
+	add_child(mmi)
 
 
 func set_excitement(v: float) -> void:
