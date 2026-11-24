@@ -15,9 +15,16 @@ uniform float six_d = 5.5;
 uniform float six_w = 18.32;
 uniform float circle_r = 9.15;
 uniform float spot_d = 11.0;
-uniform vec3 grass_a : source_color = vec3(0.13, 0.25, 0.07);
-uniform vec3 grass_b : source_color = vec3(0.19, 0.33, 0.1);
+// measured against EA FC 27 broadcast frames (grass hue 65-90 deg, saturation 0.66-0.73, luminance spread 20-25):
+// a yellower, richer green than before (hue ~101, sat 0.54, spread 17), stripes with more contrast
+uniform vec3 grass_a : source_color = vec3(0.14, 0.26, 0.035);
+uniform vec3 grass_b : source_color = vec3(0.23, 0.37, 0.05);
 uniform float wet = 0.0;
+// the main stand behind the camera (not drawn) still throws its roof's shadow across the near part of the pitch
+uniform vec3 sun_to = vec3(0.0, 1.0, 0.0);   // direction from the ground toward the sun
+uniform float stand_z = 41.5;                 // the shadowing stand's front edge (+z side)
+uniform float roof_h = 21.0;                  // its roof edge height
+uniform float stand_shadow = 0.0;             // 0 = off (night, cloud), 1 = full
 varying vec3 wpos;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -36,7 +43,7 @@ void fragment() {
 	// mowed grass leans one way per stripe: which stripe looks light depends on where the camera looks from
 	vec3 vdir = normalize(wpos - CAMERA_POSITION_WORLD);
 	float lean = mix(1.0, -1.0, s) * clamp(vdir.x * 1.6, -1.0, 1.0);
-	vec3 col = mix(grass_a, grass_b, 0.5 + 0.5 * mix(-1.0, 1.0, s) * 0.8 + lean * 0.45);
+	vec3 col = mix(grass_a, grass_b, 0.5 + 0.5 * mix(-1.0, 1.0, s) * 0.95 + lean * 0.45);
 	col *= 0.93 + 0.12 * noise(p * 0.9) + 0.05 * noise(p * 6.0) + 0.04 * noise(p * 31.0);
 	// worn turf: goal mouths and the centre spot
 	vec2 qq = vec2(abs(p.x), p.y);
@@ -60,6 +67,13 @@ void fragment() {
 	L = max(L, ln(length(q - vec2(hl - spot_d, 0.0)) - circle_r, lw) * step(q.x, hl - box_d));
 	L = max(L, ln(length(vec2(hl - q.x, hw - abs(q.y))) - 1.0, lw) * step(hl - 1.0, q.x) * step(hw - 1.0, abs(q.y)));
 	col = mix(col, vec3(0.86), L * 0.92);
+	// roof shadow: follow the ray toward the sun to the stand's front; below the roof edge there = in shade
+	if (stand_shadow > 0.0 && sun_to.z > 0.05) {
+		float t = (stand_z - p.y) / sun_to.z;
+		float h = t * sun_to.y;
+		float shade = (1.0 - smoothstep(roof_h - 1.2, roof_h + 1.2, h)) * step(0.0, t);
+		col = mix(col, col * vec3(0.5, 0.56, 0.68), shade * stand_shadow);
+	}
 	ALBEDO = col * (1.0 - 0.18 * wet);
 	ROUGHNESS = 0.92 - 0.45 * wet;
 	SPECULAR = 0.2;
@@ -100,9 +114,29 @@ func _ground() -> void:
 	sm.set_shader_parameter("circle_r", pitch.circle_radius)
 	sm.set_shader_parameter("spot_d", pitch.penalty_spot)
 	grass_mat = sm
+	_stand_shadow(sm)
 	mi.material_override = sm
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## Day matches: the sun's direction from the view's main light (it exists before the pitch is built) so the stand
+## behind the camera shades the near side of the pitch, as on TV.
+func _stand_shadow(sm: ShaderMaterial) -> void:
+	var sun: DirectionalLight3D = null
+	if get_parent():
+		for c in get_parent().get_children():
+			if c is DirectionalLight3D and (c as DirectionalLight3D).shadow_enabled:
+				sun = c
+				break
+	if sun == null or pitch.walls:
+		return
+	var to_sun := sun.transform.basis.z.normalized()   # the view sits at the origin; global_transform may not be updated yet
+	var night_like := sun.light_color.b > sun.light_color.r or sun.rotation_degrees.x < -60.0
+	sm.set_shader_parameter("sun_to", to_sun)
+	sm.set_shader_parameter("stand_z", pitch.half_w() + 7.5)
+	sm.set_shader_parameter("roof_h", 21.0)
+	sm.set_shader_parameter("stand_shadow", 0.0 if night_like else 0.85)
 
 
 func _goal(side: float) -> void:
