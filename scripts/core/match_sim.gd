@@ -1354,7 +1354,9 @@ func _check_keepers() -> void:
 		tc = tk
 		cross = at_k
 	var lateral := cross.z - gk.pos.y
-	var reach := (0.3 if gk.has_ps("far_reach") else 0.0) + 1.2 + 1.8 * PlayerSim.q(gk.gk_diving) * clampf(tc / 0.45, 0.35, 1.0) + 2.5 * maxf(0.0, tc - 0.3)
+	# measured: most goals were shots that reached him in ~0.2 s about 0.8 m beyond his reach (7.8 goals in a
+	# 10-minute match); a longer spread and the reflex of good keepers on quick shots
+	var reach := (0.3 if gk.has_ps("far_reach") else 0.0) + 1.6 + 1.9 * PlayerSim.q(gk.gk_diving) * clampf(tc / 0.4, 0.45, 1.0) + 2.5 * maxf(0.0, tc - 0.3)
 	var need := absf(lateral) + maxf(0.0, cross.y - 2.2)
 	var speed := ball.vel.length()
 	var save := need <= reach

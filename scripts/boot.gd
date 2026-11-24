@@ -75,6 +75,8 @@ static func _load_native() -> void:
 		cfg.set_value("native", ver, "failed")
 		cfg.save(NATIVE_STATE)
 		native_note = "it closed the game last time: playing on the built-in engine"
+		# keep the evidence: the system log of that crash (this app's own lines) for Settings > Engine info
+		_save_crash_log()
 		return
 	if state == "failed":
 		native_note = "it failed on this phone: playing on the built-in engine"
@@ -86,6 +88,53 @@ static func _load_native() -> void:
 		cfg.set_value("native", ver, "failed")
 		cfg.save(NATIVE_STATE)
 		native_note = "it could not be loaded (%d)" % st
+
+
+const NATIVE_CRASH := "user://native_crash.txt"
+
+
+static func _save_crash_log() -> void:
+	if OS.get_name() != "Android":
+		return
+	var out := []
+	if OS.execute("logcat", ["-d", "-v", "time", "-t", "3000"], out, true) != 0 or out.is_empty():
+		return
+	var keep := PackedStringArray()
+	for l in str(out[0]).split("\n"):
+		if l.contains("afcgf") or l.contains("dlopen") or l.contains("Fatal signal") or l.contains("F DEBUG") \
+				or l.contains("F/DEBUG") or l.contains("backtrace") or l.contains("#0") or l.contains("abort") \
+				or l.contains("godot") or l.contains("linker") or l.contains("GDExtension"):
+			keep.append(l)
+	var f := FileAccess.open(NATIVE_CRASH, FileAccess.WRITE)
+	if f:
+		f.store_string("\n".join(keep.slice(maxi(0, keep.size() - 120))))
+
+
+## Everything known about the native engine on this phone, for Settings > Engine info (and to send to us).
+static func native_report() -> String:
+	var lines := PackedStringArray()
+	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
+	lines.append("Version %s   %s %s   %s" % [ver, OS.get_name(), OS.get_version(), OS.get_model_name()])
+	lines.append("CPU: %s (%d cores)   arm64: %s" % [OS.get_processor_name(), OS.get_processor_count(), OS.has_feature("arm64")])
+	lines.append("Match engine: " + ("ON" if ClassDB.class_exists("GFEngine") else "OFF"))
+	var cfg := ConfigFile.new()
+	cfg.load(NATIVE_STATE)
+	if cfg.has_section("native"):
+		for k in cfg.get_section_keys("native"):
+			lines.append("  state %s: %s" % [k, cfg.get_value("native", k)])
+	if native_note != "":
+		lines.append("Note: " + native_note)
+	var log := FileAccess.open("user://logs/godot.log", FileAccess.READ)
+	if log:
+		lines.append("--- godot.log")
+		while not log.eof_reached():
+			var l := log.get_line()
+			if "afcgf" in l or "GDExtension" in l or "dynamic library" in l or "dlopen" in l or "ERROR" in l:
+				lines.append(l.strip_edges())
+	if FileAccess.file_exists(NATIVE_CRASH):
+		lines.append("--- crash log")
+		lines.append(FileAccess.get_file_as_string(NATIVE_CRASH))
+	return "\n".join(lines)
 
 
 ## The game has been up a few seconds with the native engine loaded: this version is good on this phone.

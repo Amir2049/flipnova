@@ -819,9 +819,24 @@ func _controls() -> void:
 
 
 func _settings() -> void:
-	var pg := _page("SETTINGS")
+	var info := UI.button("Engine info", func(): _go(_engine_info), Vector2(200, 54), "ghost", 20)
+	var pg := _page("SETTINGS", info)
 	var sp := SettingsPanel.new()
 	pg[1].add_child(sp)
+	_set_screen(pg[0])
+
+
+## What the game knows about the native match engine on this phone, with a COPY button to send it to us.
+func _engine_info() -> void:
+	var text: String = load("res://scripts/boot.gd").native_report()
+	var copy := UI.button("Copy", func(): DisplayServer.clipboard_set(text), Vector2(160, 54), "accent", 20)
+	var pg := _page("ENGINE INFO", copy)
+	var box := TextEdit.new()
+	box.text = text
+	box.editable = false
+	box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_theme_font_size_override("font_size", 15)
+	pg[1].add_child(box)
 	_set_screen(pg[0])
 
 

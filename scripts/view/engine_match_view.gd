@@ -118,8 +118,6 @@ static func load_error() -> String:
 	if available():
 		return "" if GFData.prepare(data_dir()) else "its data could not be unpacked (storage full?)"
 	var note: String = load("res://scripts/boot.gd").native_note
-	if note != "":
-		return note
 	var f := FileAccess.open("user://logs/godot.log", FileAccess.READ)
 	if f == null:
 		return "native library not loaded"
@@ -128,7 +126,10 @@ static func load_error() -> String:
 		var line := f.get_line()
 		if "afcgf" in line or "GDExtension" in line or "dynamic library" in line or "dlopen" in line:
 			found = line.strip_edges()
-	return found if found != "" else "native library not loaded"
+	# the log line (the real reason) first, then what the start-up guard decided
+	if found != "":
+		return found + ("   (" + note + ")" if note != "" else "")
+	return note if note != "" else "native library not loaded"
 
 
 ## TiZero's weights as a real file (the native code reads files; inside the APK res:// is not one).

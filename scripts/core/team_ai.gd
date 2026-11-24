@@ -520,7 +520,9 @@ func _decide(p: PlayerSim) -> bool:
 	# shoot
 	var xg := _xg(p.pos)
 	var shot_lane := _lane_clearance(p.pos, goal)
-	if d_goal < 30.0 and (xg * 2.4 > 0.16 + m.rng.randf() * 0.14 or d_goal < 11.0 and shot_lane > 1.0 or d_goal < 24.0 and shot_lane > 2.5 and m.rng.randf() < 0.07):
+	# measured: 28.8 shots and 6.8 goals in a 10-minute match (real-feel games: ~15 and ~3) - the AI shot at nearly
+	# any chance; now it shoots from good positions and only rarely tries its luck from range
+	if d_goal < 27.0 and (xg * 2.4 > 0.27 + m.rng.randf() * 0.16 or d_goal < 10.0 and shot_lane > 1.2 or d_goal < 22.0 and shot_lane > 3.0 and m.rng.randf() < 0.03):
 		var aim := (goal - p.pos).normalized()
 		return m.request_kick(p, "shot", clampf(0.62 + m.rng.randf() * 0.35, 0.0, 1.0), aim.rotated(m.rng.randf_range(-0.6, 0.6)))
 	# cross from wide in the final third
@@ -551,8 +553,8 @@ func _decide(p: PlayerSim) -> bool:
 		var progress := (q.pos.x - p.pos.x) * _ad()
 		var v := open * 2.2 + progress * 0.08 + _xg(q.pos) * 3.0 - d * 0.015
 		var risk := _pass_risk(p.pos, q.pos, m._pass_speed(d, 0.5))
-		v -= risk * 3.2
-		if risk > 0.6 and pressure < 0.7:
+		v -= risk * 4.5          # possession matters more than a gamble (passes completed were 77 %)
+		if risk > 0.45 and pressure < 0.7:
 			continue
 		if q.role == "GK":
 			v -= 1.5
