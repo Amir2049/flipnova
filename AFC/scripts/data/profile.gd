@@ -28,9 +28,9 @@ const PAD_PRESETS := {
 }
 
 const DEFAULT_SETTINGS := {
-	"difficulty": 1, "half": 1, "camera": 0, "volume": 0.8, "crowd": 0.7, "effects": 0.9, "quality": 1,
+	"difficulty": 0, "half": 1, "camera": 0, "volume": 0.8, "crowd": 0.7, "effects": 0.9, "quality": 1,
 	"radar": true, "names": true, "replays": true, "vibration": true, "stoppage_menu": false,
-	"celebration": "random", "touch_size": 1.0, "touch_opacity": 0.75, "swipe_skills": true, "edge_sprint": false,
+	"celebration": "random", "touch_size": 1.0, "touch_opacity": 0.75, "swipe_skills": true, "flick_loft": false, "edge_sprint": false,
 	"touch_fixed": false, "touch_left": false,
 	"pad_preset": "PES", "home": 0, "away": 1, "side": 0,
 	"style": "authentic", "game_speed": 1, "offside": true, "sl_sprint": 1.0, "sl_accel": 1.0, "sl_pass": 1.0, "sl_shot_error": 1.0,

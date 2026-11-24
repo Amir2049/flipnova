@@ -36,6 +36,7 @@ var size_k := 1.0
 var opacity := 0.75
 var fixed_stick := false
 var left_handed := false
+var flick_loft := false             # flick up off PASS / THROUGH lofts it; off: those buttons act on the touch, no wait
 var sprint_button := true          # always shown now (edge sprint is an option in the game settings)
 var vibrate := true
 var swipes := {}                   # touch index -> {start, t0, path}
@@ -55,6 +56,7 @@ func configure(opts: Dictionary) -> void:
 	vibrate = opts.get("vibration", true)
 	fixed_stick = bool(opts.get("touch_fixed", false))
 	left_handed = bool(opts.get("touch_left", false))
+	flick_loft = bool(opts.get("flick_loft", false))
 	if is_inside_tree():
 		_layout()
 
@@ -202,7 +204,8 @@ func _input(event: InputEvent) -> void:
 					b["t_down"] = _now()
 					b["start"] = e.position
 					b["variant"] = ""
-					b["commit"] = not (name in SWIPEABLE and not defending)
+					# only a button that can still become a flick waits COMMIT (80 ms) before it counts
+					b["commit"] = not (flick_loft and name in SWIPEABLE and not defending)
 					if vibrate and OS.has_feature("mobile"):
 						Input.vibrate_handheld(12)
 					queue_redraw()
@@ -248,7 +251,7 @@ func _input(event: InputEvent) -> void:
 			return
 		for name in buttons:
 			var b: Dictionary = buttons[name]
-			if b["touch"] == d.index and b["held"] and name in SWIPEABLE and b["variant"] == "":
+			if flick_loft and b["touch"] == d.index and b["held"] and name in SWIPEABLE and b["variant"] == "":
 				var mv: Vector2 = d.position - b["start"]
 				if -mv.y > FLICK * u and absf(mv.x) < -mv.y * 1.2:
 					b["variant"] = "up"
