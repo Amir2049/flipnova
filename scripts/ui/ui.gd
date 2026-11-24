@@ -2,13 +2,20 @@ class_name UI
 extends RefCounted
 ## Shared look for every menu: colours, panels, buttons, rows (toggle / choice / slider), headers, lists.
 
-const ACCENT := Color(0.78, 1.0, 0.24)       # volt
-const CYAN := Color(0.2, 0.86, 0.95)         # electric cyan (second accent)
-const FLARE := Color(1.0, 0.42, 0.17)        # orange
-const INK := Color(0.02, 0.04, 0.09)
-const PANEL := Color(0.04, 0.07, 0.15, 0.9)
-const PANEL_2 := Color(0.08, 0.12, 0.24, 0.94)
-const MUTED := Color(0.7, 0.78, 0.92)
+## "Matchday ticket": a night pitch under floodlights, chalk lines, the red of a ticket stub, the brass of a trophy.
+const PITCH := Color("0f3d2e")               # night pitch green: panels and cards
+const TURF := Color("072619")                # the deep stripe: wells, notches, text on light fills
+const CHALK := Color("edefe6")               # touchline chalk: text
+const TICKET := Color("c8102e")              # ticket red: the one action on a screen (Play, Start)
+const BRASS := Color("e0b43a")               # trophy brass: what is selected or focused, stars, values
+const NILE := Color("2fa39a")                # river teal: a second colour for the career / info
+const ACCENT := BRASS
+const CYAN := NILE
+const FLARE := Color("e8742c")               # warning / tired
+const INK := TURF
+const PANEL := Color(PITCH.r, PITCH.g, PITCH.b, 0.93)
+const PANEL_2 := Color("15513d")
+const MUTED := Color("a9c2b3")
 const GOOD := Color(0.35, 0.9, 0.5)
 const BAD := Color(1.0, 0.35, 0.35)
 
@@ -39,7 +46,7 @@ static func style(bg: Color, border: Color = Color(0, 0, 0, 0), radius: int = 8,
 
 
 ## A slanted card (the FC menu look): skewed panel, optional coloured edge on the left.
-static func card(bg: Color, edge: Color = Color(0, 0, 0, 0), skew: float = -0.1, radius: int = 10) -> StyleBoxFlat:
+static func card(bg: Color, edge: Color = Color(0, 0, 0, 0), skew: float = 0.0, radius: int = 8) -> StyleBoxFlat:
 	var s := style(bg, Color(1, 1, 1, 0.08), radius, 16)
 	s.skew = Vector2(skew, 0)
 	if edge.a > 0:
@@ -49,6 +56,26 @@ static func card(bg: Color, edge: Color = Color(0, 0, 0, 0), skew: float = -0.1,
 		s.border_width_right = 0
 		s.border_width_bottom = 0
 	return s
+
+
+## The ticket: a card with a perforated tear line `stub` px from its right edge, half-circle notches where the line
+## meets the top and bottom edges (cut in `notch` colour, the page behind), and corner notches like a printed stub.
+static func ticket_art(stub: float, notch: Color = TURF, line: Color = Color(CHALK.r, CHALK.g, CHALK.b, 0.35)) -> Control:
+	var c := Control.new()
+	c.set_anchors_preset(Control.PRESET_FULL_RECT)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.draw.connect(func():
+		var w := c.size.x
+		var h := c.size.y
+		if stub > 0.0 and w - stub >= 320.0:   # a narrow card has no room for a stub: no tear line
+			var x := w - stub
+			var y := 16.0
+			while y < h - 16.0:
+				c.draw_line(Vector2(x, y), Vector2(x, minf(y + 7.0, h - 16.0)), line, 2.0)
+				y += 13.0
+			c.draw_circle(Vector2(x, 0.0), 11.0, notch)
+			c.draw_circle(Vector2(x, h), 11.0, notch))
+	return c
 
 
 ## A vertical gradient strip as a texture (for backgrounds and card fills).
@@ -80,25 +107,33 @@ static func label(text: String, size: int = 20, color: Color = Color(1, 1, 1)) -
 	return l
 
 
+## "KICK OFF" -> "Kick off": headings in sentence case (shouting capitals read as a template).
+static func sentence(text: String) -> String:
+	if text != text.to_upper() or text.strip_edges().length() <= 3:
+		return text   # already mixed case, or an abbreviation (GK, OK, 4-3-3)
+	var s := text.to_lower()
+	return s.substr(0, 1).to_upper() + s.substr(1)
+
+
 static func caption(text: String) -> Label:
-	var l := label(text.to_upper(), 15, MUTED)
+	var l := label(text, 16, MUTED)
 	return l
 
 
 static func button(text: String, cb: Callable, min_size: Vector2 = Vector2(0, 56), kind: String = "normal", font_size: int = 22) -> Button:
 	var b := Button.new()
-	b.text = text
+	b.text = sentence(text)
 	b.custom_minimum_size = min_size
 	b.add_theme_font_size_override("font_size", font_size)
 	b.focus_mode = Control.FOCUS_ALL
 	var bg := PANEL_2
-	var fg := Color(1, 1, 1)
-	var border := Color(1, 1, 1, 0.16)
+	var fg := CHALK
+	var border := Color(CHALK.r, CHALK.g, CHALK.b, 0.18)
 	match kind:
 		"accent":
-			bg = ACCENT
-			fg = INK
-			border = ACCENT
+			bg = TICKET
+			fg = CHALK
+			border = TICKET
 		"flare":
 			bg = FLARE
 			fg = INK
@@ -110,9 +145,9 @@ static func button(text: String, cb: Callable, min_size: Vector2 = Vector2(0, 56
 			bg = Color(0.35, 0.08, 0.1, 0.95)
 			border = BAD
 	b.add_theme_stylebox_override("normal", style(bg, border))
-	b.add_theme_stylebox_override("hover", style(bg.lightened(0.12), ACCENT))
-	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.2), ACCENT))
-	b.add_theme_stylebox_override("focus", style(Color(0, 0, 0, 0), ACCENT))
+	b.add_theme_stylebox_override("hover", style(bg.lightened(0.1), BRASS))
+	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.2), BRASS))
+	b.add_theme_stylebox_override("focus", style(Color(0, 0, 0, 0), BRASS))
 	b.add_theme_stylebox_override("disabled", style(Color(bg.r, bg.g, bg.b, 0.35), Color(1, 1, 1, 0.06)))
 	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		b.add_theme_color_override(k, fg)
@@ -174,8 +209,8 @@ static func stars(n: int, of: int = 5, size: int = 18) -> Label:
 static func header(title: String, back: Callable, right: Control = null) -> HBoxContainer:
 	var h := hbox(16)
 	if back.is_valid():
-		h.add_child(button("◀  BACK", back, Vector2(150, 54), "ghost", 20))
-	var t := label(title, 34)
+		h.add_child(button("◀  Back", back, Vector2(150, 54), "ghost", 20))
+	var t := label(sentence(title), 36, CHALK)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	h.add_child(t)
@@ -216,8 +251,8 @@ static func toggle_row(title: String, on: bool, on_change: Callable) -> HBoxCont
 	b.add_theme_font_size_override("font_size", 18)
 	b.focus_mode = Control.FOCUS_ALL
 	var paint := func(v: bool) -> void:
-		b.text = "ON" if v else "OFF"
-		var bg := ACCENT if v else PANEL_2
+		b.text = "On" if v else "Off"
+		var bg := BRASS if v else PANEL_2
 		b.add_theme_stylebox_override("normal", style(bg, Color(1, 1, 1, 0.16)))
 		b.add_theme_stylebox_override("pressed", style(bg, ACCENT))
 		b.add_theme_stylebox_override("hover", style(bg.lightened(0.1), ACCENT))
@@ -252,17 +287,21 @@ static func pills(items: Array, index: int, on_pick: Callable, font_size: int = 
 	var h := hbox(6)
 	var btns: Array[Button] = []
 	for i in items.size():
-		var b := button(str(items[i]), func(): pass, Vector2(0, 48), "accent" if i == index else "normal", font_size)
+		var b := button(str(items[i]), func(): pass, Vector2(0, 48), "normal", font_size)
+		if i == index:
+			b.add_theme_stylebox_override("normal", style(BRASS, BRASS))
+			for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+				b.add_theme_color_override(k, INK)
 		btns.append(b)
 		h.add_child(b)
 	for i in btns.size():
 		btns[i].pressed.connect(func():
 			for j in btns.size():
 				var on := j == i
-				var bg := ACCENT if on else PANEL_2
-				btns[j].add_theme_stylebox_override("normal", style(bg, ACCENT if on else Color(1, 1, 1, 0.16)))
+				var bg := BRASS if on else PANEL_2
+				btns[j].add_theme_stylebox_override("normal", style(bg, BRASS if on else Color(CHALK.r, CHALK.g, CHALK.b, 0.18)))
 				for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-					btns[j].add_theme_color_override(k, INK if on else Color(1, 1, 1))
+					btns[j].add_theme_color_override(k, INK if on else CHALK)
 			on_pick.call(i))
 	return h
 
@@ -288,7 +327,7 @@ static func overlay(width: float = 760.0, height: float = 560.0) -> Array:
 	dim.color = Color(0, 0, 0, 0.55)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(dim)
-	var p := panel(Color(0.03, 0.05, 0.1, 0.97), ACCENT, 14, 20)
+	var p := panel(Color(PITCH.r, PITCH.g, PITCH.b, 0.98), Color(CHALK.r, CHALK.g, CHALK.b, 0.35), 10, 20)
 	p.set_anchors_preset(Control.PRESET_CENTER)
 	p.custom_minimum_size = Vector2(width, height)
 	p.position = Vector2(-width * 0.5, -height * 0.5)
