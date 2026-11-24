@@ -1,0 +1,105 @@
+--- a/src/onthepitch/teamAIcontroller.cpp
++++ b/src/onthepitch/teamAIcontroller.cpp
+@@ -15,6 +15,7 @@
+ // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
+ // i do not offer support, so don't ask. to be used for inspiration :)
+ 
++#include <algorithm>
+ #include "teamAIcontroller.hpp"
+ 
+ #include <cmath>
+@@ -105,6 +106,17 @@
+ 
+   CalculateSituation();
+ 
++  // AFC counter-press: a CPU side that has just lost the ball presses at once
++  if (team->GetHumanGamerCount() == 0) {
++    if (prevTeamHasPossession && !teamHasPossession && match->IsInPlay()) ApplyCounterPress();
++    if (counterPressActive && match->GetActualTime_ms() > counterPressEndTime_ms) {
++      counterPressActive = false;
++      counterPressPlayers.clear();
++      counterPressTarget = 0;
++    }
++  }
++  prevTeamHasPossession = teamHasPossession;
++
+   float startDistance = 30.0f + 20.0f * offensivenessBias; // distance from goal where we start holding the opponents (but are likely to fallback somewhat)
+   float forceDistance = 6.0f; // minimum distance from goal - try to 'hold' the opp there
+ 
+@@ -706,6 +718,12 @@
+     if (players.size() == 0) break;
+   }
+   //printf("\n");
++  // AFC counter-press: the hunters stay on the new ball carrier until it runs out
++  if (counterPressActive && counterPressTarget) {
++    for (Player *p : counterPressPlayers) {
++      if (p) p->SetManMarking(counterPressTarget);
++    }
++  }
+ }
+ 
+ void TeamAIController::ApplyOffsideTrap(Vector3 &position) const {
+@@ -1200,6 +1218,34 @@
+   }
+ }
+ 
++void TeamAIController::ApplyCounterPress() {
++  DO_VALIDATION;
++  Player *opp = match->GetTeam(abs(team->GetID() - 1))->GetBestPossessionPlayer();
++  if (!opp) return;
++  counterPressActive = true;
++  counterPressEndTime_ms = match->GetActualTime_ms() + 3500;
++  counterPressTarget = opp;
++  counterPressPlayers.clear();
++  Vector3 ballPos = match->GetBall()->Predict(0).Get2D();
++  std::vector<Player*> players;
++  team->GetActivePlayers(players);
++  // the two nearest outfield players (a third would leave too much open behind them)
++  for (int n = 0; n < 2; n++) {
++    Player *best = 0;
++    float bestD = 1e9f;
++    for (Player *p : players) {
++      if (p == team->GetGoalie()) continue;
++      if (std::find(counterPressPlayers.begin(), counterPressPlayers.end(), p) != counterPressPlayers.end()) continue;
++      float d = (p->GetPosition() - ballPos).GetLength();
++      if (d < bestD) { bestD = d; best = p; }
++    }
++    if (best && bestD < 18.0f) {
++      best->SetManMarking(opp);
++      counterPressPlayers.push_back(best);
++    }
++  }
++}
++
+ void TeamAIController::ApplyKeeperRush() {
+   DO_VALIDATION;
+   endApplyKeeperRush_ms = match->GetActualTime_ms() + 300;
+--- a/src/onthepitch/teamAIcontroller.hpp
++++ b/src/onthepitch/teamAIcontroller.hpp
+@@ -46,6 +46,14 @@
+     void CalculateDynamicRoles();
+     float CalculateMarkingQuality(Player *player, Player *opp);
+     void CalculateManMarking();
++    // AFC (from League-Soccer, Apache-2.0): counter-press - right after losing the ball, the nearest outfield
++    // players hunt the new ball carrier for a few seconds
++    void ApplyCounterPress();
++    bool counterPressActive = false;
++    unsigned long counterPressEndTime_ms = 0;
++    std::vector<Player*> counterPressPlayers;
++    Player* counterPressTarget = 0;
++    bool prevTeamHasPossession = false;
+     void ApplyOffsideTrap(Vector3 &position) const;
+     float GetOffsideTrapX() const { return offsideTrapX; }
+     void PrepareSetPiece(e_GameMode setPiece, Team* other_team,
+--- a/src/onthepitch/player/playerbase.cpp
++++ b/src/onthepitch/player/playerbase.cpp
+@@ -127,7 +127,8 @@
+ 
+ float PlayerBase::GetMaxVelocity() const {
+   // see humanoidbase's physics function
+-  return sprintVelocity * GetVelocityMultiplier();
++  // AFC (from League-Soccer): a tired player sprints slower - rested 100 %, exhausted 80 %
++  return sprintVelocity * GetVelocityMultiplier() * (0.8f + 0.2f * fatigueFactorInv);
+ }
+ 
+ float PlayerBase::GetVelocityMultiplier() const {

@@ -80,8 +80,22 @@ int main(int argc, char** argv) {
          st.players[0].pos[0], st.players[0].pos[1], o.left[0][0], o.left[0][1], st.players[11].pos[0], st.players[11].pos[1],
          o.right[0][0], o.right[0][1]);
   int stop = getenv("GF_STOP") ? atoi(getenv("GF_STOP")) : frames;
+  // match numbers: possession changes, set pieces by kind, time in play
+  int poss_changes = 0, last_owner = -1, prev_mode = 0, in_play = 0;
+  int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
   for (int f = 0; f < stop; f++) {
     afc::gf_frame();
+    {
+      afc::GfState ms;
+      afc::gf_state(&ms);
+      if (ms.ball_owner_team >= 0 && ms.ball_owner_team != last_owner) {
+        if (last_owner >= 0) poss_changes++;
+        last_owner = ms.ball_owner_team;
+      }
+      if (ms.game_mode != prev_mode && ms.game_mode > 0 && ms.game_mode < 7) restarts[ms.game_mode]++;
+      prev_mode = ms.game_mode;
+      if (ms.game_mode == 0) in_play++;
+    }
     if (df && f % 50 == 0) {
       afc::gf_brain_obs(&o, true);
       dump(df, o, f);
@@ -113,6 +127,8 @@ int main(int argc, char** argv) {
   printf("%d frames in %.0f ms (%.3f ms per frame, %.1fx real time)\n", frames, ms, ms / frames, frames * 10.0 / ms);
   afc::gf_state(&st);
   printf("FINAL %d-%d\n", st.goals[0], st.goals[1]);
+  printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
+         poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
   // where the engine reports the right team vs where it draws them (positions must agree, turned 180 degrees)
   afc::gf_brain_obs(&o, false);
   printf("right player 5: drawn (%.2f %.2f), observed (%.3f %.3f) -> metres (%.2f %.2f)\n", st.players[16].pos[0],
