@@ -1,3 +1,5 @@
+# Moved out of .github/workflows while AFC lives in the flipnova repo (a push would build and publish a release
+# there). Move it back to .github/workflows/ when AFC has its own repository.
 name: native-android
 # Builds AFC's native football engine (Google Research Football, as a Godot GDExtension) for Android arm64 and
 # publishes libafcgf.android.arm64.so as a release asset. The game's APK is assembled elsewhere.
