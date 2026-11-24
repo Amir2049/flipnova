@@ -3,9 +3,9 @@
   blender --background --factory-startup --python tools/blender/make_crowd.py -- <player.glb> <out dir>
   python3 tools/blender/pack_crowd.py <out dir> assets/stadium/crowd_atlas.png
 
-Renders N_FANS supporters (varied skin, hair, clothes) in two states each: calm (standing) and cheering (the
-celebration clip). Each is a transparent PNG seen from the pitch, slightly from below, as the stands are seen
-from the broadcast camera. pack_crowd.py lays them out in one atlas: column = fan, row 0 calm, row 1 cheering.
+Renders N_FANS supporters (varied skin, hair, tops) in two states each: calm (standing) and cheering (the
+celebration clip). Each is a transparent PNG of the person from the waist up (in a stand the row in front hides
+the legs, and the player model's shorts and socks must not show), seen from the pitch. pack_crowd.py lays them out in one atlas: column = fan, row 0 calm, row 1 cheering.
 The game draws the crowd as one MultiMesh of cards sampling that atlas (scripts/view/pitch_view.gd).
 """
 import math
@@ -59,9 +59,9 @@ sc.collection.objects.link(sun)
 # camera: in front of the fan (the model faces -y in Blender), a little below eye level, orthographic
 cam_data = bpy.data.cameras.new("cam")
 cam_data.type = "ORTHO"
-cam_data.ortho_scale = 2.05
+cam_data.ortho_scale = 1.15        # frame height: waist (~0.75 m) to above the head (~1.9 m)
 cam = bpy.data.objects.new("cam", cam_data)
-cam.location = (0, -6.0, 0.9)
+cam.location = (0, -6.0, 1.84)   # the imported model stands ~0.5 m above the origin
 cam.rotation_euler = (math.radians(86), 0, 0)
 sc.collection.objects.link(cam)
 sc.camera = cam

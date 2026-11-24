@@ -108,7 +108,7 @@ func build(p: Pitch) -> void:
 		_boards()
 	_stands()
 	if not p.walls:
-		_pitchside()
+		_pitchside_cameras()
 
 
 func _ground() -> void:
@@ -446,7 +446,8 @@ void vertex() {
 	rowh = MODEL_MATRIX[3].y;
 	float e = clamp(excite, 0.0, 1.0);
 	float hop = max(0.0, sin(TIME * (2.2 + 5.0 * e) + id * 40.0));
-	VERTEX.y += 1.025 - 0.125 + hop * (0.015 + 0.25 * e * step(0.25, id));
+	// the card is the person from the waist up (0.75 m .. 1.9 m above the terrace step)
+	VERTEX.y += 1.32 + hop * (0.015 + 0.25 * e * step(0.25, id));
 	VERTEX.x += sin(TIME * 1.3 + id * 17.0) * 0.03;
 }
 void fragment() {
@@ -496,7 +497,7 @@ func _stands() -> void:
 	var fan: Mesh = _fan_mesh()
 	if crowd_cards:
 		var q := QuadMesh.new()
-		q.size = Vector2(1.37, 2.05)   # the atlas cell: 128 x 192 px of a 2.05 m orthographic frame
+		q.size = Vector2(0.77, 1.15)   # the atlas cell: 128 x 192 px of a 1.15 m orthographic frame (waist up)
 		fan = q
 	# the far side and both ends (no stand on the camera side: the broadcast camera sits there)
 	_tier(Vector3(0, 0, -hw - 7.5), pitch.length + 34.0, 180.0, steps, concrete, fan, 0)
@@ -746,8 +747,32 @@ func _floodlights() -> void:
 		add_child(head)
 
 
-## Match-day people around the pitch: photographers behind the goal lines, stewards along the far touchline,
-## TV cameras on tripods. Same cards as the crowd (Blender renders), one MultiMesh.
+## TV cameras on tripods at the corners of the far side (pitch-side people need full-body renders in proper
+## clothes first; the player model's kit made them look like substitutes, so they are not drawn for now).
+func _pitchside_cameras() -> void:
+	var cam_mat := StandardMaterial3D.new()
+	cam_mat.albedo_color = Color(0.05, 0.05, 0.06)
+	cam_mat.roughness = 0.5
+	for sx in [-1.0, 1.0]:
+		var tri := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.03
+		cm.bottom_radius = 0.35
+		cm.height = 1.4
+		tri.mesh = cm
+		tri.material_override = cam_mat
+		tri.position = Vector3(sx * (pitch.half_l() - 12.0), 0.7, -pitch.half_w() - 3.2)
+		add_child(tri)
+		var body := MeshInstance3D.new()
+		var bm2 := BoxMesh.new()
+		bm2.size = Vector3(0.7, 0.45, 0.4)
+		body.mesh = bm2
+		body.material_override = cam_mat
+		body.position = tri.position + Vector3(0, 0.9, 0)
+		add_child(body)
+
+
+## Photographers, stewards and TV cameras as crowd cards (kept for when full-body staff renders exist).
 func _pitchside() -> void:
 	if not crowd_cards or crowd_mat == null:
 		return
