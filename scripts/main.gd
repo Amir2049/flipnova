@@ -17,8 +17,12 @@ func _ready() -> void:
 	ui = CanvasLayer.new()
 	ui.layer = 10
 	add_child(ui)
-	_start_demo()
+	# the title first: the match behind the menus (stadium, crowd, 22 players, and on a phone the first compile of
+	# all their shaders) comes a moment later instead of holding the first picture back
 	_go(_title, false)
+	get_tree().create_timer(0.35).timeout.connect(func():
+		if match_view == null:
+			_start_demo())
 
 
 # ------------------------------------------------------------------ navigation
@@ -58,7 +62,7 @@ void fragment() {
 	float b1 = smoothstep(0.09, 0.0, abs(d - 0.6)) * 0.09;
 	float b2 = smoothstep(0.025, 0.0, abs(d - 0.69)) * 0.1;
 	float b3 = smoothstep(0.16, 0.0, abs(d - 0.95)) * 0.06;
-	vec3 c = vec3(0.2, 0.86, 0.95) * (b1 + b3) + vec3(0.78, 1.0, 0.24) * b2;
+	vec3 c = vec3(0.93, 0.94, 0.9) * (b1 + b3) + vec3(0.88, 0.71, 0.23) * b2;
 	float a = b1 + b2 + b3;
 	COLOR = vec4(c / max(a, 0.001), a);
 }
@@ -70,7 +74,7 @@ static var _streak_mat: ShaderMaterial
 func _base(dim: float = 0.55) -> Control:
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var wash := UI.gradient_rect(Color(0.01, 0.02, 0.06, minf(dim + 0.3, 0.96)), Color(0.02, 0.07, 0.13, dim * 0.75), 30.0)
+	var wash := UI.gradient_rect(Color(0.01, 0.06, 0.04, minf(dim + 0.3, 0.96)), Color(0.02, 0.09, 0.06, dim * 0.75), 30.0)
 	wash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(wash)
 	if _streak_mat == null:

@@ -142,6 +142,14 @@ func flush() -> void:
 func _notification(what: int) -> void:
 	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_PREDELETE]:
 		flush()
+	# a clean pause / close: the next start need not look for a crash in the system log
+	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST]:
+		if FileAccess.file_exists("user://running.flag"):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path("user://running.flag"))
+	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		var f := FileAccess.open("user://running.flag", FileAccess.WRITE)
+		if f:
+			f.store_string("1")
 
 
 func _exit_tree() -> void:

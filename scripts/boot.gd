@@ -4,6 +4,7 @@ extends Control
 
 const MAIN := "res://scenes/main.tscn"
 const SEEN := "user://last_crash.txt"
+const RUNNING := "user://running.flag"     # there while the game runs; gone after a clean pause / exit
 
 var status: Label
 
@@ -36,24 +37,45 @@ func _ready() -> void:
 	ver.add_theme_color_override("font_color", Color(1, 1, 1, 0.4))
 	ver.position = Vector2(16, 16)
 	add_child(ver)
-	var crash := _previous_crash()
+	# the log is read only when the last run did not end cleanly (reading it costs seconds on some phones)
+	var crash := _previous_crash() if FileAccess.file_exists(RUNNING) else ""
+	mark_running(true)
 	if crash != "":
 		_show_crash(crash)
 		return
 	_load_game()
 
 
+## The run flag: set while playing, cleared when the app is paused or closed normally (Profile does this).
+static func mark_running(on: bool) -> void:
+	if on:
+		var f := FileAccess.open(RUNNING, FileAccess.WRITE)
+		if f:
+			f.store_string("1")
+	elif FileAccess.file_exists(RUNNING):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(RUNNING))
+
+
 func _load_game() -> void:
-	# let this screen draw before the heavy loading starts
+	# let this screen draw before the heavy loading starts, then load the game on a thread with a live percentage
 	await get_tree().process_frame
 	await get_tree().process_frame
+	ResourceLoader.load_threaded_request(MAIN)
+	var progress := []
+	while ResourceLoader.load_threaded_get_status(MAIN, progress) == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+		status.text = "Loading… %d%%" % int(100.0 * float(progress[0]) if progress.size() > 0 else 0.0)
+		await get_tree().process_frame
 	# unpack the match engine's data here, behind "Loading", not when PLAY is pressed (first run / new version)
 	if EngineMatchView.available():
 		status.text = "Preparing the match engine…"
 		await get_tree().process_frame
 		await get_tree().process_frame
 		GFData.prepare(EngineMatchView.data_dir())
-	get_tree().change_scene_to_file(MAIN)
+	var scene := ResourceLoader.load_threaded_get(MAIN) as PackedScene
+	if scene:
+		get_tree().change_scene_to_packed(scene)
+	else:
+		get_tree().change_scene_to_file(MAIN)
 
 
 ## The last crash of this app in its own log (an app may read its own log lines), if it is new.
