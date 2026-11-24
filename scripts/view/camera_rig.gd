@@ -13,7 +13,9 @@ var override_target = null  # Vector3 to look at instead (celebrations, replays)
 ## fov: vertical lens angle (fixed, so the pitch keeps its real size on screen); follow_z: how far the view follows
 ## the ball across the pitch. broadcast ~23 degrees down with the far stand in view, players about 8-9 % of the screen height like FC.
 const MODES := {
-	"broadcast": {"height": 16.0, "back": 38.0, "fov": 22.0, "follow_z": 0.7},
+	# TV framing (broadcast standard: high on the halfway line, long lens, ~15 degrees down): the far stand fills the
+	# top of the picture, which is what makes it read as a stadium
+	"broadcast": {"height": 15.0, "back": 55.0, "fov": 21.0, "follow_z": 0.45},
 	"tele": {"height": 22.0, "back": 46.0, "fov": 24.0, "follow_z": 0.6},
 	"close": {"height": 11.0, "back": 24.0, "fov": 32.0, "follow_z": 0.85},
 	"wide": {"height": 24.0, "back": 42.0, "fov": 30.0, "follow_z": 0.5},

@@ -1,0 +1,2 @@
+Grass005 from ambientCG (https://ambientcg.com/a/Grass005), CC0 1.0 Universal.
+Resized to 512 px for the pitch detail (scripts/view/pitch_view.gd).

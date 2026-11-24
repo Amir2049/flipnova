@@ -25,6 +25,12 @@ uniform vec3 sun_to = vec3(0.0, 1.0, 0.0);   // direction from the ground toward
 uniform float stand_z = 41.5;                 // the shadowing stand's front edge (+z side)
 uniform float roof_h = 21.0;                  // its roof edge height
 uniform float stand_shadow = 0.0;             // 0 = off (night, cloud), 1 = full
+// real turf: a CC0 grass photo (ambientCG Grass005) at two scales, as relative detail on top of the mowing colours,
+// and its normal map so the blades catch the light
+uniform sampler2D grass_tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D grass_nrm : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform vec3 grass_avg = vec3(0.3978, 0.517, 0.1711);
+uniform float detail = 0.0;                   // 0 = no texture (it failed to load), 1 = full
 varying vec3 wpos;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -45,6 +51,14 @@ void fragment() {
 	float lean = mix(1.0, -1.0, s) * clamp(vdir.x * 1.6, -1.0, 1.0);
 	vec3 col = mix(grass_a, grass_b, 0.5 + 0.5 * mix(-1.0, 1.0, s) * 0.95 + lean * 0.45);
 	col *= 0.93 + 0.12 * noise(p * 0.9) + 0.05 * noise(p * 6.0) + 0.04 * noise(p * 31.0);
+	if (detail > 0.0) {
+		vec3 d1 = texture(grass_tex, p / 2.2).rgb / grass_avg;
+		vec3 d2 = texture(grass_tex, p / 8.5 + vec2(0.37, 0.61)).rgb / grass_avg;
+		vec3 dd = mix(vec3(1.0), d1, 0.55) * mix(vec3(1.0), d2, 0.3);
+		col *= mix(vec3(1.0), clamp(dd, vec3(0.5), vec3(1.6)), detail);
+		NORMAL_MAP = texture(grass_nrm, p / 2.2).rgb;
+		NORMAL_MAP_DEPTH = 0.7 * detail;
+	}
 	// worn turf: goal mouths and the centre spot
 	vec2 qq = vec2(abs(p.x), p.y);
 	float wear = exp(-pow(length((qq - vec2(hl - 3.0, 0.0)) / vec2(3.5, 4.5)), 2.0)) + 0.5 * exp(-pow(length(p / 3.0), 2.0));
@@ -114,6 +128,10 @@ func _ground() -> void:
 	sm.set_shader_parameter("circle_r", pitch.circle_radius)
 	sm.set_shader_parameter("spot_d", pitch.penalty_spot)
 	grass_mat = sm
+	if ResourceLoader.exists("res://assets/textures/grass_color.jpg") and ResourceLoader.exists("res://assets/textures/grass_normal.jpg"):
+		sm.set_shader_parameter("grass_tex", load("res://assets/textures/grass_color.jpg"))
+		sm.set_shader_parameter("grass_nrm", load("res://assets/textures/grass_normal.jpg"))
+		sm.set_shader_parameter("detail", 1.0)
 	_stand_shadow(sm)
 	mi.material_override = sm
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
