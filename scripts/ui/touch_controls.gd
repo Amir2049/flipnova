@@ -6,8 +6,9 @@ extends Control
 ##   base follows the thumb only when it goes well past the edge.
 ## - Button side: SHOOT (big, in the corner, with a power ring while held), PASS, THROUGH, LOB and SPRINT. When
 ##   defending they become SLIDE, PRESS, SWITCH, TEAM PRESS / TACKLE and SPRINT, in another colour.
-## - PASS and THROUGH take a swipe: flick up off PASS for a lofted pass, up off THROUGH for a lofted through ball
-##   (FC Mobile's gestures). A button with a swipe waits a few hundredths of a second to see which it is.
+## - With the "flick to loft" setting on, PASS and THROUGH take a swipe: flick up off PASS for a lofted pass, up off
+##   THROUGH for a lofted through ball (FC Mobile's gestures); such a button then waits COMMIT (80 ms) to see which
+##   it is. Off (the default) they act on the touch, and LOB lofts.
 ## - A quick tap stays "down" for at least MIN_HOLD, so a tap between two game frames is never lost.
 ## - Swipes on the free part of the button side are skill gestures (swipe, double tap, zig-zag, V, circle).
 
@@ -376,7 +377,7 @@ func _draw() -> void:
 				var pc := Color(0.78, 1.0, 0.24) if pw < 0.8 else Color(1.0, 0.55, 0.2)
 				draw_arc(pos, rr + 7 * u, -PI * 0.5, -PI * 0.5 + TAU * pw, 48, pc, 6.0 * u, true)
 		# PASS / THROUGH: a small chevron says "flick up"
-		if name in SWIPEABLE and not defending:
+		if flick_loft and name in SWIPEABLE and not defending:
 			var cy := pos.y - rr * 0.62
 			var cc := Color(0.04, 0.04, 0.04) if down else Color(1, 1, 1, 0.55 * a)
 			if b["variant"] == "up":

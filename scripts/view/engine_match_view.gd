@@ -116,7 +116,7 @@ static func can_play() -> bool:
 ## Why the engine is missing (from Godot's log: the extension or dlopen error), for the screen.
 static func load_error() -> String:
 	if available():
-		return ""
+		return "" if GFData.prepare(data_dir()) else "its data could not be unpacked (storage full?)"
 	var f := FileAccess.open("user://logs/godot.log", FileAccess.READ)
 	if f == null:
 		return "native library not loaded"
@@ -246,11 +246,12 @@ func start(config: Dictionary) -> void:
 	reader.pad = config.get("pad", {}) if not config.get("pad", {}).is_empty() else Profile.PAD_PRESETS["PES"].duplicate()
 	# the engine
 	var dir := data_dir()
-	GFData.unpack(dir)
+	if not GFData.prepare(dir):
+		push_error("EngineMatchView: the engine's data is not ready in " + dir)
 	engine = ClassDB.instantiate("GFEngine")
 	match_seconds = float(config.get("half_minutes", 4.0)) * 120.0
 	# The engine scales every stat of a side by 0.3 + 0.7 * difficulty (Player::GetStat), its AI too. The human's
-	# side used to be fixed at 0.95, so from World Class up the CPU was ~3.6 % better at everything and the
+	# side used to be fixed at 0.95, so on Legendary and Ultimate (1.0) the CPU was ~3.6 % better at everything and the
 	# player's team-mates reacted slower: the human's side now plays at full level (a watched match: both alike).
 	var eo := {"human": 1 if human_team >= 0 else 0, "difficulty_home": 1.0 if human_team >= 0 else AWAY_DIFF[level],
 		"difficulty_away": AWAY_DIFF[level],

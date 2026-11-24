@@ -8,6 +8,8 @@ extends RefCounted
 
 const ZIP := "res://assets/gfdata.zip"
 
+static var _ready_dir := ""   # the folder prepare() last found complete (checked once per run)
+
 
 static func _version() -> String:
 	if not FileAccess.file_exists(ZIP):
@@ -42,6 +44,9 @@ static func unpack(dir: String) -> int:
 	if ver == "" or z.open(ZIP) != OK:
 		push_error("GFData: cannot open " + ZIP)
 		return -1
+	# no stamp while files are being rewritten: an unpack cut off half way (app killed) must not look complete
+	DirAccess.remove_absolute(dir + "/.version")
+	_ready_dir = ""
 	var n := 0
 	var failed := 0
 	var written := PackedStringArray()
@@ -55,10 +60,13 @@ static func unpack(dir: String) -> int:
 		if out == null:
 			failed += 1
 			continue
-		out.store_buffer(z.read_file(f))
+		var buf := z.read_file(f)
+		out.store_buffer(buf)
+		out.flush()   # a full disk may only show up when the buffer is written out
 		var err := out.get_error()
+		var length := out.get_length()
 		out.close()
-		if err == OK:
+		if err == OK and length == buf.size():
 			n += 1
 			written.append(f)
 		else:
@@ -66,7 +74,6 @@ static func unpack(dir: String) -> int:
 	z.close()
 	if failed > 0:
 		# no stamp: the next start tries again instead of running on half the files forever (a full disk)
-		DirAccess.remove_absolute(dir + "/.version")
 		push_error("GFData: %d files could not be written into %s" % [failed, dir])
 		return -1
 	var sf := FileAccess.open(dir + "/.version", FileAccess.WRITE)
@@ -77,5 +84,11 @@ static func unpack(dir: String) -> int:
 
 
 ## Makes the engine's data ready; false means the native engine must not be started.
+## unpack() returns 0 only after complete() said yes, and > 0 only when every file was written in full.
 static func prepare(dir: String) -> bool:
-	return unpack(dir) >= 0 and complete(dir)
+	if _ready_dir == dir:
+		return true
+	if unpack(dir) < 0:
+		return false
+	_ready_dir = dir
+	return true

@@ -17,8 +17,26 @@ func _process(_d) -> bool:
 		run()
 	return false
 
+var saved := {}
+
+## The test writes into user:// (the developer's real save): keep the real files and put them back at the end.
+func _keep(prof) -> void:
+	for p in [prof.PATH, prof.BAK]:
+		saved[p] = FileAccess.get_file_as_bytes(p) if FileAccess.file_exists(p) else null
+
+func _restore(prof) -> void:
+	for p in saved:
+		if saved[p] == null:
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+		else:
+			var f := FileAccess.open(p, FileAccess.WRITE)
+			f.store_buffer(saved[p])
+			f.close()
+	prof.load_profile()
+
 func run():
 	var prof = get_root().get_node("Profile")
+	_keep(prof)
 	check(prof.is_inside_tree(), "Profile autoload is in the tree")
 	prof.data["career"] = {"club": 3, "season": 7}
 	prof.save()
@@ -44,4 +62,5 @@ func run():
 	var d = JSON.parse_string(FileAccess.get_file_as_string(prof.PATH))
 	check(d is Dictionary and absf(float(d["settings"]["volume"]) - 49 / 50.0) < 0.001, "the last value is on disk")
 	print("50 slider steps took %d us" % (Time.get_ticks_usec() - t0))
+	_restore(prof)
 	quit(1 if fails > 0 else 0)

@@ -190,13 +190,25 @@ func _on_match_finished(r: Dictionary) -> void:
 			_home_reset()
 
 
+## The match has ended (or, with `or_break`, is at a half-time / full-time screen where a pause menu does not belong).
+## The native engine's view has no `sim`: it keeps its own full_time flag.
+func _match_over(or_break: bool = false) -> bool:
+	if match_view == null or not is_instance_valid(match_view):
+		return true
+	if match_view is EngineMatchView:
+		return match_view.full_time   # its half-time screen already sets paused
+	if match_view.ended or match_view.sim.phase == "fulltime":
+		return true
+	return or_break and match_view.sim.phase == "halftime"
+
+
 func _on_match_quit() -> void:
 	var t: String = context.get("type", "friendly")
 	var forfeit: Array = [0, 3] if context["config"]["human_team"] == 0 else [3, 0]
-	if t == "career" and match_view and match_view.sim.phase != "fulltime":
+	if t == "career" and match_view and not _match_over():
 		_career_result({"score": forfeit, "scorers": []})
 		return
-	if t == "cup" and match_view and match_view.sim.phase != "fulltime":
+	if t == "cup" and match_view and not _match_over():
 		_cup_result({"score": forfeit})
 		return
 	if t == "career":
@@ -256,7 +268,7 @@ func _title() -> void:
 	hero.offset_top = -300
 	hero.offset_bottom = 260
 	root.add_child(hero)
-	var credit := UI.label("v%s   match engine %s" % [str(ProjectSettings.get_setting("application/config/version", "")), "ON" if EngineMatchView.available() else "OFF:  " + EngineMatchView.load_error()], 14, Color(1, 1, 1, 0.5) if EngineMatchView.available() else Color(1, 0.4, 0.35))
+	var credit := UI.label("v%s   match engine %s" % [str(ProjectSettings.get_setting("application/config/version", "")), "ON" if EngineMatchView.can_play() else "OFF:  " + EngineMatchView.load_error()], 14, Color(1, 1, 1, 0.5) if EngineMatchView.can_play() else Color(1, 0.4, 0.35))
 	credit.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	credit.position = Vector2(16, -34)
 	root.add_child(credit)
@@ -331,7 +343,7 @@ func _topbar(active: String) -> Control:
 			_go(fn, false))
 		bar.add_child(b)
 	bar.add_child(UI.spacer(0, 0, true))
-	var ok := EngineMatchView.available()
+	var ok := EngineMatchView.can_play()
 	var pill := UI.panel(Color(0.04, 0.1, 0.06, 0.8) if ok else Color(0.25, 0.05, 0.05, 0.85), UI.GOOD if ok else UI.BAD, 20, 14)
 	pill.add_child(UI.label(("ENGINE ON" if ok else "ENGINE OFF") + "  ·  v" + str(ProjectSettings.get_setting("application/config/version", "")), 15, UI.GOOD if ok else UI.BAD))
 	var pv := VBoxContainer.new()
@@ -1414,7 +1426,7 @@ func _notification(what: int) -> void:
 	# a call, the home button or the screen turning off: stop the match (it kept running in the background)
 	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		if match_view and is_instance_valid(match_view) and (match_view is EngineMatchView or match_view.hud.visible) \
-				and not match_view.paused:
+				and not match_view.paused and not _match_over(true):
 			match_view.set_paused(true)
 		Profile.flush()
 		return

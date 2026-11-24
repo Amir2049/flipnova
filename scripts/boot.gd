@@ -47,6 +47,12 @@ func _load_game() -> void:
 	# let this screen draw before the heavy loading starts
 	await get_tree().process_frame
 	await get_tree().process_frame
+	# unpack the match engine's data here, behind "Loading", not when PLAY is pressed (first run / new version)
+	if EngineMatchView.available():
+		status.text = "Preparing the match engine…"
+		await get_tree().process_frame
+		await get_tree().process_frame
+		GFData.prepare(EngineMatchView.data_dir())
 	get_tree().change_scene_to_file(MAIN)
 
 
