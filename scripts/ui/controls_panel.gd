@@ -62,10 +62,11 @@ func _fill() -> void:
 			body.add_child(UI.slider_row("Button opacity", Profile.get_s("touch_opacity"), func(v: float): Profile.set_s("touch_opacity", v); changed.emit(), 0.25, 1.0))
 			body.add_child(UI.toggle_row("Sprint by pushing the stick to the edge", Profile.get_s("edge_sprint"), func(v: bool): Profile.set_s("edge_sprint", v); changed.emit()))
 			body.add_child(UI.toggle_row("Skill moves by swiping", Profile.get_s("swipe_skills"), func(v: bool): Profile.set_s("swipe_skills", v); changed.emit()))
+			body.add_child(UI.toggle_row("Flick up off PASS / THROUGH to loft it (passes wait 0.08 s to tell)", Profile.get_s("flick_loft"), func(v: bool): Profile.set_s("flick_loft", v); changed.emit()))
 			body.add_child(UI.toggle_row("Vibration", Profile.get_s("vibration"), func(v: bool): Profile.set_s("vibration", v); changed.emit()))
 			body.add_child(UI.toggle_row("Fixed stick (off: it appears under your thumb)", Profile.get_s("touch_fixed"), func(v: bool): Profile.set_s("touch_fixed", v); changed.emit()))
 			body.add_child(UI.toggle_row("Left-handed (stick on the right)", Profile.get_s("touch_left"), func(v: bool): Profile.set_s("touch_left", v); changed.emit()))
-			body.add_child(UI.label("Flick up off PASS for a lofted pass, off THROUGH for a lofted through ball. Hold SHOOT for power (the ring).", 15, UI.MUTED))
+			body.add_child(UI.label("LOB lofts a pass (or flick up off PASS / THROUGH when that is on). Hold SHOOT for power (the ring).", 15, UI.MUTED))
 			body.add_child(UI.label("Left half: movement stick. Right side: PASS, SHOOT, LOB, THROUGH — in defence they become PRESS, SLIDE, TACKLE, SWITCH. Swipe on the free right side for skill moves.", 16, UI.MUTED))
 		"keys":
 			var txt := "Move  W A S D / arrows\nPass  K      Shoot  L      Lob / cross  J      Through ball  I\nSprint  Shift      Close control / jockey  E      Switch  Q\nDefence: K pressure · I standing tackle · L slide · J teammate pressure\nSkill moves  1 – 0      Pause  Esc"

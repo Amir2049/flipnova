@@ -249,7 +249,11 @@ func start(config: Dictionary) -> void:
 	GFData.unpack(dir)
 	engine = ClassDB.instantiate("GFEngine")
 	match_seconds = float(config.get("half_minutes", 4.0)) * 120.0
-	var eo := {"human": 1 if human_team >= 0 else 0, "difficulty_home": 0.95, "difficulty_away": AWAY_DIFF[level],
+	# The engine scales every stat of a side by 0.3 + 0.7 * difficulty (Player::GetStat), its AI too. The human's
+	# side used to be fixed at 0.95, so from World Class up the CPU was ~3.6 % better at everything and the
+	# player's team-mates reacted slower: the human's side now plays at full level (a watched match: both alike).
+	var eo := {"human": 1 if human_team >= 0 else 0, "difficulty_home": 1.0 if human_team >= 0 else AWAY_DIFF[level],
+		"difficulty_away": AWAY_DIFF[level],
 		"seed": int(config.get("seed", randi() % 100000)), "match_seconds": match_seconds, "offsides": opts.get("offside", true),
 		"home_formation": formation_entries(team_defs[0]["formation"]),
 		"away_formation": formation_entries(team_defs[1]["formation"])}
