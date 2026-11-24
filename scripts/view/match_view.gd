@@ -41,6 +41,10 @@ var intro_t := 0.0
 func _exit_tree() -> void:
 	if sim:
 		sim.dispose()
+	# the menus run at full rate and resolution again whatever the match had to trade
+	Engine.max_fps = 0
+	if get_viewport():
+		get_viewport().scaling_3d_scale = 1.0
 
 
 func start(config: Dictionary) -> void:
@@ -195,10 +199,10 @@ func _environment() -> void:
 	e.ambient_light_energy = 0.42 if not night else 0.35
 	# broadcast look: filmic curve, slightly lower saturation, a touch more contrast, haze over the far stands
 	e.tonemap_mode = Environment.TONE_MAPPER_ACES
-	e.tonemap_exposure = 0.86
+	e.tonemap_exposure = 0.8          # measured against FC 27 frames: grass luminance ~127
 	e.tonemap_white = 6.0
 	e.adjustment_enabled = true
-	e.adjustment_saturation = 1.05
+	e.adjustment_saturation = 1.22    # the "traditional sports look" (BBC): FC grass saturation ~0.73
 	e.adjustment_contrast = 1.12
 	e.fog_enabled = not night
 	e.fog_mode = Environment.FOG_MODE_EXPONENTIAL
@@ -239,9 +243,37 @@ func _environment() -> void:
 
 
 ## 0 low (no shadows, lower resolution), 1 medium, 2 high (MSAA 4x)
+var governor: FrameGovernor
+
+
+## 0 Low (fast, 30 fps), 1 Medium, 2 High, 3 Auto (Medium, then the governor trades picture for speed as needed).
+var sun_energy := -1.0
+
+
+## Real sun shadows on / off. In the Compatibility renderer a shadowed light is drawn in extra passes and comes out
+## brighter (measured: grass luminance 137 with, 84 without), so without shadows the sun is turned up to match.
+func set_sun_shadows(on: bool) -> void:
+	if sun == null:
+		return
+	if sun_energy < 0.0:
+		sun_energy = sun.light_energy
+	sun.shadow_enabled = on
+	sun.light_energy = sun_energy * (1.0 if on else 1.55)
+
+
 func _quality(q: int) -> void:
+	if governor:
+		governor.queue_free()
+		governor = null
+	Engine.max_fps = 30 if q == 0 else 0
+	if q == 3:
+		_quality(1)
+		governor = FrameGovernor.new()
+		add_child(governor)
+		governor.setup(self)
+		return
 	var vp := get_viewport()
-	sun.shadow_enabled = q >= 1
+	set_sun_shadows(q >= 1)
 	sun.directional_shadow_max_distance = 80.0 if q == 1 else 120.0
 	if vp:
 		vp.scaling_3d_scale = 0.75 if q == 0 else 1.0

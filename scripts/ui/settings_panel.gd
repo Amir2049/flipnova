@@ -16,7 +16,7 @@ static func game_speed(o: Dictionary) -> float:
 const HALVES := ["2 min", "4 min", "6 min", "8 min", "10 min"]
 const HALF_VALUES := [2.0, 4.0, 6.0, 8.0, 10.0]
 const CAMS := ["broadcast", "tele", "close", "wide"]
-const QUALITY := ["Low (fast)", "Medium", "High"]
+const QUALITY := ["Low (fast)", "Medium", "High", "Auto (any phone)"]
 const CELEBS := ["random", "fist", "arms", "knee_slide", "leap", "spin", "flip", "salute"]
 const CELEB_NAMES := ["Random", "Fist pump", "Arms out", "Knee slide", "Leap", "Spin", "Flip", "Salute"]
 

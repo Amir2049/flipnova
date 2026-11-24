@@ -653,7 +653,7 @@ func _tier(pos: Vector3, length: float, yaw: float, steps_mat: Material, concret
 ## The people on a stand's terraces (one MultiMesh, the crowd shader animates them).
 func _crowd(root: Node3D, length: float, rows: int, tread: float, rise: float, base: float, fan: Mesh, which: int) -> void:
 	var hl := length * 0.5
-	var occupancy: float = ([0.7, 0.9, 0.97] if crowd_cards else [0.45, 0.72, 0.9])[clampi(quality, 0, 2)]   # cards are 2 triangles each: full houses
+	var occupancy: float = ([0.7, 0.9, 0.97] if crowd_cards else [0.45, 0.72, 0.9])[clampi(quality if quality < 3 else 1, 0, 2)]   # cards are 2 triangles each: full houses; Auto counts as Medium
 	var spacing := 0.62
 	var per_row := int(length / spacing)
 	var rng := RandomNumberGenerator.new()

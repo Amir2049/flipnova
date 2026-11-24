@@ -5,7 +5,7 @@ extends Node
 const PATH := "user://profile.json"
 const TMP := "user://profile.json.tmp"
 const BAK := "user://profile.json.bak"
-const VERSION := 6
+const VERSION := 7
 
 const ATTACK_ACTIONS := [["pass", "Short pass"], ["shoot", "Shoot"], ["lob", "Lob / cross"], ["through", "Through ball"],
 	["sprint", "Sprint"], ["close", "Close control"], ["skill_mod", "Skill modifier"], ["stepover", "Step over"]]
@@ -28,7 +28,7 @@ const PAD_PRESETS := {
 }
 
 const DEFAULT_SETTINGS := {
-	"difficulty": 0, "half": 1, "camera": 0, "volume": 0.8, "crowd": 0.7, "effects": 0.9, "quality": 1,
+	"difficulty": 0, "half": 1, "camera": 0, "volume": 0.8, "crowd": 0.7, "effects": 0.9, "quality": 3,
 	"radar": true, "names": true, "replays": true, "vibration": true, "stoppage_menu": false,
 	"celebration": "random", "touch_size": 1.0, "touch_opacity": 0.75, "swipe_skills": true, "flick_loft": false, "edge_sprint": false,
 	"touch_fixed": false, "touch_left": false,
@@ -77,6 +77,9 @@ func load_profile() -> void:
 		# 2.18: "the players are very fast" - realistic tempo and the Normal game speed once
 		data["settings"]["style"] = "authentic"
 		data["settings"]["game_speed"] = 1
+	if int(d.get("version", 0)) < 7 and int(data["settings"].get("quality", 1)) == 1:
+		# 2.21: graphics on Auto (it adapts to the phone) unless the player had picked Low or High
+		data["settings"]["quality"] = 3
 	if d.get("pad") is Dictionary:
 		for k in d["pad"]:
 			var v = d["pad"][k]
