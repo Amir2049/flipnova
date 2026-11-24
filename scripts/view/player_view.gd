@@ -177,17 +177,21 @@ func restyle(kit: Dictionary, gk_kit: Dictionary, seed: int) -> void:
 func update_view(sim_time: float, has_ball: bool) -> void:
 	var p := sim
 	position = Vector3(p.pos.x, 0, p.pos.y)
-	rotation.y = atan2(p.facing.x, p.facing.y)
+	# the facing from the simulation jitters a few degrees a frame (measured 2.4 deg / frame): the body turns toward
+	# it smoothly (fast enough for real turns) instead of snapping, which read as swaying left and right
+	var want_yaw := atan2(p.facing.x, p.facing.y)
+	var ydt := clampf(sim_time - last_t, 0.0, 0.1) if last_t >= 0.0 else 1.0
+	rotation.y = want_yaw if ydt >= 1.0 else lerp_angle(rotation.y, want_yaw, 1.0 - exp(-ydt * 14.0))
 	# body language: lean into turns, tilt forward when accelerating / sprinting, back when braking
 	var dt := clampf(sim_time - last_t, 0.0, 0.1) if last_t >= 0.0 else 0.0
 	last_t = sim_time
 	var spd := p.vel.length()
 	if dt > 0.0:
 		var turn := last_face.angle_to(p.facing) / dt
-		var want_lean := clampf(-turn * spd * 0.022, -0.32, 0.32) if p.action == "" else 0.0
+		var want_lean := clampf(-turn * spd * 0.012, -0.12, 0.12) if p.action == "" else 0.0   # was up to 18 deg
 		var acc := (spd - last_speed) / dt
 		var want_tilt := clampf(acc * 0.012 + maxf(0.0, spd - 5.5) * 0.025, -0.12, 0.16) if p.action == "" else 0.0
-		lean = lerpf(lean, want_lean, 1.0 - exp(-dt * 10.0))
+		lean = lerpf(lean, want_lean, 1.0 - exp(-dt * 5.0))
 		tilt = lerpf(tilt, want_tilt, 1.0 - exp(-dt * 8.0))
 	last_face = p.facing
 	last_speed = spd
