@@ -35,14 +35,14 @@ SEC = 12.0          # section length
 AISLE = 0.7         # half-width of the stair aisle at x = 0
 
 PAL = {
-    "concrete": (0.42, 0.43, 0.44, 1),
+    "concrete": (0.30, 0.31, 0.32, 1),
     "riser": (0.30, 0.31, 0.32, 1),
-    "red": (0.62, 0.04, 0.10, 1),
-    "white": (0.86, 0.87, 0.84, 1),
-    "green": (0.04, 0.24, 0.17, 1),
+    "red": (0.34, 0.025, 0.05, 1),      # seats read darker than paint under stadium light (they were pink)
+    "white": (0.55, 0.56, 0.55, 1),
+    "green": (0.03, 0.15, 0.11, 1),
     "rail": (0.75, 0.76, 0.78, 1),
     "steel": (0.20, 0.22, 0.25, 1),
-    "roof": (0.55, 0.57, 0.60, 1),
+    "roof": (0.36, 0.38, 0.40, 1),
     "fascia": (0.04, 0.16, 0.11, 1),
     "stripe": (0.70, 0.05, 0.12, 1),
     "exit": (0.02, 0.02, 0.025, 1),

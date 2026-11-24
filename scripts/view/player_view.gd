@@ -74,6 +74,9 @@ static func dress(model: Node3D, k: Dictionary, number: int, is_gk: bool, rng: R
 	var kit_mat := StandardMaterial3D.new()
 	kit_mat.albedo_texture = KitPainter.paint(k, number)
 	kit_mat.roughness = 0.8
+	# the painted kit was lit up to pastel (red read as pink) under the bright sun: a cloth-like albedo keeps colours deep
+	kit_mat.albedo_color = Color(0.8, 0.8, 0.8)
+	kit_mat.metallic_specular = 0.25
 	var skin := StandardMaterial3D.new()
 	skin.albedo_color = SKIN_TONES[rng.randi() % SKIN_TONES.size()]
 	skin.vertex_color_use_as_albedo = true   # brows, lips and eyelids are vertex colours on the skin

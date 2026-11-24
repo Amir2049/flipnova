@@ -64,7 +64,7 @@ void fragment() {
 	float wear = exp(-pow(length((qq - vec2(hl - 3.0, 0.0)) / vec2(3.5, 4.5)), 2.0)) + 0.5 * exp(-pow(length(p / 3.0), 2.0));
 	col = mix(col, vec3(0.33, 0.33, 0.2), clamp(wear, 0.0, 1.0) * 0.35);
 	float inside = step(abs(p.x), hl + 0.1) * step(abs(p.y), hw + 0.1);
-	col *= mix(0.85, 1.0, inside);
+	col *= mix(0.62, 1.0, inside);
 	float lw = 0.12;
 	float L = 0.0;
 	L = max(L, ln(abs(p.x) - hl, lw) * step(abs(p.y), hw + lw));
@@ -200,12 +200,14 @@ func _goal(side: float) -> void:
 		add_child(bp)
 	# net: roof, back, sides
 	var net_mat := StandardMaterial3D.new()
-	net_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	net_mat.alpha_scissor_threshold = 0.5
+	# blended, not alpha-scissored: with mipmaps the thin strands averaged under the scissor and the net vanished at
+	# broadcast distance; blended they fade into the white haze a real net makes from the stand
+	net_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	net_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	net_mat.albedo_texture = _net_texture()
 	net_mat.uv1_triplanar = true
-	net_mat.uv1_scale = Vector3(4, 4, 4)
+	net_mat.uv1_scale = Vector3(3, 3, 3)
+	net_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	net_mat.albedo_color = Color(0.95, 0.95, 0.95)
 	var net := MeshInstance3D.new()
 	var st := SurfaceTool.new()
@@ -239,7 +241,7 @@ func _net_texture() -> ImageTexture:
 	var img := Image.create(64, 64, true, Image.FORMAT_RGBA8)
 	img.fill(Color(1, 1, 1, 0))
 	for i in 64:
-		for k in [0, 1, 32, 33]:
+		for k in [0, 1, 2, 32, 33, 34]:
 			img.set_pixel(i, k, Color(1, 1, 1, 1))
 			img.set_pixel(k, i, Color(1, 1, 1, 1))
 	img.generate_mipmaps()
@@ -250,7 +252,8 @@ func _boards() -> void:
 	var hl := pitch.half_l()
 	var hw := pitch.half_w()
 	var texts := ["AFC", "PLAY ON", "AFC ARENA", "FAIR PLAY", "GOAL!", "AFC"]
-	var colors := [Color(0.78, 1.0, 0.24), Color(1.0, 0.42, 0.17), Color(0.1, 0.14, 0.28), Color(0.2, 0.8, 0.9)]
+	# LED boards: the light is in the lettering (UI palette: chalk, brass, ticket red, Nile teal)
+	var colors := [Color("edefe6"), Color("e0b43a"), Color("ff3b4e"), Color("3fd1c5")]
 	var n := 0
 	for side in [-1.0, 1.0]:
 		var z: float = side * (hw + 4.0)
@@ -366,9 +369,10 @@ func _board(pos: Vector3, rot: Vector3, width: float, text: String, color: Color
 	bm.size = Vector3(width, 0.9, 0.12)
 	mi.mesh = bm
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
+	mat.albedo_color = Color(0.03, 0.035, 0.045)
+	mat.roughness = 0.35
 	mat.emission_enabled = true
-	mat.emission = color * 0.35
+	mat.emission = color * 0.06
 	mi.material_override = mat
 	root.add_child(mi)
 	var lb := Label3D.new()
@@ -377,7 +381,7 @@ func _board(pos: Vector3, rot: Vector3, width: float, text: String, color: Color
 	lb.pixel_size = 0.006
 	lb.position = Vector3(0, 0, -0.07)
 	lb.rotation_degrees = Vector3(0, 180, 0)
-	lb.modulate = Color(0.05, 0.05, 0.08) if color.get_luminance() > 0.5 else Color(1, 1, 1)
+	lb.modulate = color * 1.15   # unshaded: the LED glow
 	lb.outline_size = 0
 	root.add_child(lb)
 	add_child(root)
@@ -589,8 +593,8 @@ func _crowd(root: Node3D, length: float, rows: int, tread: float, rise: float, b
 	var xforms: Array[Transform3D] = []
 	var cols: Array[Color] = []
 	var customs: Array[Color] = []
-	var home := Color(0.85, 0.12, 0.2)
-	var away := Color(0.1, 0.6, 0.75)
+	var home := Color(0.62, 0.06, 0.1)
+	var away := Color(0.06, 0.42, 0.55)
 	for r in rows:
 		for i in per_row:
 			if rng.randf() > occupancy:
@@ -604,10 +608,10 @@ func _crowd(root: Node3D, length: float, rows: int, tread: float, rise: float, b
 			var away_end := which == 2 and x > -hl * 0.2
 			var c := home if not away_end else away
 			var roll := rng.randf()
-			if roll < 0.25:
+			if roll < 0.45:
+				c = Color.from_hsv(rng.randf(), rng.randf_range(0.1, 0.4), rng.randf_range(0.06, 0.3))   # dark everyday clothes
+			elif roll < 0.53:
 				c = Color(0.92, 0.92, 0.92)
-			elif roll < 0.42:
-				c = Color.from_hsv(rng.randf(), 0.35, rng.randf_range(0.15, 0.6))
 			cols.append(c.darkened(rng.randf_range(0.0, 0.3)))
 			customs.append(Color(rng.randf(), rng.randf(), 0, 0))
 	var mm := MultiMesh.new()
