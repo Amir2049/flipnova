@@ -1,6 +1,7 @@
 class_name Sfx
 extends Node
-## Synthesised sounds (no audio files): crowd bed, kicks, touches, whistle, goal roar.
+## Match sounds: real recordings (assets/sounds, CC0 from freesound.org, see CREDITS.txt) for the crowd, its swells
+## and roars, the referee's whistle and the ball; the old synthesised ones are only a fallback if a file is missing.
 
 const RATE := 22050
 const PAD := 256   # silent samples after every sound: the mixer reads a little past the end (interpolation, loop wrap)
@@ -13,6 +14,12 @@ var roar_s: AudioStreamWAV
 var vol_fx := 0.8
 var vol_crowd := 0.6
 var crowd_level := 0.35
+var rec := {}          # name -> AudioStream (the recordings that loaded)
+var _swell_cd := 0.0
+
+
+func _rec(name: String) -> AudioStream:
+	return rec.get(name)
 
 
 func _ready() -> void:
@@ -22,16 +29,25 @@ func _ready() -> void:
 func _build() -> void:
 	if crowd_player:
 		return
+	for n in ["crowd_bed", "crowd_swell", "goal_roar", "goal_roar2", "whistle_short", "whistle_long", "kick", "kick2"]:
+		var path := "res://assets/sounds/%s.ogg" % n
+		if ResourceLoader.exists(path):
+			rec[n] = load(path)
 	kick_s = _make(0.12, func(t: float) -> float: return sin(TAU * (170.0 * exp(-t * 22.0) + 45.0) * t) * exp(-t * 28.0))
 	touch_s = _make(0.06, func(t: float) -> float: return (randf() * 2.0 - 1.0) * exp(-t * 70.0) * 0.4 + sin(TAU * 120.0 * t) * exp(-t * 50.0) * 0.5)
 	whistle_s = _make(0.32, func(t: float) -> float: return sin(TAU * (2850.0 + 220.0 * sin(TAU * 38.0 * t)) * t) * minf(1.0, t * 40.0) * minf(1.0, (0.32 - t) * 30.0) * 0.5)
 	roar_s = _noise(3.5, 0.9, true)
 	crowd_player = AudioStreamPlayer.new()
-	var c := _noise(4.0, 0.5, false)
-	c.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	c.loop_begin = 0
-	c.loop_end = int(4.0 * RATE) - 8   # well inside the buffer (the padding stays after it)
-	crowd_player.stream = c
+	var bed: AudioStream = _rec("crowd_bed")
+	if bed is AudioStreamOggVorbis:
+		(bed as AudioStreamOggVorbis).loop = true   # the file's end is cross-faded into its start
+		crowd_player.stream = bed
+	else:
+		var c := _noise(4.0, 0.5, false)
+		c.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		c.loop_begin = 0
+		c.loop_end = int(4.0 * RATE) - 8   # well inside the buffer (the padding stays after it)
+		crowd_player.stream = c
 	crowd_player.volume_db = -18.0
 	add_child(crowd_player)
 	for i in 6:
@@ -102,22 +118,48 @@ func crowd(level: float) -> void:
 		return
 	if not crowd_player.playing:
 		crowd_player.play()
+	# the stands get louder as the play nears a goal; a swell when it gets there (not more than every few seconds)
+	if level > crowd_level + 0.08 and level > 0.35 and Time.get_ticks_msec() / 1000.0 > _swell_cd and _rec("crowd_swell"):
+		_swell_cd = Time.get_ticks_msec() / 1000.0 + 6.0
+		_play(_rec("crowd_swell"), linear_to_db(level) - 10.0, randf_range(0.95, 1.05))
 	crowd_level = level
-	crowd_player.volume_db = linear_to_db(maxf(0.001, level * vol_crowd)) - 8.0
+	var lift := 0.0 if _rec("crowd_bed") else -8.0
+	crowd_player.volume_db = linear_to_db(maxf(0.001, (0.35 + 0.65 * level) * vol_crowd)) - 6.0 + lift
 
 
 func kick(speed: float) -> void:
-	_play(kick_s, clampf(-14.0 + speed * 0.4, -14.0, -2.0), randf_range(0.9, 1.1))
+	var k: AudioStream = _rec("kick") if randf() < 0.5 else _rec("kick2")
+	if k:
+		# harder strikes: louder and a touch lower
+		_play(k, clampf(-16.0 + speed * 0.45, -16.0, -1.0), clampf(1.12 - speed * 0.006, 0.9, 1.12) * randf_range(0.96, 1.04))
+	else:
+		_play(kick_s, clampf(-14.0 + speed * 0.4, -14.0, -2.0), randf_range(0.9, 1.1))
 
 
 func touch() -> void:
-	_play(touch_s, -20.0, randf_range(0.9, 1.15))
+	var k: AudioStream = _rec("kick2")
+	if k:
+		_play(k, -24.0, randf_range(1.25, 1.4))   # a dribble touch: the kick, soft and short
+	else:
+		_play(touch_s, -20.0, randf_range(0.9, 1.15))
 
 
 func whistle(n: int) -> void:
+	# one short blast for a restart, the long one to end a half / the match
+	var long_w: AudioStream = _rec("whistle_long")
+	var short_w: AudioStream = _rec("whistle_short")
+	if n >= 2 and long_w:
+		for i in n - 1:
+			get_tree().create_timer(i * 0.45).timeout.connect(func(): _play(short_w if short_w else whistle_s, -9.0))
+		get_tree().create_timer((n - 1) * 0.45).timeout.connect(func(): _play(long_w, -9.0))
+		return
 	for i in n:
-		get_tree().create_timer(i * 0.4).timeout.connect(func(): _play(whistle_s, -8.0))
+		get_tree().create_timer(i * 0.4).timeout.connect(func(): _play(short_w if short_w else whistle_s, -9.0))
 
 
 func roar(level: float) -> void:
-	_play(roar_s, linear_to_db(level) - 4.0)
+	var r: AudioStream = _rec("goal_roar") if randf() < 0.6 else _rec("goal_roar2")
+	if r:
+		_play(r, linear_to_db(maxf(level, 0.05)) - 3.0)
+	else:
+		_play(roar_s, linear_to_db(level) - 4.0)

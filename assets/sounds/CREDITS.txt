@@ -1,0 +1,8 @@
+Match sounds: recordings from freesound.org, all CC0 1.0 (public domain dedication), trimmed / normalised.
+  crowd_bed.ogg, goal_roar2.ogg  241630 "Crowd screaming GOAL during the soccer game, Mexico" by felix.blume
+  goal_roar.ogg                  528799 "Football Crowd - Reaction To Goal" by D.jones
+  crowd_swell.ogg                130568 "RoaringCrowd.wav" by benfree
+  whistle_short.ogg              538422 "Referee whistle sound" by Rosa-Orenes256
+  whistle_long.ogg               218318 "Referee whistle blow, gymnasium" by SpliceSound
+  kick.ogg                       261267 "Soccer Kick" by musita182
+  kick2.ogg                      555042 "Soccer Ball Kick" by bittermelonheart
