@@ -1,4 +1,4 @@
-# AFC test builds
+# AFC test builds (install as "AFC Test", next to the original game)
 
-- `AFC-2.24-safe.apk` (32 MB, Android arm64): installs as "AFC Test" (`com.afc.game.test`) next to the original
-  game. Built without the native match engine library (matches use the built-in engine), so it opens on any phone.
+- `AFC-2.25-full.apk`: with the native match engine (Google Research Football), library built with the Android NDK.
+- `AFC-2.25-safe.apk`: without the native library (matches on the built-in engine); opens on any phone.
