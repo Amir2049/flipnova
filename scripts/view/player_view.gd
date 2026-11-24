@@ -5,6 +5,10 @@ extends Node3D
 
 const PLAYER_SCENE := preload("res://assets/player.glb")
 const KIT_NORMAL := preload("res://assets/kit_normal.png")
+## Blender-baked shading of the kit (folds, armpits, hems) times a knit pattern, in the kit UV layout
+## (tools/blender/bake_player_ao.py + make_kit_shade.py); multiplied over the painted kit
+const KIT_SHADE_PATH := "res://assets/kit_shade.png"
+static var kit_shade: Texture2D
 const SKIN_TONES := [Color8(241, 201, 165), Color8(217, 164, 122), Color8(176, 122, 79), Color8(125, 81, 53), Color8(90, 58, 38)]
 const HAIR := [Color8(27, 22, 18), Color8(59, 39, 22), Color8(107, 74, 43), Color8(181, 138, 82), Color8(138, 59, 29)]
 const BOOTS := [Color8(17, 17, 17), Color8(242, 242, 242), Color8(198, 255, 61), Color8(255, 106, 43), Color8(45, 108, 223)]
@@ -92,6 +96,13 @@ static func dress(model: Node3D, k: Dictionary, number: int, is_gk: bool, rng: R
 	# cloth folds on the kit
 	kit_mat.normal_enabled = true
 	kit_mat.normal_texture = KIT_NORMAL
+	if kit_shade == null and ResourceLoader.exists(KIT_SHADE_PATH):
+		kit_shade = load(KIT_SHADE_PATH)
+	if kit_shade:
+		kit_mat.detail_enabled = true
+		kit_mat.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+		kit_mat.detail_uv_layout = BaseMaterial3D.DETAIL_UV_1
+		kit_mat.detail_albedo = kit_shade
 	kit_mat.normal_scale = 0.5
 	var hair_meshes: Array[MeshInstance3D] = []
 	for mi in model.find_children("*", "MeshInstance3D", true, false):
