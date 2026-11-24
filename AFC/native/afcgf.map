@@ -1,6 +1,0 @@
-{
-  global:
-    afcgf_library_init;
-  local:
-    *;
-};
