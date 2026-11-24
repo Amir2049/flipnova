@@ -37,8 +37,8 @@ AISLE = 0.7         # half-width of the stair aisle at x = 0
 PAL = {
     "concrete": (0.30, 0.31, 0.32, 1),
     "riser": (0.30, 0.31, 0.32, 1),
-    "red": (0.34, 0.025, 0.05, 1),      # seats read darker than paint under stadium light (they were pink)
-    "white": (0.55, 0.56, 0.55, 1),
+    "red": (0.16, 0.02, 0.03, 1),       # seats read much lighter under the match sun (they were pink): deep maroon
+    "white": (0.36, 0.37, 0.37, 1),
     "green": (0.03, 0.15, 0.11, 1),
     "rail": (0.75, 0.76, 0.78, 1),
     "steel": (0.20, 0.22, 0.25, 1),

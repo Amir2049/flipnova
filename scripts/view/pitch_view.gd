@@ -428,9 +428,46 @@ void fragment() {
 }
 """
 
+## Crowd cards: real people rendered in Blender (tools/blender/make_crowd.py) in an atlas, column = fan, row 0 calm,
+## row 1 cheering. Cards stand on the terraces facing the pitch, bob a little, and swap to cheering with the game.
+const CROWD_ATLAS := "res://assets/stadium/crowd_atlas.png"
+const CARD_SHADER := """
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D atlas : source_color, filter_linear_mipmap;
+uniform float fans = 16.0;
+uniform float excite = 0.0;
+varying float id;
+varying float rowh;
+void vertex() {
+	id = INSTANCE_CUSTOM.x;
+	rowh = MODEL_MATRIX[3].y;
+	float e = clamp(excite, 0.0, 1.0);
+	float hop = max(0.0, sin(TIME * (2.2 + 5.0 * e) + id * 40.0));
+	VERTEX.y += 1.025 - 0.125 + hop * (0.015 + 0.25 * e * step(0.25, id));
+	VERTEX.x += sin(TIME * 1.3 + id * 17.0) * 0.03;
+}
+void fragment() {
+	float e = clamp(excite, 0.0, 1.0);
+	float fan = floor(id * fans);
+	float cheer = step(0.5, clamp(e * 1.6 - id * 0.6, 0.0, 1.0) * (0.75 + 0.25 * sin(TIME * 7.0 + id * 31.0)) + step(0.95, id) * 0.6);
+	vec2 uv = vec2((fan + UV.x) / fans, (cheer + UV.y) * 0.5);
+	vec4 t = texture(atlas, uv);
+	if (t.a < 0.5) discard;
+	// the renders were lit for a portrait: in the stand, under the roof, people read much darker (TV crowds are dark)
+	vec3 c = t.rgb * 0.5;
+	float g = dot(c, vec3(0.3, 0.59, 0.11));
+	c = mix(vec3(g), c, 0.8);
+	ALBEDO = c * (1.0 - 0.45 * clamp((rowh - 1.5) / 14.0, 0.0, 1.0));
+	ROUGHNESS = 0.95;
+	SPECULAR = 0.1;
+}
+"""
+
 var crowd_mat: ShaderMaterial
 var grass_mat: ShaderMaterial
 var quality := 1
+var crowd_cards := false
 var excite := 0.0
 var excite_target := 0.15
 
@@ -440,7 +477,12 @@ func _stands() -> void:
 	var hw := pitch.half_w()
 	var sm := ShaderMaterial.new()
 	var sh := Shader.new()
-	sh.code = FAN_SHADER
+	if ResourceLoader.exists(CROWD_ATLAS):
+		sh.code = CARD_SHADER
+		sm.set_shader_parameter("atlas", load(CROWD_ATLAS))
+		crowd_cards = true
+	else:
+		sh.code = FAN_SHADER
 	sm.shader = sh
 	crowd_mat = sm
 	var concrete := StandardMaterial3D.new()
@@ -449,7 +491,11 @@ func _stands() -> void:
 	var steps := StandardMaterial3D.new()
 	steps.vertex_color_use_as_albedo = true
 	steps.roughness = 0.9
-	var fan := _fan_mesh()
+	var fan: Mesh = _fan_mesh()
+	if crowd_cards:
+		var q := QuadMesh.new()
+		q.size = Vector2(1.37, 2.05)   # the atlas cell: 128 x 192 px of a 2.05 m orthographic frame
+		fan = q
 	# the far side and both ends (no stand on the camera side: the broadcast camera sits there)
 	_tier(Vector3(0, 0, -hw - 7.5), pitch.length + 34.0, 180.0, steps, concrete, fan, 0)
 	_tier(Vector3(hl + 9.0, 0, 0), pitch.width + 24.0, 90.0, steps, concrete, fan, 1)
@@ -501,8 +547,28 @@ func _blender_stand(root: Node3D, length: float) -> bool:
 		sec.scale = Vector3(sx, 1, 1)
 		root.add_child(sec)
 		for mi in sec.find_children("*", "MeshInstance3D", true, false):
-			(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var m3 := mi as MeshInstance3D
+			m3.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			m3.material_override = _stand_material(m3)
 	return true
+
+
+var _stand_mat: StandardMaterial3D
+
+
+## The baked stand texture already holds its shading; under the match sun it washed out to white, so the stand gets
+## one shared material: the baked colours a little darker and matt (and one material for all sections).
+func _stand_material(mi: MeshInstance3D) -> Material:
+	if _stand_mat == null:
+		var src := mi.get_active_material(0) as StandardMaterial3D
+		_stand_mat = StandardMaterial3D.new()
+		if src:
+			_stand_mat.albedo_texture = src.albedo_texture
+		_stand_mat.albedo_color = Color(0.62, 0.62, 0.62)
+		_stand_mat.roughness = 0.95
+		_stand_mat.metallic_specular = 0.15
+		_stand_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return _stand_mat
 
 
 func _tier(pos: Vector3, length: float, yaw: float, steps_mat: Material, concrete: Material, fan: Mesh, which: int) -> void:
@@ -585,7 +651,7 @@ func _tier(pos: Vector3, length: float, yaw: float, steps_mat: Material, concret
 ## The people on a stand's terraces (one MultiMesh, the crowd shader animates them).
 func _crowd(root: Node3D, length: float, rows: int, tread: float, rise: float, base: float, fan: Mesh, which: int) -> void:
 	var hl := length * 0.5
-	var occupancy: float = [0.45, 0.72, 0.9][clampi(quality, 0, 2)]
+	var occupancy: float = ([0.7, 0.9, 0.97] if crowd_cards else [0.45, 0.72, 0.9])[clampi(quality, 0, 2)]   # cards are 2 triangles each: full houses
 	var spacing := 0.62
 	var per_row := int(length / spacing)
 	var rng := RandomNumberGenerator.new()
