@@ -42,6 +42,10 @@ var _save_pending := false
 
 
 func _ready() -> void:
+	# The menus are laid out left to right and the game has no translations yet. On a phone set to Arabic Godot
+	# takes the system locale and mirrors every Control: the title card lost its text and its Start button. English
+	# locale = left-to-right layout (Arabic text, when it comes, still shapes right to left inside its labels).
+	TranslationServer.set_locale("en")
 	load_profile()
 
 
