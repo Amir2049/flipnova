@@ -23,6 +23,7 @@ func _ready() -> void:
 	get_tree().create_timer(0.35).timeout.connect(func():
 		if match_view == null:
 			_start_demo())
+	get_tree().create_timer(4.0).timeout.connect(func(): load("res://scripts/boot.gd").confirm_native())
 
 
 # ------------------------------------------------------------------ navigation

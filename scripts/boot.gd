@@ -5,11 +5,15 @@ extends Control
 const MAIN := "res://scenes/main.tscn"
 const SEEN := "user://last_crash.txt"
 const RUNNING := "user://running.flag"     # there while the game runs; gone after a clean pause / exit
+const NATIVE := "res://native/afcgf.gdextension"
+const NATIVE_STATE := "user://native_state.cfg"
+static var native_note := ""               # why the match engine is off, for the title screen
 
 var status: Label
 
 
 func _ready() -> void:
+	_load_native()
 	var bg := ColorRect.new()
 	bg.color = Color(0.03, 0.05, 0.1)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -54,6 +58,46 @@ static func mark_running(on: bool) -> void:
 			f.store_string("1")
 	elif FileAccess.file_exists(RUNNING):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(RUNNING))
+
+
+## The native match engine (a GDExtension) is not in the build's auto-load list (tools/build_android.sh takes it out):
+## it is loaded here, behind a guard. Before loading, this version's state is written as "trying"; once the title has
+## run a few seconds main.gd marks it "ok". If the library takes the app down, the next start finds "trying", marks
+## the version "failed" and the game runs on its built-in engine instead: it always opens, at worst on the second try.
+static func _load_native() -> void:
+	if ClassDB.class_exists("GFEngine") or not FileAccess.file_exists(NATIVE):
+		return
+	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
+	var cfg := ConfigFile.new()
+	cfg.load(NATIVE_STATE)
+	var state := str(cfg.get_value("native", ver, ""))
+	if state == "trying":
+		cfg.set_value("native", ver, "failed")
+		cfg.save(NATIVE_STATE)
+		native_note = "it closed the game last time: playing on the built-in engine"
+		return
+	if state == "failed":
+		native_note = "it failed on this phone: playing on the built-in engine"
+		return
+	cfg.set_value("native", ver, "trying")
+	cfg.save(NATIVE_STATE)
+	var st := GDExtensionManager.load_extension(NATIVE)
+	if st != GDExtensionManager.LOAD_STATUS_OK and st != GDExtensionManager.LOAD_STATUS_ALREADY_LOADED:
+		cfg.set_value("native", ver, "failed")
+		cfg.save(NATIVE_STATE)
+		native_note = "it could not be loaded (%d)" % st
+
+
+## The game has been up a few seconds with the native engine loaded: this version is good on this phone.
+static func confirm_native() -> void:
+	if not ClassDB.class_exists("GFEngine"):
+		return
+	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
+	var cfg := ConfigFile.new()
+	cfg.load(NATIVE_STATE)
+	if str(cfg.get_value("native", ver, "")) == "trying":
+		cfg.set_value("native", ver, "ok")
+		cfg.save(NATIVE_STATE)
 
 
 func _load_game() -> void:

@@ -115,6 +115,10 @@ def main():
         zout = zipfile.ZipFile(fp, "w")
         for info in zin.infolist():
             data = new_man if info.filename == "AndroidManifest.xml" else zin.read(info.filename)
+            if info.filename == "assets/.godot/extension_list.cfg":
+                # the native match engine is loaded by boot.gd behind a crash guard, not by the engine at start-up:
+                # if the library cannot run on a phone the game still opens (on the built-in match engine)
+                data = b""
             zi = zipfile.ZipInfo(info.filename, date_time=info.date_time)
             # native libraries keep Godot's compression (the installer extracts them; stored ones are 16 KB aligned so
             # they also map on 16 KB page devices)

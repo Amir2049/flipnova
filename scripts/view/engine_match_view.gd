@@ -117,6 +117,9 @@ static func can_play() -> bool:
 static func load_error() -> String:
 	if available():
 		return "" if GFData.prepare(data_dir()) else "its data could not be unpacked (storage full?)"
+	var note: String = load("res://scripts/boot.gd").native_note
+	if note != "":
+		return note
 	var f := FileAccess.open("user://logs/godot.log", FileAccess.READ)
 	if f == null:
 		return "native library not loaded"
