@@ -638,8 +638,8 @@ func dribble_lead(p: PlayerSim) -> float:
 		return 0.34
 	var sprinting := p.sprint > 0.5 and s > 0.62 * p.top_speed
 	if sprinting:
-		return 0.6 + 0.12 * s * (1.2 - 0.4 * bc)
-	return 0.38 + 0.05 * s * (1.15 - 0.35 * bc)
+		return 0.5 + 0.06 * s * (1.2 - 0.4 * bc)
+	return 0.34 + 0.035 * s * (1.15 - 0.35 * bc)
 
 
 func _update_ball_control(dt: float) -> void:
@@ -682,10 +682,12 @@ func _update_ball_control(dt: float) -> void:
 	var sprinting := o.sprint > 0.5 and spd > 0.62 * o.top_speed and o.style != PlayerSim.Style.CLOSE
 	var close := o.style == PlayerSim.Style.CLOSE or spd < 2.6
 
+	# mobile feel (FC Mobile / DLS keep the ball near the boot; the console knock-ons read on a phone as the player
+	# running away from it): a touch every step while jogging, every second step sprinting
 	var n_steps := 1 if close else (2 if sprinting else 1)
 	var rate := maxf(o.step_rate(), 2.0)
 	var T := float(n_steps) / rate
-	var s0 := 0.28 if close else (0.4 if sprinting else 0.32)
+	var s0 := 0.26 if close else (0.32 if sprinting else 0.28)
 	var tgt := o.target_speed(true)
 	var v_end := want * tgt + (o.vel - want * tgt) * exp(-T / o.tau)
 	var foot_d := (bp - o.foot_point(0.3)).length()
@@ -695,7 +697,7 @@ func _update_ball_control(dt: float) -> void:
 	var bdir := bv.normalized() if bv.length() > 0.6 else want
 	var turning := absf(bdir.angle_to(want)) > deg_to_rad(28.0) and o.move.length() > 0.1
 	var lagging := ahead < s0 * 0.5 or bv.length() < 0.3   # he has caught up with it / run past it
-	var reach := 1.05 if turning else 0.85
+	var reach := 1.4 if turning else 0.95   # a turn is answered by the next touch, not after the ball has run on
 	if o.immune <= 0.0 and foot_d < reach and (due or turning or lagging):
 		var future := o.pos + (o.vel + v_end) * 0.5 * T
 		var contact := future + want * s0
@@ -706,7 +708,7 @@ func _update_ball_control(dt: float) -> void:
 		var sigma := deg_to_rad(1.0 + 4.0 * (1.0 - bc)) * (1.0 + pressure * 0.8)
 		dirn = dirn.rotated(rng.randfn(0.0, sigma))
 		# constant deceleration that brings it to the contact point at the next touch, arriving slower than him
-		var k_end := 0.55 if sprinting else 0.65
+		var k_end := 0.8 if sprinting else 0.8   # the ball arrives nearly at his pace: it stays at the boot
 		var v_c := v_end.length() * k_end
 		var a := maxf(2.0 * (D / T - v_c) / T, 1.2)
 		var u0 := D / T + a * T * 0.5
@@ -730,9 +732,9 @@ func _update_ball_control(dt: float) -> void:
 
 		var el := time - float(drib["t0"])
 		var u := maxf(float(drib["u0"]) - float(drib["a"]) * el, 0.0)
-		var lim := 1.0 if sprinting else 0.6
+		var lim := 0.7 if sprinting else 0.45
 		if ahead > lim:
-			u = minf(u, spd * 0.85)
+			u = minf(u, spd * 0.7)
 		var d0: Vector2 = drib["dir"]
 		ball.vel.x = d0.x * u
 		ball.vel.z = d0.y * u
