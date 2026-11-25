@@ -122,7 +122,7 @@ func _stage(px: Vector2i, cam_pos: Vector3, look: Vector3, fov: float) -> void:
 	var rim2 := DirectionalLight3D.new()
 	rim2.rotation_degrees = Vector3(-20, -150, 0)
 	rim2.light_energy = 1.4
-	rim2.light_color = Color(0.85, 1.0, 0.45)
+	rim2.light_color = Color(1.0, 0.82, 0.45)
 	vp.add_child(rim2)
 	pivot = Node3D.new()
 	vp.add_child(pivot)

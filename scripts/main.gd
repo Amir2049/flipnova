@@ -59,14 +59,13 @@ func _set_screen(c: Control) -> void:
 
 
 const STREAKS := """shader_type canvas_item;
+// a floodlight's glow from the top right, and the night closing in at the bottom
 void fragment() {
-	float d = UV.x * 0.9 - UV.y * 0.55;
-	float b1 = smoothstep(0.09, 0.0, abs(d - 0.6)) * 0.09;
-	float b2 = smoothstep(0.025, 0.0, abs(d - 0.69)) * 0.1;
-	float b3 = smoothstep(0.16, 0.0, abs(d - 0.95)) * 0.06;
-	vec3 c = vec3(0.93, 0.94, 0.9) * (b1 + b3) + vec3(0.88, 0.71, 0.23) * b2;
-	float a = b1 + b2 + b3;
-	COLOR = vec4(c / max(a, 0.001), a);
+	vec2 p = (UV - vec2(0.96, -0.1)) * vec2(1.7, 1.0);
+	float glow = exp(-dot(p, p) * 3.2) * 0.2;
+	float floor_dark = smoothstep(0.55, 1.0, UV.y) * 0.45;
+	vec3 c = mix(vec3(0.02, 0.04, 0.12), vec3(1.0, 0.93, 0.78), glow / max(glow + floor_dark, 0.001));
+	COLOR = vec4(c, glow + floor_dark);
 }
 """
 static var _streak_mat: ShaderMaterial
@@ -76,7 +75,7 @@ static var _streak_mat: ShaderMaterial
 func _base(dim: float = 0.55) -> Control:
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var wash := UI.gradient_rect(Color(0.01, 0.06, 0.04, minf(dim + 0.3, 0.96)), Color(0.02, 0.09, 0.06, dim * 0.75), 30.0)
+	var wash := UI.gradient_rect(Color(UI.TURF.r, UI.TURF.g, UI.TURF.b, minf(dim + 0.35, 0.96)), Color(UI.TURF.r, UI.TURF.g, UI.TURF.b, dim * 0.4), 0.0)
 	wash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(wash)
 	if _streak_mat == null:
@@ -282,61 +281,42 @@ func _on_match_quit() -> void:
 
 # ------------------------------------------------------------------ title + home
 
+## The badge: a red score-bug plate with the name in the headline face.
 func _logo(size: int) -> Control:
-	var hb := HBoxContainer.new()
-	hb.alignment = BoxContainer.ALIGNMENT_CENTER
-	# the badge is a ticket stub: red, chalk letters, a brass rule under the name
 	var p := PanelContainer.new()
-	var st := UI.style(UI.TICKET, Color(0, 0, 0, 0), 6, int(size * 0.3))
+	var st := UI.style(UI.TICKET, Color(0, 0, 0, 0), 2, int(size * 0.45), UI.SKEW)
 	st.border_color = UI.BRASS
-	st.border_width_bottom = maxi(3, int(size * 0.06))
+	st.border_width_bottom = maxi(3, int(size * 0.1))
 	p.add_theme_stylebox_override("panel", st)
-	p.add_child(UI.label("AFC", size, UI.CHALK))
-	hb.add_child(p)
-	return hb
+	p.add_child(UI.title("AFC", size, UI.CHALK))
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return p
 
 
+## The title: the name as a broadcast caption over the stadium, START under it, the player on the right.
 func _title() -> void:
-	var root := _base(0.35)
-	# the title is a match ticket: the name and the night's fixture on the left, START is the stub you tear off
-	const TW := 820.0
-	const TH := 300.0
-	const STUB := 250.0
-	var ticket := PanelContainer.new()
-	var ts := UI.style(Color(UI.PITCH.r, UI.PITCH.g, UI.PITCH.b, 0.96), Color(0, 0, 0, 0), 10, 0)
-	ts.border_color = UI.TICKET
-	ts.border_width_left = 14
-	ticket.add_theme_stylebox_override("panel", ts)
-	ticket.anchor_left = 0.0
-	ticket.anchor_right = 0.0
-	ticket.anchor_top = 0.5
-	ticket.anchor_bottom = 0.5
-	ticket.offset_left = 70
-	ticket.offset_right = 70 + TW
-	ticket.offset_top = -TH * 0.5
-	ticket.offset_bottom = TH * 0.5
-	root.add_child(ticket)
-	var inner := Control.new()
-	inner.custom_minimum_size = Vector2(TW, TH)
-	ticket.add_child(inner)
-	inner.add_child(UI.ticket_art(STUB, Color(0.02, 0.1, 0.07, 1.0)))
-	var left := UI.vbox(14)
-	left.position = Vector2(46, 0)
-	left.size = Vector2(TW - STUB - 80, TH)
-	left.alignment = BoxContainer.ALIGNMENT_CENTER
-	inner.add_child(left)
-	var name_l := UI.label("AFC", 96, UI.CHALK)
-	left.add_child(name_l)
-	var rule := ColorRect.new()
-	rule.color = UI.BRASS
-	rule.custom_minimum_size = Vector2(120, 6)
-	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	left.add_child(rule)
-	left.add_child(UI.label("Football in your hands. No internet needed.", 22, UI.MUTED))
-	var start := UI.button("Start", func(): _go(_home), Vector2(STUB - 60, 120), "accent", 34)
-	start.position = Vector2(TW - STUB + 30, (TH - 120) * 0.5)
-	start.size = Vector2(STUB - 60, 120)
-	inner.add_child(start)
+	var root := _base(0.3)
+	var col := UI.vbox(6)
+	col.anchor_top = 1.0
+	col.anchor_bottom = 1.0
+	col.offset_left = 80
+	col.offset_right = 900
+	col.offset_top = -640
+	col.offset_bottom = -64
+	col.alignment = BoxContainer.ALIGNMENT_END
+	root.add_child(col)
+	col.add_child(UI.title("AFC", 170, UI.CHALK))
+	var bar := ColorRect.new()
+	bar.color = UI.BRASS
+	bar.custom_minimum_size = Vector2(190, 8)
+	bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	col.add_child(bar)
+	col.add_child(UI.spacer(0, 6))
+	col.add_child(UI.label("Football in your hands. No internet needed.", 26, UI.CHALK))
+	col.add_child(UI.spacer(0, 26))
+	var start := UI.button("Start", func(): _go(_home), Vector2(320, 96), "accent", 44)
+	start.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	col.add_child(start)
 	# the user's club in the hero shot
 	var hc: Dictionary = Profile.data["career"]
 	var club_i := int(hc.get("club", 0)) if not hc.is_empty() else 0
@@ -350,9 +330,17 @@ func _title() -> void:
 	hero.offset_top = -300
 	hero.offset_bottom = 260
 	root.add_child(hero)
-	var credit := UI.label("v%s   match engine %s" % [str(ProjectSettings.get_setting("application/config/version", "")), "ON" if EngineMatchView.can_play() else "OFF:  " + EngineMatchView.load_error()], 14, Color(1, 1, 1, 0.5) if EngineMatchView.can_play() else Color(1, 0.4, 0.35))
-	credit.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	credit.position = Vector2(16, -34)
+	var ok := EngineMatchView.can_play()
+	var credit := UI.label("v%s   match engine %s" % [str(ProjectSettings.get_setting("application/config/version", "")), "on" if ok else "off: " + EngineMatchView.load_error()], 15, Color(1, 1, 1, 0.5) if ok else Color(1, 0.5, 0.45))
+	credit.anchor_left = 1.0
+	credit.anchor_right = 1.0
+	credit.anchor_top = 1.0
+	credit.anchor_bottom = 1.0
+	credit.offset_left = -700
+	credit.offset_right = -24
+	credit.offset_top = -40
+	credit.offset_bottom = -14
+	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	root.add_child(credit)
 	_set_screen(root)
 	start.grab_focus()
@@ -373,9 +361,9 @@ func _tile(title: String, sub: String, cb: Callable, size: Vector2, accent: bool
 	b.add_theme_stylebox_override("focus", fs)
 	var vb := UI.vbox(2)
 	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vb.offset_left = 18
+	vb.offset_left = 30
 	vb.offset_top = 12
-	vb.offset_right = -14
+	vb.offset_right = -18
 	vb.offset_bottom = -10
 	vb.alignment = BoxContainer.ALIGNMENT_END
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -435,68 +423,108 @@ func _topbar(active: String) -> Control:
 	return bar
 
 
-## A hub card: dark rounded panel, a diagonal wash of its colour, live 3D art on the right, big title bottom-left.
-func _card(title: String, sub: String, cb: Callable, col: Color, art: Control = null, big: bool = false, cta: String = "Play  ▶") -> Button:
+## A hub plate: slanted navy, the mode's colour as a bar on its leading edge, the headline bottom-left and, top-right,
+## the one fact that matters about the mode now (matchday, cup stage, stars). Big plates add the red PLAY plate.
+func _card(title: String, sub: String, cb: Callable, col: Color, art: Control = null, big: bool = false, cta: String = "Play  ▶", fact: String = "") -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_ALL
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	b.clip_contents = true
-	# a match ticket: pitch-green card, the mode's colour as the band down the left edge, a perforated tear line
-	# with notches in front of the stub that holds the 3D art
-	var bg := UI.PITCH
+	var bg := Color(UI.PITCH.r, UI.PITCH.g, UI.PITCH.b, 0.94)
 	for st_name in ["normal", "hover", "pressed", "focus"]:
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = bg.lightened(0.05) if st_name == "hover" else (bg.darkened(0.15) if st_name == "pressed" else bg)
-		sb.set_corner_radius_all(8)
-		sb.border_color = col
-		sb.border_width_left = 10
+		var sb := UI.plate(bg, col, 0)
+		if st_name == "hover":
+			sb.bg_color = UI.PANEL_2
+		elif st_name == "pressed":
+			sb.bg_color = bg.darkened(0.2)
 		if st_name in ["hover", "focus"]:
 			sb.border_color = UI.BRASS
 			sb.set_border_width_all(3)
-			sb.border_width_left = 10
+			sb.border_width_left = 8
 		if st_name == "focus":
 			sb.bg_color = Color(0, 0, 0, 0)
+			sb.shadow_size = 0
 		b.add_theme_stylebox_override(st_name, sb)
 	b.pressed.connect(cb)
-	var stub: float = (art.custom_minimum_size.x + 24.0) if art else 0.0
-	b.add_child(UI.ticket_art(stub, Color(0.02, 0.1, 0.07, 0.95)))
 	if art:
-		# bottom-right at its own size (a stretched viewport would distort it)
 		var w: float = art.custom_minimum_size.x
 		var h: float = art.custom_minimum_size.y
 		art.anchor_left = 1.0
 		art.anchor_right = 1.0
-		art.anchor_top = 1.0
-		art.anchor_bottom = 1.0
-		art.offset_left = -w - 8
-		art.offset_right = -8
-		art.offset_top = -h
-		art.offset_bottom = 0
+		# top right, clear of the headline at the bottom left
+		art.anchor_top = 0.0
+		art.anchor_bottom = 0.0
+		art.offset_left = -w - 34
+		art.offset_right = -34
+		art.offset_top = 24
+		art.offset_bottom = 24 + h
 		b.add_child(art)
-	var vb := UI.vbox(2)
+	if fact != "":
+		var fl := UI.title(fact, 40 if big else 28, UI.BRASS)
+		fl.anchor_left = 1.0
+		fl.anchor_right = 1.0
+		fl.offset_left = -300
+		fl.offset_right = -26
+		fl.offset_top = 10
+		fl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		b.add_child(fl)
+	var vb := UI.vbox(0)
 	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vb.offset_left = 26
-	vb.offset_top = 16
-	vb.offset_right = -16
-	vb.offset_bottom = -18
+	vb.offset_left = 34
+	vb.offset_top = 12
+	vb.offset_right = -20
+	vb.offset_bottom = -14 if big else -10
 	vb.alignment = BoxContainer.ALIGNMENT_END
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var t := UI.label(UI.sentence(title), 50 if big else 30, UI.CHALK)
-	vb.add_child(t)
-	var sl := UI.label(sub, 19 if big else 16, UI.MUTED)
+	vb.add_child(UI.title(UI.sentence(title), 58 if big else 30, UI.CHALK))
+	var sl := UI.label(sub, 21 if big else 17, UI.MUTED)
 	sl.autowrap_mode = TextServer.AUTOWRAP_WORD
-	sl.custom_minimum_size = Vector2(220, 0)
+	sl.custom_minimum_size = Vector2(200, 0)
 	vb.add_child(sl)
 	if big:
-		vb.add_child(UI.spacer(0, 10))
-		var go := UI.panel(UI.TICKET, UI.TICKET, 6, 28)
+		vb.add_child(UI.spacer(0, 14))
+		var go := PanelContainer.new()
+		go.add_theme_stylebox_override("panel", UI.style(UI.TICKET, Color(0, 0, 0, 0), 2, 30, UI.SKEW))
 		go.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		go.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		go.add_child(UI.label(cta, 26, UI.CHALK))
+		go.add_child(UI.title(cta, 30, UI.CHALK))
 		vb.add_child(go)
 	b.add_child(vb)
 	return b
+
+
+## The next fixture as two crests, home and away.
+func _fixture_art(home: int, away: int) -> Control:
+	var hb := UI.hbox(14)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(UI.crest(home, 92))
+	var v := UI.title("v", 34, UI.MUTED)
+	v.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	v.size_flags_vertical = Control.SIZE_FILL
+	hb.add_child(v)
+	hb.add_child(UI.crest(away, 92))
+	hb.custom_minimum_size = Vector2(92 * 2 + 60, 92 * 1.15)
+	return hb
+
+
+## The cup's eight clubs as a block of crests.
+func _field_art() -> Control:
+	var g := GridContainer.new()
+	g.columns = 4
+	g.add_theme_constant_override("h_separation", 10)
+	g.add_theme_constant_override("v_separation", 8)
+	g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in GameData.CLUBS.size():
+		g.add_child(UI.crest(i, 46))
+	g.custom_minimum_size = Vector2(4 * 46 + 30, 2 * 46 * 1.15 + 8)
+	return g
+
+
+## The hub screens: the plates on the left, one player standing on the right (the only live 3D in the menus).
+func _with_hero(row: HBoxContainer, kit: Dictionary, number: int, facing: float) -> void:
+	var hero := HeroPlayer.new().setup(kit, number, Vector2i(300, 540), facing)
+	hero.size_flags_vertical = Control.SIZE_SHRINK_END
+	row.add_child(hero)
 
 
 func _hub_page(active: String) -> Array:
@@ -520,35 +548,36 @@ func _my_club() -> int:
 func _home() -> void:
 	var pg := _hub_page("HOME")
 	var vb: VBoxContainer = pg[1]
-	var row := UI.hbox(16)
+	var row := UI.hbox(10)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(row)
+	var left := UI.vbox(14)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(left)
 	var club := _my_club()
-	var kit: Dictionary = GameData.CLUBS[club]["kit"]
-	var hero := Showcase.footballer(kit, 10, Vector2i(300, 420), -26.0, 11)
-	var nxt := "%s  v  %s" % [GameData.CLUBS[int(Profile.get_s("home"))]["name"], GameData.CLUBS[int(Profile.get_s("away"))]["name"]]
-	var ko := _card("KICK OFF", "Play a match now\n" + nxt, func(): _go(_kickoff), KitPainter.hex(kit["shirt"]), hero, true)
-	ko.size_flags_stretch_ratio = 1.35
-	row.add_child(ko)
-	var right := UI.vbox(16)
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	row.add_child(right)
+	var home := int(Profile.get_s("home"))
+	var away := int(Profile.get_s("away"))
+	var ko := _card("KICK OFF", "%s  v  %s" % [GameData.CLUBS[home]["name"], GameData.CLUBS[away]["name"]], func(): _go(_kickoff),
+		KitPainter.hex(GameData.CLUBS[home]["kit"]["shirt"]), _fixture_art(home, away), true)
+	left.add_child(ko)
+	var mid := UI.hbox(14)
+	mid.custom_minimum_size = Vector2(0, 124)
+	left.add_child(mid)
 	var c: Dictionary = Profile.data["career"]
-	var csub: String = "Start a league season" if c.is_empty() else "%s · season %d · matchday %d" % [GameData.CLUBS[int(c["club"])]["name"], int(c["season"]), mini(int(c["round"]) + 1, 14)]
-	right.add_child(_card("CAREER", csub, func(): _go(_career), UI.NILE,
-		Showcase.mocap(GameData.CLUBS[club]["away"], 7, Vector2i(170, 210), "cele_very_happy", 20.0, 5)))
+	var csub: String = "Start a league season" if c.is_empty() else "%s, season %d" % [GameData.CLUBS[int(c["club"])]["name"], int(c["season"])]
+	mid.add_child(_card("CAREER", csub, func(): _go(_career), UI.NILE, null, false, "", "New" if c.is_empty() else "MD %d" % mini(int(c["round"]) + 1, 14)))
 	var cup: Dictionary = Profile.data["cup"]
-	var tsub: String = "8-club knockout cup" if cup.is_empty() or int(cup.get("champion", -1)) >= 0 else "In progress · " + Career.STAGE_NAMES[mini(int(cup["stage"]), 2)]
-	right.add_child(_card("TOURNAMENT", tsub, func(): _go(_cup), UI.BRASS, Showcase.trophy(Vector2i(170, 210))))
-	var low := UI.hbox(16)
-	low.custom_minimum_size = Vector2(0, 150)
-	vb.add_child(low)
-	low.add_child(_card("HARA STREET", "5-a-side in the cage", func(): _go(_street), UI.FLARE, Showcase.ball(Vector2i(140, 140))))
-	low.add_child(_card("CHALLENGES", "Big moments, ★ %d of %d" % [_scenario_stars(), Scenarios.LIST.size() * 3], func(): _go(_challenges), UI.TICKET,
-		Showcase.trophy(Vector2i(120, 140))))
-	low.add_child(_card("SKILL GAMES", "Training, shooting, skills", func(): _go(_skill_games), UI.CHALK,
-		Showcase.mocap(GameData.CLUBS[(club + 3) % GameData.CLUBS.size()]["kit"], 11, Vector2i(110, 150), "kick", 60.0, 21)))
+	var running := not cup.is_empty() and int(cup.get("champion", -1)) < 0
+	mid.add_child(_card("TOURNAMENT", "8-club knockout cup", func(): _go(_cup), UI.BRASS, null, false, "",
+		Career.STAGE_NAMES[mini(int(cup["stage"]), 2)] if running else ""))
+	var low := UI.hbox(14)
+	low.custom_minimum_size = Vector2(0, 104)
+	left.add_child(low)
+	low.add_child(_card("HARA STREET", "5-a-side in the cage", func(): _go(_street), UI.FLARE, null, false, "", "5v5"))
+	low.add_child(_card("CHALLENGES", "Big moments", func(): _go(_challenges), UI.TICKET, null, false, "",
+		"★ %d/%d" % [_scenario_stars(), Scenarios.LIST.size() * 3]))
+	low.add_child(_card("SKILL GAMES", "Train, shoot, skills", func(): _go(_skill_games), UI.CHALK))
+	_with_hero(row, GameData.CLUBS[club]["kit"], 10, -24.0)
 	_set_screen(pg[0])
 	ko.grab_focus()
 
@@ -556,20 +585,28 @@ func _home() -> void:
 func _play_hub() -> void:
 	var pg := _hub_page("PLAY")
 	var vb: VBoxContainer = pg[1]
-	var row := UI.hbox(16)
+	var row := UI.hbox(10)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(row)
+	var left := UI.vbox(14)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(left)
 	var club := _my_club()
+	var top := UI.hbox(14)
+	top.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.add_child(top)
 	var ko := _card("KICK OFF", "Pick two clubs and play", func(): _go(_kickoff), KitPainter.hex(GameData.CLUBS[club]["kit"]["shirt"]),
-		Showcase.footballer(GameData.CLUBS[club]["kit"], 9, Vector2i(240, 380), -20.0, 3), true)
-	row.add_child(ko)
-	row.add_child(_card("TOURNAMENT", "8-club knockout cup", func(): _go(_cup), UI.BRASS, Showcase.trophy(Vector2i(240, 300)), true))
-	var low := UI.hbox(16)
-	low.custom_minimum_size = Vector2(0, 170)
-	vb.add_child(low)
-	low.add_child(_card("HARA STREET", "5-a-side in the cage", func(): _go(_street), UI.FLARE, Showcase.ball(Vector2i(150, 150))))
-	low.add_child(_card("CHALLENGES", "Big moments to turn round", func(): _go(_challenges), UI.TICKET))
-	low.add_child(_card("SKILL GAMES", "Training, shooting, skills", func(): _go(_skill_games), UI.CHALK))
+		_fixture_art(int(Profile.get_s("home")), int(Profile.get_s("away"))), true)
+	top.add_child(ko)
+	top.add_child(_card("TOURNAMENT", "8-club knockout cup", func(): _go(_cup), UI.BRASS, _field_art(), true))
+	var low := UI.hbox(14)
+	low.custom_minimum_size = Vector2(0, 124)
+	left.add_child(low)
+	low.add_child(_card("HARA STREET", "5-a-side in the cage", func(): _go(_street), UI.FLARE, null, false, "", "5v5"))
+	low.add_child(_card("CHALLENGES", "Big moments to turn round", func(): _go(_challenges), UI.TICKET, null, false, "",
+		"★ %d/%d" % [_scenario_stars(), Scenarios.LIST.size() * 3]))
+	low.add_child(_card("SKILL GAMES", "Train, shoot, skills", func(): _go(_skill_games), UI.CHALK))
+	_with_hero(row, GameData.CLUBS[club]["away"], 9, 20.0)
 	_set_screen(pg[0])
 	ko.grab_focus()
 
@@ -577,16 +614,22 @@ func _play_hub() -> void:
 func _club_hub() -> void:
 	var pg := _hub_page("CLUB")
 	var vb: VBoxContainer = pg[1]
-	var row := UI.hbox(16)
+	var row := UI.hbox(10)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(row)
+	var left := UI.vbox(14)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(left)
 	var club := _my_club()
 	var sq := _card("SQUADS", "Line-ups, formations, names", func(): _go(_squads), KitPainter.hex(GameData.CLUBS[club]["kit"]["shirt"]),
-		Showcase.footballer(GameData.CLUBS[club]["kit"], 4, Vector2i(220, 380), 20.0, 8), true, "Edit squads  ▶")
-	row.add_child(sq)
-	row.add_child(_card("SKILLS", "Skill moves and PlayStyles", func(): _go(_catalogue), UI.NILE,
-		Showcase.mocap(GameData.CLUBS[(club + 2) % GameData.CLUBS.size()]["kit"], 7, Vector2i(220, 380), "kick", 50.0, 4), true, "See skills  ▶"))
-	row.add_child(_card("CONTROLS", "Touch, pad presets, remap", func(): _go(_controls), UI.TICKET, null, true, "Set controls  ▶"))
+		UI.crest(club, 110), true, "Edit squads  ▶", GameData.club_formation(club, Profile.squads()))
+	left.add_child(sq)
+	var low := UI.hbox(14)
+	low.custom_minimum_size = Vector2(0, 150)
+	left.add_child(low)
+	low.add_child(_card("SKILLS", "Skill moves and PlayStyles", func(): _go(_catalogue), UI.NILE))
+	low.add_child(_card("CONTROLS", "Touch, pad presets, remap", func(): _go(_controls), UI.TICKET))
+	_with_hero(row, GameData.CLUBS[club]["kit"], 4, 20.0)
 	_set_screen(pg[0])
 	sq.grab_focus()
 
@@ -861,8 +904,14 @@ func _catalogue() -> void:
 
 func _controls() -> void:
 	var pg := _page("CONTROLS")
+	var row := UI.hbox(0)
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var cp := ControlsPanel.new()
-	pg[1].add_child(cp)
+	row.add_child(cp)
+	var rest := UI.spacer(0, 0, true)
+	rest.size_flags_stretch_ratio = 0.8   # a readable column: the action and its button side by side, not a screen apart
+	row.add_child(rest)
+	pg[1].add_child(row)
 	_set_screen(pg[0])
 
 
@@ -900,12 +949,17 @@ func _engine_info() -> void:
 func _skill_games() -> void:
 	var pg := _page("SKILL GAMES")
 	var vb: VBoxContainer = pg[1]
-	var row := UI.hbox(18)
-	row.add_child(_tile("TRAINING", "Your team against a keeper. Practise anything, no clock.", func(): _practice("training"), Vector2(330, 220)))
-	row.add_child(_tile("SHOOTING", "60 seconds, shots from around the box.  Best: %d" % Profile.record("shooting"), func(): _practice("shooting"), Vector2(330, 220), true))
-	row.add_child(_tile("SKILLS", "60 seconds, do the move shown.  Best: %d" % Profile.record("skills"), func(): _practice("skills"), Vector2(330, 220)))
+	var row := UI.hbox(16)
+	row.custom_minimum_size = Vector2(0, 330)
+	var first := _card("TRAINING", "Your team against a keeper. Practise anything, no clock.", func(): _practice("training"), UI.NILE, null, true, "Train  ▶")
+	row.add_child(first)
+	row.add_child(_card("SHOOTING", "60 seconds, shots from around the box.", func(): _practice("shooting"), UI.BRASS, null, true, "Play  ▶",
+		"Best %d" % Profile.record("shooting")))
+	row.add_child(_card("SKILLS", "60 seconds, do the move shown.", func(): _practice("skills"), UI.FLARE, null, true, "Play  ▶",
+		"Best %d" % Profile.record("skills")))
 	vb.add_child(row)
 	_set_screen(pg[0])
+	first.grab_focus()
 
 
 func _street() -> void:

@@ -2,24 +2,28 @@ class_name UI
 extends RefCounted
 ## Shared look for every menu: colours, panels, buttons, rows (toggle / choice / slider), headers, lists.
 
-## "Matchday ticket": a night pitch under floodlights, chalk lines, the red of a ticket stub, the brass of a trophy.
-const PITCH := Color("0f3d2e")               # night pitch green: panels and cards
-const TURF := Color("072619")                # the deep stripe: wells, notches, text on light fills
-const CHALK := Color("edefe6")               # touchline chalk: text
-const TICKET := Color("c8102e")              # ticket red: the one action on a screen (Play, Start)
-const BRASS := Color("e0b43a")               # trophy brass: what is selected or focused, stars, values
-const NILE := Color("2fa39a")                # river teal: a second colour for the career / info
+## "Derby night on TV": the menus speak the language of a match broadcast - slanted score-bug plates in stadium-night
+## navy, chalk text, floodlight gold for whatever is selected, and derby red only for the one action that starts play.
+## (The pitch's own green stays in the picture behind; green panels on a green pitch had no contrast.)
+const PITCH := Color("13204a")               # plate navy: panels and cards
+const TURF := Color("080f28")                # stadium night: wells, notches, text on light fills
+const CHALK := Color("f3f5f2")               # touchline chalk: text
+const TICKET := Color("e10a2e")              # derby red: the one action on a screen (Play, Start)
+const BRASS := Color("ffc72c")               # floodlight gold: what is selected or focused, stars, values
+const NILE := Color("19bfae")                # Nile teal: a second colour for the career / info
+const SKEW := -0.16                          # the broadcast slant of plates and buttons
 const ACCENT := BRASS
 const CYAN := NILE
 const FLARE := Color("e8742c")               # warning / tired
 const INK := TURF
 const PANEL := Color(PITCH.r, PITCH.g, PITCH.b, 0.93)
-const PANEL_2 := Color("15513d")
-const MUTED := Color("a9c2b3")
+const PANEL_2 := Color("203470")
+const MUTED := Color("a3b3d6")
 const GOOD := Color(0.35, 0.9, 0.5)
 const BAD := Color(1.0, 0.35, 0.35)
 
 static var _font: Font
+static var _display: FontVariation
 
 
 static func font() -> Font:
@@ -28,25 +32,43 @@ static func font() -> Font:
 	return _font
 
 
-static func style(bg: Color, border: Color = Color(0, 0, 0, 0), radius: int = 8, pad: int = 12) -> StyleBoxFlat:
+## Headlines: Changa made heavy and leaning forward, like a broadcast caption.
+static func display() -> FontVariation:
+	if _display == null:
+		_display = FontVariation.new()
+		_display.base_font = font()
+		_display.variation_embolden = 0.85
+		_display.variation_transform = Transform2D(Vector2(1, 0), Vector2(0.22, 1), Vector2.ZERO)
+		_display.spacing_glyph = 1
+	return _display
+
+
+static func title(text: String, size: int = 44, color: Color = CHALK) -> Label:
+	var l := label(text, size, color)
+	l.add_theme_font_override("font", display())
+	return l
+
+
+static func style(bg: Color, border: Color = Color(0, 0, 0, 0), radius: int = 3, pad: int = 12, skew: float = 0.0) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = bg
 	s.border_color = border
 	s.set_border_width_all(2 if border.a > 0 else 0)
 	s.set_corner_radius_all(radius)
+	s.skew = Vector2(skew, 0)
 	s.content_margin_left = pad
 	s.content_margin_right = pad
 	s.content_margin_top = pad * 0.5
 	s.content_margin_bottom = pad * 0.5
 	if bg.a > 0.5:
-		s.shadow_color = Color(0, 0, 0, 0.35)
-		s.shadow_size = 6
-		s.shadow_offset = Vector2(0, 3)
+		s.shadow_color = Color(0, 0, 0, 0.4)
+		s.shadow_size = 8
+		s.shadow_offset = Vector2(3, 4)
 	return s
 
 
 ## A slanted card (the FC menu look): skewed panel, optional coloured edge on the left.
-static func card(bg: Color, edge: Color = Color(0, 0, 0, 0), skew: float = 0.0, radius: int = 8) -> StyleBoxFlat:
+static func card(bg: Color, edge: Color = Color(0, 0, 0, 0), skew: float = SKEW, radius: int = 2) -> StyleBoxFlat:
 	var s := style(bg, Color(1, 1, 1, 0.08), radius, 16)
 	s.skew = Vector2(skew, 0)
 	if edge.a > 0:
@@ -144,11 +166,14 @@ static func button(text: String, cb: Callable, min_size: Vector2 = Vector2(0, 56
 		"danger":
 			bg = Color(0.35, 0.08, 0.1, 0.95)
 			border = BAD
-	b.add_theme_stylebox_override("normal", style(bg, border))
-	b.add_theme_stylebox_override("hover", style(bg.lightened(0.1), BRASS))
-	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.2), BRASS))
-	b.add_theme_stylebox_override("focus", style(Color(0, 0, 0, 0), BRASS))
-	b.add_theme_stylebox_override("disabled", style(Color(bg.r, bg.g, bg.b, 0.35), Color(1, 1, 1, 0.06)))
+	var sk := skew_for(min_size)
+	b.add_theme_stylebox_override("normal", style(bg, border, 3, 12, sk))
+	b.add_theme_stylebox_override("hover", style(bg.lightened(0.1), BRASS, 3, 12, sk))
+	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.2), BRASS, 3, 12, sk))
+	b.add_theme_stylebox_override("focus", style(Color(0, 0, 0, 0), BRASS, 3, 12, sk))
+	b.add_theme_stylebox_override("disabled", style(Color(bg.r, bg.g, bg.b, 0.35), Color(1, 1, 1, 0.06), 3, 12, sk))
+	if kind == "accent":
+		b.add_theme_font_override("font", display())
 	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		b.add_theme_color_override(k, fg)
 	b.add_theme_color_override("font_disabled_color", Color(fg.r, fg.g, fg.b, 0.4))
@@ -156,10 +181,27 @@ static func button(text: String, cb: Callable, min_size: Vector2 = Vector2(0, 56
 	return b
 
 
-static func panel(bg: Color = PANEL, border: Color = Color(1, 1, 1, 0.1), radius: int = 12, pad: int = 16) -> PanelContainer:
+static func panel(bg: Color = PANEL, border: Color = Color(1, 1, 1, 0.1), radius: int = 4, pad: int = 16) -> PanelContainer:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", style(bg, border, radius, pad))
+	p.add_theme_stylebox_override("panel", style(bg, border, mini(radius, 4), pad))
 	return p
+
+
+## The slant for a button of this size: the full broadcast lean on wide plates, less on small square ones
+## (an arrow or a pill would look knocked over), none on tiny ones.
+static func skew_for(sz: Vector2) -> float:
+	if sz.y > 0.0 and sz.x > 0.0 and sz.x < sz.y * 1.4:
+		return SKEW * 0.5
+	return SKEW
+
+
+## A score-bug plate: slanted navy with a coloured bar on its leading edge.
+static func plate(bg: Color = PITCH, edge: Color = Color(0, 0, 0, 0), pad: int = 18) -> StyleBoxFlat:
+	var s := style(bg, Color(0, 0, 0, 0), 2, pad, SKEW)
+	if edge.a > 0:
+		s.border_color = edge
+		s.border_width_left = 8
+	return s
 
 
 static func vbox(sep: int = 10) -> VBoxContainer:
@@ -210,7 +252,7 @@ static func header(title: String, back: Callable, right: Control = null) -> HBox
 	var h := hbox(16)
 	if back.is_valid():
 		h.add_child(button("◀  Back", back, Vector2(150, 54), "ghost", 20))
-	var t := label(sentence(title), 36, CHALK)
+	var t := title(sentence(title), 42, CHALK)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	h.add_child(t)
@@ -253,11 +295,11 @@ static func toggle_row(title: String, on: bool, on_change: Callable) -> HBoxCont
 	var paint := func(v: bool) -> void:
 		b.text = "On" if v else "Off"
 		var bg := BRASS if v else PANEL_2
-		b.add_theme_stylebox_override("normal", style(bg, Color(1, 1, 1, 0.16)))
-		b.add_theme_stylebox_override("pressed", style(bg, ACCENT))
-		b.add_theme_stylebox_override("hover", style(bg.lightened(0.1), ACCENT))
-		b.add_theme_stylebox_override("hover_pressed", style(bg.lightened(0.1), ACCENT))
-		b.add_theme_stylebox_override("focus", style(Color(0, 0, 0, 0), ACCENT))
+		b.add_theme_stylebox_override("normal", style(bg, Color(1, 1, 1, 0.16), 3, 12, SKEW))
+		b.add_theme_stylebox_override("pressed", style(bg, ACCENT, 3, 12, SKEW))
+		b.add_theme_stylebox_override("hover", style(bg.lightened(0.1), ACCENT, 3, 12, SKEW))
+		b.add_theme_stylebox_override("hover_pressed", style(bg.lightened(0.1), ACCENT, 3, 12, SKEW))
+		b.add_theme_stylebox_override("focus", style(Color(0, 0, 0, 0), ACCENT, 3, 12, SKEW))
 		for k in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color", "font_focus_color"]:
 			b.add_theme_color_override(k, INK if v else Color(1, 1, 1))
 	paint.call(on)
@@ -289,7 +331,7 @@ static func pills(items: Array, index: int, on_pick: Callable, font_size: int = 
 	for i in items.size():
 		var b := button(str(items[i]), func(): pass, Vector2(0, 48), "normal", font_size)
 		if i == index:
-			b.add_theme_stylebox_override("normal", style(BRASS, BRASS))
+			b.add_theme_stylebox_override("normal", style(BRASS, BRASS, 3, 12, SKEW))
 			for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 				b.add_theme_color_override(k, INK)
 		btns.append(b)
@@ -299,7 +341,7 @@ static func pills(items: Array, index: int, on_pick: Callable, font_size: int = 
 			for j in btns.size():
 				var on := j == i
 				var bg := BRASS if on else PANEL_2
-				btns[j].add_theme_stylebox_override("normal", style(bg, BRASS if on else Color(CHALK.r, CHALK.g, CHALK.b, 0.18)))
+				btns[j].add_theme_stylebox_override("normal", style(bg, BRASS if on else Color(CHALK.r, CHALK.g, CHALK.b, 0.18), 3, 12, SKEW))
 				for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 					btns[j].add_theme_color_override(k, INK if on else CHALK)
 			on_pick.call(i))

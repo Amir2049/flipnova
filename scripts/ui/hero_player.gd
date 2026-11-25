@@ -48,7 +48,7 @@ func setup(kit: Dictionary, number: int, px: Vector2i, facing_deg: float = -24.0
 	var rim2 := DirectionalLight3D.new()
 	rim2.rotation_degrees = Vector3(-20, -150, 0)
 	rim2.light_energy = 1.4
-	rim2.light_color = Color(0.85, 1.0, 0.45)
+	rim2.light_color = Color(1.0, 0.82, 0.45)
 	vp.add_child(rim2)
 	model = PlayerView.PLAYER_SCENE.instantiate()
 	vp.add_child(model)
