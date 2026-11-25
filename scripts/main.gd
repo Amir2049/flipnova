@@ -344,21 +344,62 @@ func _title() -> void:
 	hero.offset_bottom = 260
 	root.add_child(hero)
 	var ok := EngineMatchView.can_play()
-	var credit := UI.label("v%s   match engine %s" % [str(ProjectSettings.get_setting("application/config/version", "")), "on" if ok else "off: " + EngineMatchView.load_error()], 15, Color(1, 1, 1, 0.5) if ok else Color(1, 0.5, 0.45))
-	credit.anchor_left = 1.0
-	credit.anchor_right = 1.0
-	credit.anchor_top = 1.0
-	credit.anchor_bottom = 1.0
-	credit.offset_left = -700
-	credit.offset_right = -24
-	credit.offset_top = -40
-	credit.offset_bottom = -14
-	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	root.add_child(credit)
+	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
+	if ok:
+		var credit := UI.label("v%s   match engine on" % ver, 15, Color(1, 1, 1, 0.5))
+		credit.anchor_left = 1.0
+		credit.anchor_right = 1.0
+		credit.anchor_top = 1.0
+		credit.anchor_bottom = 1.0
+		credit.offset_left = -700
+		credit.offset_right = -24
+		credit.offset_top = -40
+		credit.offset_bottom = -14
+		credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		root.add_child(credit)
+	else:
+		root.add_child(_engine_off_panel(ver))
 	_set_screen(root)
 	start.grab_focus()
 	Motion.sheen(start, 1.5)
 	_title_intro(name_l, bar, tag, start, hero)
+
+
+## The match engine is off: say why, in full, and send the report in one tap (a GitHub issue with everything the game
+## knows: the step it died on, the engine's own crash report, the log) - or copy it, or try the engine again.
+func _engine_off_panel(ver: String) -> Control:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", UI.style(Color(0.35, 0.05, 0.08, 0.92), UI.TICKET, 4, 16))
+	p.anchor_left = 1.0
+	p.anchor_right = 1.0
+	p.anchor_top = 1.0
+	p.anchor_bottom = 1.0
+	p.offset_left = -640
+	p.offset_right = -20
+	p.offset_top = -190
+	p.offset_bottom = -16
+	var vb := UI.vbox(8)
+	p.add_child(vb)
+	var why := UI.label("v%s: match engine off. %s" % [ver, EngineMatchView.load_error()], 17, UI.CHALK)
+	why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	why.custom_minimum_size = Vector2(580, 0)
+	vb.add_child(why)
+	var row := UI.hbox(10)
+	var boot = load("res://scripts/boot.gd")
+	row.add_child(UI.button("Send report", func(): OS.shell_open(boot.report_url()), Vector2(170, 50), "accent", 18))
+	var copy: Button
+	copy = UI.button("Copy report", func():
+		DisplayServer.clipboard_set(boot.native_report())
+		copy.text = "Copied", Vector2(170, 50), "normal", 18)
+	row.add_child(copy)
+	var again: Button
+	again = UI.button("Try again", func():
+		boot.retry_native()
+		again.text = "Close and reopen"
+		again.disabled = true, Vector2(170, 50), "ghost", 18)
+	row.add_child(again)
+	vb.add_child(row)
+	return p
 
 
 ## The title's one big moment: the name slams down under the lights (a camera-flash burst as it lands), the gold

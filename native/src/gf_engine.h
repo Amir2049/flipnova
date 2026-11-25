@@ -19,6 +19,8 @@ class GFEngine : public RefCounted {
   // data_dir: the unpacked engine data. options: human (0/1), difficulty_home, difficulty_away (0..1), seed,
   // match_seconds (real seconds for 90 minutes), offsides (bool).
   bool start(const String& data_dir, const Dictionary& options);
+  // from now on a crash of the engine is written to this file (crash_guard.cpp)
+  void set_crash_file(const String& path);
   // run n engine frames of 10 ms
   void frames(int n);
   // the human's stick in pitch axes (x along the pitch, y across it, length 0..1) and held buttons (GF_* bits)

@@ -1,4 +1,5 @@
 #include "gf_engine.h"
+#include "crash_guard.h"
 
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -7,6 +8,7 @@ namespace godot {
 
 void GFEngine::_bind_methods() {
   ClassDB::bind_method(D_METHOD("start", "data_dir", "options"), &GFEngine::start);
+  ClassDB::bind_method(D_METHOD("set_crash_file", "path"), &GFEngine::set_crash_file);
   ClassDB::bind_method(D_METHOD("frames", "n"), &GFEngine::frames);
   ClassDB::bind_method(D_METHOD("set_input", "dx", "dy", "buttons"), &GFEngine::set_input);
   ClassDB::bind_method(D_METHOD("state"), &GFEngine::state);
@@ -38,6 +40,8 @@ bool GFEngine::start(const String& data_dir, const Dictionary& o) {
   fresh_ = false;
   return ok;
 }
+
+void GFEngine::set_crash_file(const String& path) { afc::crash_guard_install(path.utf8().get_data()); }
 
 void GFEngine::frames(int n) {
   for (int i = 0; i < n; i++) afc::gf_frame();

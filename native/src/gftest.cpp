@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "gf_api.h"
+#include "crash_guard.h"
 #include "tizero.h"
 
 static void dump(FILE* f, const afc::TzObs& o, int frame) {
@@ -38,6 +39,71 @@ static void dump(FILE* f, const afc::TzObs& o, int frame) {
           o.ball_owned_team, o.ball_owned_player, o.game_mode, o.score[0], o.score[1], o.steps_left);
 }
 
+// Shots, saves and what the keepers do, from the state alone (the same shot test as scripts/view/engine_stats.gd):
+// a shot = the ball leaves its man at > 12 m/s toward the goal his side attacks, from within 36 m, arriving within
+// 2.5 s inside 10 m of the goal's centre; a save = the defending keeper gets the ball while the shot is live; a dive =
+// the defending keeper's body (the "player" joint) goes below 0.55 m while it is live.
+struct KeeperStats {
+  int shots = 0, on_target = 0, saves = 0, goals = 0, dives = 0, dives_off = 0;
+  double depth_sum = 0.0;
+  int depth_n = 0;
+  int live = -1;        // team of the live shot, -1 none
+  bool live_on = false, dived = false;
+  int last_man = -1;    // 0..21 who had the ball last
+  int goals_seen[2] = {0, 0};
+  float root_min = 9.f, root_max = -9.f;
+
+  void feed(const afc::GfState& s) {
+    const float GOAL_X = 54.4f;
+    int ot = s.ball_owner_team;
+    if (ot >= 0) {
+      int man = ot * 11 + s.ball_owner_player;
+      if (live >= 0 && ot != live && s.ball_owner_player == 0 && live_on) saves++;
+      live = -1;
+      last_man = man;
+    }
+    if (ot < 0 && last_man >= 0 && live < 0 && s.game_mode == 0) {
+      int team = last_man / 11;
+      float gx = team == 0 ? GOAL_X : -GOAL_X;
+      float vx = team == 0 ? s.ball_vel[0] : -s.ball_vel[0];
+      float sp = std::sqrt(s.ball_vel[0] * s.ball_vel[0] + s.ball_vel[1] * s.ball_vel[1] + s.ball_vel[2] * s.ball_vel[2]);
+      if (sp > 12.f && vx > 4.f && std::fabs(gx - s.ball[0]) < 36.f) {
+        float t = std::fabs(gx - s.ball[0]) / std::fabs(s.ball_vel[0]);
+        float y = s.ball[1] + s.ball_vel[1] * t;
+        if (t < 2.5f && std::fabs(y) < 10.f) {
+          float z = s.ball[2] + s.ball_vel[2] * t - 4.9f * t * t;
+          shots++;
+          live = team;
+          live_on = std::fabs(y) < 3.66f && z < 2.44f + 0.4f;
+          if (live_on) on_target++;
+          dived = false;
+        }
+      }
+    }
+    const afc::GfPlayer& k = s.players[live >= 0 ? (1 - live) * 11 : 0];
+    if (live >= 0) {
+      root_min = std::min(root_min, k.root[2]);
+      root_max = std::max(root_max, k.root[2]);
+      if (!dived && k.root[2] < 0.55f) {
+        dived = true;
+        dives++;
+        if (!live_on) dives_off++;
+      }
+    }
+    for (int t = 0; t < 2; t++) {
+      if (s.goals[t] > goals_seen[t]) {
+        goals_seen[t] = s.goals[t];
+        goals++;
+        const afc::GfPlayer& gk = s.players[(1 - t) * 11];
+        float line = t == 0 ? GOAL_X : -GOAL_X;   // the conceding keeper's goal line
+        depth_sum += std::fabs(line - gk.pos[0]);
+        depth_n++;
+        live = -1;
+      }
+    }
+  }
+};
+
 int main(int argc, char** argv) {
   if (argc < 2) {
     fprintf(stderr, "usage: gftest <data dir> [physics frames] [tizero.bin [left difficulty [temperature [dump]]]]\n");
@@ -58,6 +124,7 @@ int main(int argc, char** argv) {
     setup.brain_temperature = argc > 5 ? (float)atof(argv[5]) : 0.f;
   }
   FILE* df = argc > 6 ? fopen(argv[6], "w") : nullptr;
+  if (getenv("GF_CRASH_FILE")) afc::crash_guard_install(getenv("GF_CRASH_FILE"));
   if (!afc::gf_start(setup)) {
     fprintf(stderr, "start failed\n");
     return 2;
@@ -82,9 +149,11 @@ int main(int argc, char** argv) {
   int stop = getenv("GF_STOP") ? atoi(getenv("GF_STOP")) : frames;
   // match numbers: possession changes, set pieces by kind, time in play
   int poss_changes = 0, last_owner = -1, prev_mode = 0, in_play = 0;
+  KeeperStats ks;
   int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
   for (int f = 0; f < stop; f++) {
     afc::gf_frame();
+    if (getenv("GF_CRASH_TEST") && f == 50) *(volatile int*)nullptr = 1;   // proves the crash report works
     {
       afc::GfState ms;
       afc::gf_state(&ms);
@@ -95,6 +164,7 @@ int main(int argc, char** argv) {
       if (ms.game_mode != prev_mode && ms.game_mode > 0 && ms.game_mode < 7) restarts[ms.game_mode]++;
       prev_mode = ms.game_mode;
       if (ms.game_mode == 0) in_play++;
+      ks.feed(ms);
     }
     if (df && f % 50 == 0) {
       afc::gf_brain_obs(&o, true);
@@ -129,6 +199,9 @@ int main(int argc, char** argv) {
   printf("FINAL %d-%d\n", st.goals[0], st.goals[1]);
   printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
+  printf("KEEPER shots %d on_target %d saves %d goals %d dives %d dives_off_target %d depth_at_goal %.2f (keeper root z %.2f..%.2f)\n",
+         ks.shots, ks.on_target, ks.saves, ks.goals, ks.dives, ks.dives_off, ks.depth_n ? ks.depth_sum / ks.depth_n : 0.0,
+         ks.root_min, ks.root_max);
   // where the engine reports the right team vs where it draws them (positions must agree, turned 180 degrees)
   afc::gf_brain_obs(&o, false);
   printf("right player 5: drawn (%.2f %.2f), observed (%.3f %.3f) -> metres (%.2f %.2f)\n", st.players[16].pos[0],

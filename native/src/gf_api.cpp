@@ -1,5 +1,6 @@
 // AFC bridge to Google Research Football's engine. See gf_api.h.
 #include "gf_api.h"
+#include "crash_guard.h"
 
 #include <cmath>
 #include <cstdio>
@@ -67,12 +68,14 @@ static const BodyPart kJointPart[J_COUNT] = {player,     body,         middle,  
 bool gf_start(const GfSetup& s) {
   // the engine keeps global state: it is started once, and every new match is a reset of it
   if (!g_env) {
+    crash_stage("loading the engine data (start_game)");
     setenv("GFOOTBALL_DATA_DIR", s.data_dir.c_str(), 1);
     g_env = new GameEnv();
     g_env->game_config.render = false;
     g_env->game_config.physics_steps_per_frame = 1;
     g_env->start_game();
   }
+  crash_stage("setting up the match (teams, formations)");
   SetGame(g_env);
   auto cfg = ScenarioConfig::make();
   for (int i = 0; i < 11; i++) {
@@ -307,6 +310,9 @@ static void tz_frame() {
 
 void gf_frame() {
   if (!g_env) return;
+  crash_stage("playing", g_frame);
+  static const bool crash_test = getenv("AFC_CRASH_TEST") != nullptr;   // tests only: proves the crash report path
+  if (crash_test && g_frame == 300) *(volatile int*)nullptr = 1;
   SetGame(g_env);
   apply_input();
   if (g_tz_on) {

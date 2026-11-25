@@ -61,47 +61,111 @@ static func mark_running(on: bool) -> void:
 
 
 ## The native match engine (a GDExtension) is not in the build's auto-load list (tools/build_android.sh takes it out):
-## it is loaded here, behind a guard. Before loading, this version's state is written as "trying", and "ok" as soon as
-## the library is in. The first 15 s of a match on it are guarded the same way (native_match_guard). If the library
-## takes the app down, the next start finds "trying", marks the version "failed" and the game runs on its built-in
-## engine instead: it always opens, at worst on the second try. Settings > Engine info can try it again.
+## it is loaded here, behind a guard, and every step is written down first (NATIVE_STEP), so a death is never a guess:
+## - the library itself catches its own crashes and writes where (NATIVE_TRACE, native/src/crash_guard.cpp);
+## - a run that died while loading the library or in a match's first 15 s, with no crash written, counts as
+##   unexplained (the phone may have killed it): the engine is only switched off after two of those in a row.
+## Switched off, the game runs on its built-in engine; Settings > Engine info / the title can try it again.
 static func _load_native() -> void:
 	if ClassDB.class_exists("GFEngine") or not FileAccess.file_exists(NATIVE):
+		if ClassDB.class_exists("GFEngine"):
+			_arm_crash_guard()
 		return
 	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
 	var cfg := ConfigFile.new()
 	cfg.load(NATIVE_STATE)
 	var state := str(cfg.get_value("native", ver, ""))
-	# a match on the native engine that took the app down (see EngineMatchView.start)
-	if str(cfg.get_value("native_match", ver, "")) == "trying":
-		cfg.set_value("native_match", ver, "failed")
-		cfg.set_value("native", ver, "failed")
-		cfg.save(NATIVE_STATE)
-		native_note = "a match on it closed the game: playing on the built-in engine"
+	var died_in_match := str(cfg.get_value("native_match", ver, "")) == "trying"
+	var trace := _new_trace()
+	if state == "trying" or died_in_match:
+		var step := FileAccess.get_file_as_string(NATIVE_STEP).strip_edges() if FileAccess.file_exists(NATIVE_STEP) else "?"
 		_save_crash_log()
-		return
-	if state == "trying":
-		cfg.set_value("native", ver, "failed")
+		if trace != "":
+			cfg.set_value("native", ver, "failed")
+			cfg.set_value("native_match", ver, "failed")
+			cfg.save(NATIVE_STATE)
+			native_note = "it crashed (" + trace + ")"
+			return
+		var n := int(cfg.get_value("unexplained", ver, 0)) + 1
+		cfg.set_value("unexplained", ver, n)
+		cfg.set_value("native_match", ver, "")
+		if n >= 2:
+			cfg.set_value("native", ver, "failed")
+			cfg.save(NATIVE_STATE)
+			native_note = "the game closed twice while: " + step
+			return
 		cfg.save(NATIVE_STATE)
-		native_note = "it closed the game last time: playing on the built-in engine"
-		# keep the evidence: the system log of that crash (this app's own lines) for Settings > Engine info
-		_save_crash_log()
-		return
-	if state == "failed":
-		native_note = "it failed on this phone: playing on the built-in engine"
+	elif state == "failed":
+		native_note = "it failed on this phone before: " + str(cfg.get_value("reason", ver, "see Engine info"))
 		return
 	cfg.set_value("native", ver, "trying")
 	cfg.save(NATIVE_STATE)
+	step("loading the engine library")
 	var st := GDExtensionManager.load_extension(NATIVE)
 	if st != GDExtensionManager.LOAD_STATUS_OK and st != GDExtensionManager.LOAD_STATUS_ALREADY_LOADED:
 		cfg.set_value("native", ver, "failed")
+		native_note = "the library did not load (status %d): %s" % [st, _log_reason()]
+		cfg.set_value("reason", ver, native_note)
 		cfg.save(NATIVE_STATE)
-		native_note = "it could not be loaded (%d)" % st
 		return
-	# loaded and initialised: what follows (unpacking, menus) is not the library's doing. (2.27-2.29 waited for
-	# the menus + 4 s; a game closed or killed in that time - a long first start - was taken for a crash.)
+	_arm_crash_guard()
+	step("library loaded")
 	cfg.set_value("native", ver, "ok")
+	cfg.set_value("unexplained", ver, 0)
 	cfg.save(NATIVE_STATE)
+
+
+const NATIVE_STEP := "user://native_step.txt"       # what the game was doing with the engine (written before it)
+const NATIVE_TRACE := "user://native_trace.txt"     # crash reports written by the engine itself
+const NATIVE_TRACE_SEEN := "user://native_trace_seen.txt"
+
+
+## Note what is about to happen with the engine (flushed to disk: it must survive a crash right after).
+static func step(what: String) -> void:
+	var f := FileAccess.open(NATIVE_STEP, FileAccess.WRITE)
+	if f:
+		f.store_string("%s  (%s)" % [what, Time.get_datetime_string_from_system()])
+		f.flush()
+
+
+## From now on the engine writes its own crash reports.
+static func _arm_crash_guard() -> void:
+	var e = ClassDB.instantiate("GFEngine")
+	if e and e.has_method("set_crash_file"):
+		e.set_crash_file(ProjectSettings.globalize_path(NATIVE_TRACE))
+
+
+## A crash report the engine wrote since the last start: its first lines (signal, step, top frame) for the title, the
+## whole report kept for Engine info.
+static func _new_trace() -> String:
+	if not FileAccess.file_exists(NATIVE_TRACE):
+		return ""
+	var t := FileAccess.get_file_as_string(NATIVE_TRACE)
+	var f := FileAccess.open(NATIVE_TRACE_SEEN, FileAccess.WRITE)
+	if f:
+		f.store_string(t)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(NATIVE_TRACE))
+	var lines := t.split("\n", false)
+	var short := PackedStringArray()
+	for l in lines:
+		if l.begins_with("=== ") or l.begins_with("step:") or l.contains("#0"):
+			short.append(l.replace("=== native crash: ", "").strip_edges())
+		if short.size() >= 3:
+			break
+	return "; ".join(short)
+
+
+## The reason Godot gave for a library that would not load (its log: "Can't open dynamic library ... dlopen ...").
+static func _log_reason() -> String:
+	var f := FileAccess.open("user://logs/godot.log", FileAccess.READ)
+	if f == null:
+		return "no log"
+	var found := ""
+	while not f.eof_reached():
+		var l := f.get_line()
+		if "afcgf" in l or "dynamic library" in l or "dlopen" in l or "GDExtension" in l:
+			found = l.strip_edges()
+	return found if found != "" else "no reason in the log"
 
 
 ## Around the start of a native-engine match: a crash in there switches the engine off for the next start.
@@ -154,10 +218,43 @@ static func native_report() -> String:
 			var l := log.get_line()
 			if "afcgf" in l or "GDExtension" in l or "dynamic library" in l or "dlopen" in l or "ERROR" in l:
 				lines.append(l.strip_edges())
+	if FileAccess.file_exists(NATIVE_STEP):
+		lines.append("Last engine step: " + FileAccess.get_file_as_string(NATIVE_STEP).strip_edges())
+	if FileAccess.file_exists(NATIVE_TRACE_SEEN):
+		lines.append("--- the engine's own crash report")
+		lines.append(FileAccess.get_file_as_string(NATIVE_TRACE_SEEN).strip_edges())
+	var prev := _previous_log()
+	if prev != "":
+		lines.append("--- end of the previous run's log")
+		lines.append(prev)
 	if FileAccess.file_exists(NATIVE_CRASH):
-		lines.append("--- crash log")
+		lines.append("--- system log")
 		lines.append(FileAccess.get_file_as_string(NATIVE_CRASH))
 	return "\n".join(lines)
+
+
+## The last lines of the run before this one (Godot keeps old logs as user://logs/godot<date>.log).
+static func _previous_log() -> String:
+	var d := DirAccess.open("user://logs")
+	if d == null:
+		return ""
+	var files := Array(d.get_files()).filter(func(n: String) -> bool: return n.begins_with("godot") and n != "godot.log")
+	if files.is_empty():
+		return ""
+	files.sort()
+	var t := FileAccess.get_file_as_string("user://logs/" + str(files[-1]))
+	var ls := t.split("\n", false)
+	return "\n".join(ls.slice(maxi(0, ls.size() - 25)))
+
+
+## A link that opens a new issue on the game's GitHub with the report filled in (the phone's browser, one tap).
+static func report_url() -> String:
+	var body := native_report()
+	if body.length() > 5500:
+		body = body.substr(0, 5500) + "\n..."
+	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
+	return "https://github.com/Amir2049/flipnova/issues/new?title=%s&body=%s" % [
+		("Engine report " + ver + " " + OS.get_model_name()).uri_encode(), ("```\n" + body + "\n```").uri_encode()]
 
 
 ## Settings > Engine info > Try again: forget this version's failure, the next start loads the engine again.
@@ -167,6 +264,7 @@ static func retry_native() -> void:
 	cfg.load(NATIVE_STATE)
 	cfg.set_value("native", ver, "")
 	cfg.set_value("native_match", ver, "")
+	cfg.set_value("unexplained", ver, 0)
 	cfg.save(NATIVE_STATE)
 
 
@@ -184,7 +282,9 @@ func _load_game() -> void:
 		status.text = "Preparing the match engine…"
 		await get_tree().process_frame
 		await get_tree().process_frame
+		step("unpacking the engine data")
 		GFData.prepare(EngineMatchView.data_dir())
+		step("engine data ready")
 	var scene := ResourceLoader.load_threaded_get(MAIN) as PackedScene
 	if scene:
 		get_tree().change_scene_to_packed(scene)

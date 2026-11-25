@@ -271,6 +271,7 @@ func start(config: Dictionary) -> void:
 			eo["brain_temperature"] = BRAIN_TEMP[level]
 	# a crash in the engine's start or first seconds switches it off for the next launch (boot.gd)
 	_guard(true)
+	load("res://scripts/boot.gd").step("starting a match (engine.start)")
 	engine.start(dir, eo)
 	stride = engine.stride()
 	_pull()
@@ -289,6 +290,14 @@ func _guard(on: bool) -> void:
 		return
 	guarded = on
 	load("res://scripts/boot.gd").native_match_guard(on)
+	if not on:
+		load("res://scripts/boot.gd").step("match ran its first 15 s")
+
+
+func _notification(what: int) -> void:
+	# sent to the background in the first seconds: if the phone kills the app there, it is not the engine's fault
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_guard(false)
 
 
 func _exit_tree() -> void:
