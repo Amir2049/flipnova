@@ -178,6 +178,7 @@ static func button(text: String, cb: Callable, min_size: Vector2 = Vector2(0, 56
 		b.add_theme_color_override(k, fg)
 	b.add_theme_color_override("font_disabled_color", Color(fg.r, fg.g, fg.b, 0.4))
 	b.pressed.connect(cb)
+	Motion.press(b)
 	return b
 
 

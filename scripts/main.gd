@@ -3,7 +3,8 @@ extends Node
 ## A CPU v CPU match plays behind the menus.
 
 var match_view: MatchView
-var backdrop: CanvasLayer
+var backdrop: MenuStage
+var entering := false                   # the screen being built is new: animate it in
 var menu_crowd: AudioStreamPlayer
 var loading := false
 var ui: CanvasLayer
@@ -29,8 +30,11 @@ func _ready() -> void:
 func _go(builder: Callable, push: bool = true) -> void:
 	if push and current.is_valid():
 		nav.append(current)
+	# a new screen comes in behind the stinger (a screen rebuilding itself - an arrow on Kick off - does not)
+	entering = builder != current and builder != Callable(self, "_title")
 	current = builder
 	builder.call()
+	entering = false
 
 
 func _back() -> void:
@@ -39,7 +43,9 @@ func _back() -> void:
 		return
 	var b: Callable = nav.pop_back()
 	current = b
+	entering = true
 	b.call()
+	entering = false
 
 
 func _home_reset() -> void:
@@ -56,6 +62,19 @@ func _set_screen(c: Control) -> void:
 		# a menu with no match behind it: the stadium still and the murmur
 		if match_view == null and backdrop and not backdrop.visible:
 			_start_demo()
+		if entering:
+			_enter(c)
+
+
+## The stinger sweeps off and the plates slide in after it (once the containers have placed them).
+func _enter(c: Control) -> void:
+	Motion.stinger(self)
+	c.modulate.a = 0.0
+	await get_tree().process_frame
+	if not is_instance_valid(c):
+		return
+	c.modulate.a = 1.0
+	Motion.reveal(c)
 
 
 const STREAKS := """shader_type canvas_item;
@@ -123,15 +142,7 @@ func _clear_match() -> void:
 func _start_demo() -> void:
 	_clear_match()
 	if backdrop == null:
-		backdrop = CanvasLayer.new()
-		backdrop.layer = -1
-		var tr := TextureRect.new()
-		tr.texture = load("res://assets/menu_backdrop.jpg")
-		tr.set_anchors_preset(Control.PRESET_FULL_RECT)
-		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		backdrop.add_child(tr)
+		backdrop = MenuStage.new()
 		add_child(backdrop)
 		menu_crowd = AudioStreamPlayer.new()
 		var bed = load("res://assets/sounds/crowd_bed.ogg") if ResourceLoader.exists("res://assets/sounds/crowd_bed.ogg") else null
@@ -305,14 +316,16 @@ func _title() -> void:
 	col.offset_bottom = -64
 	col.alignment = BoxContainer.ALIGNMENT_END
 	root.add_child(col)
-	col.add_child(UI.title("AFC", 170, UI.CHALK))
+	var name_l := UI.title("AFC", 170, UI.CHALK)
+	col.add_child(name_l)
 	var bar := ColorRect.new()
 	bar.color = UI.BRASS
 	bar.custom_minimum_size = Vector2(190, 8)
 	bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	col.add_child(bar)
 	col.add_child(UI.spacer(0, 6))
-	col.add_child(UI.label("Football in your hands. No internet needed.", 26, UI.CHALK))
+	var tag := UI.label("Football in your hands. No internet needed.", 26, UI.CHALK)
+	col.add_child(tag)
 	col.add_child(UI.spacer(0, 26))
 	var start := UI.button("Start", func(): _go(_home), Vector2(320, 96), "accent", 44)
 	start.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -344,6 +357,37 @@ func _title() -> void:
 	root.add_child(credit)
 	_set_screen(root)
 	start.grab_focus()
+	Motion.sheen(start, 1.5)
+	_title_intro(name_l, bar, tag, start, hero)
+
+
+## The title's one big moment: the name slams down under the lights (a camera-flash burst as it lands), the gold
+## rule wipes across, the line fades up, START rises and then keeps a slow glow; the player walks into frame.
+func _title_intro(name_l: Control, bar: ColorRect, tag: Control, start: Control, hero: Control) -> void:
+	for c in [name_l, tag, start, hero]:
+		c.offset_transform_enabled = true
+	name_l.offset_transform_pivot_ratio = Vector2(0.0, 1.0)
+	name_l.offset_transform_scale = Vector2(1.9, 1.9)
+	name_l.modulate.a = 0.0
+	bar.custom_minimum_size.x = 0.0
+	tag.modulate.a = 0.0
+	start.modulate.a = 0.0
+	start.offset_transform_position = Vector2(0, 50)
+	hero.offset_transform_position = Vector2(320, 0)
+	var tw := name_l.create_tween().set_parallel(true)
+	tw.tween_property(name_l, "offset_transform_scale", Vector2.ONE, 0.38).set_delay(0.25).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+	tw.tween_property(name_l, "modulate:a", 1.0, 0.2).set_delay(0.25)
+	tw.tween_callback(func(): if backdrop: backdrop.burst()).set_delay(0.63)
+	tw.tween_property(bar, "custom_minimum_size:x", 190.0, 0.45).set_delay(0.7).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tw.tween_property(tag, "modulate:a", 1.0, 0.5).set_delay(0.85)
+	tw.tween_property(start, "modulate:a", 1.0, 0.35).set_delay(1.05)
+	tw.tween_property(start, "offset_transform_position", Vector2.ZERO, 0.55).set_delay(1.05).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(hero, "offset_transform_position", Vector2.ZERO, 1.1).set_delay(0.4).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	# START breathes: brighter, back, forever (until the screen goes)
+	var glow := start.create_tween().set_loops()
+	glow.tween_interval(1.8)
+	glow.tween_property(start, "modulate", Color(1.35, 1.25, 1.2), 0.6).set_trans(Tween.TRANS_SINE)
+	glow.tween_property(start, "modulate", Color(1, 1, 1), 0.8).set_trans(Tween.TRANS_SINE)
 
 
 func _tile(title: String, sub: String, cb: Callable, size: Vector2, accent: bool = false) -> Button:
@@ -446,6 +490,7 @@ func _card(title: String, sub: String, cb: Callable, col: Color, art: Control = 
 			sb.shadow_size = 0
 		b.add_theme_stylebox_override(st_name, sb)
 	b.pressed.connect(cb)
+	Motion.press(b)
 	if art:
 		var w: float = art.custom_minimum_size.x
 		var h: float = art.custom_minimum_size.y
@@ -490,6 +535,8 @@ func _card(title: String, sub: String, cb: Callable, col: Color, art: Control = 
 		go.add_child(UI.title(cta, 30, UI.CHALK))
 		vb.add_child(go)
 	b.add_child(vb)
+	if big:
+		Motion.sheen(b, randf() * 5.0)
 	return b
 
 
@@ -525,6 +572,10 @@ func _with_hero(row: HBoxContainer, kit: Dictionary, number: int, facing: float)
 	var hero := HeroPlayer.new().setup(kit, number, Vector2i(300, 540), facing)
 	hero.size_flags_vertical = Control.SIZE_SHRINK_END
 	row.add_child(hero)
+	hero.offset_transform_enabled = true
+	hero.offset_transform_position = Vector2(260, 0)
+	hero.create_tween().tween_property(hero, "offset_transform_position", Vector2.ZERO, 0.8).set_delay(0.15) \
+		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 
 
 func _hub_page(active: String) -> Array:
