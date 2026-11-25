@@ -180,6 +180,7 @@ int main(int argc, char** argv) {
   const int shot_style = getenv("GF_SHOT_STYLE") ? atoi(getenv("GF_SHOT_STYLE")) : -1;
   double elev_sum = 0.0, speed_sum = 0.0;
   int launches = 0;
+  int by_dist_n[4] = {0, 0, 0, 0}, by_dist_on[4] = {0, 0, 0, 0};   // shots from <20, 20-30, 30-45, 45+ m: on target
   int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
   for (int f = 0; f < stop; f++) {
     if (feel_test) {
@@ -253,6 +254,19 @@ int main(int argc, char** argv) {
           if (shot_style >= 0 && bs > 7.f) {
             float sp = std::sqrt(bs * bs + ps.ball_vel[2] * ps.ball_vel[2]);
             elev_sum += std::atan2(ps.ball_vel[2], bs) * 57.2958;
+            {
+              float gx = 54.4f, dxg = gx - ps.ball[0];
+              float dist = std::sqrt(dxg * dxg + ps.ball[1] * ps.ball[1]);
+              int bk = dist < 20.f ? 0 : dist < 30.f ? 1 : dist < 45.f ? 2 : 3;
+              bool on = false;
+              if (ps.ball_vel[0] > 1.f) {
+                float t = dxg / ps.ball_vel[0];
+                float y = ps.ball[1] + ps.ball_vel[1] * t, z = ps.ball[2] + ps.ball_vel[2] * t - 4.9f * t * t;
+                on = std::fabs(y) < 3.66f && z < 2.44f && t < 4.f;
+              }
+              by_dist_n[bk]++;
+              if (on) by_dist_on[bk]++;
+            }
             speed_sum += sp;
             launches++;
           }
@@ -329,6 +343,9 @@ int main(int argc, char** argv) {
            turn_face_n ? (double)turn_face_ms / turn_face_n : 0.0, turn_face_n, turn_vel_n ? (double)turn_vel_ms / turn_vel_n : 0.0, turn_vel_n);
   if (pass_test)
     printf("PASS taps %d passes %d mean_tap_to_ball_ms %.0f\n", taps, passes, passes ? 10.0 * pass_frames / passes : 0.0);
+  if (shot_style >= 0)
+    printf("SHOTDIST on target: <20m %d/%d  20-30m %d/%d  30-45m %d/%d  45m+ %d/%d\n", by_dist_on[0], by_dist_n[0],
+           by_dist_on[1], by_dist_n[1], by_dist_on[2], by_dist_n[2], by_dist_on[3], by_dist_n[3]);
   if (shot_style >= 0)
     printf("SHOT style %d launches %d mean_elevation_deg %.1f mean_speed %.1f m/s\n", shot_style, launches,
            launches ? elev_sum / launches : 0.0, launches ? speed_sum / launches : 0.0);
