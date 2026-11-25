@@ -158,6 +158,10 @@ func _stand_shadow(sm: ShaderMaterial) -> void:
 	sm.set_shader_parameter("stand_z", pitch.half_w() + 7.5)
 	sm.set_shader_parameter("roof_h", 21.0)
 	sm.set_shader_parameter("stand_shadow", 0.0 if night_like else 0.85)
+	if night_like:
+		# under the floodlights the day green turned pure neon: a darker, yellower green, like lamp-lit turf on TV
+		sm.set_shader_parameter("grass_a", Color(0.095, 0.18, 0.055))
+		sm.set_shader_parameter("grass_b", Color(0.14, 0.24, 0.072))
 
 
 func _goal(side: float) -> void:

@@ -16,7 +16,8 @@ if [ ! -d football ]; then
   git -C football fetch -q --depth 1 origin $FOOTBALL_COMMIT
   git -C football checkout -q FETCH_HEAD
   git -C football apply --directory=third_party/gfootball_engine "$HERE/patches/gfootball-headless.patch"
-  # gameplay from League-Soccer (Apache-2.0): counter-press, fatigue slows the sprint
+  # gameplay: counter-press and fatigue (from League-Soccer, Apache-2.0), short pass on the press, a keeper who
+  # reads height and posts
   git -C football apply --directory=third_party/gfootball_engine "$HERE/patches/afc-gameplay.patch"
 fi
 if [ ! -d godot-cpp ]; then

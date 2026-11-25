@@ -117,6 +117,15 @@ the measurement, then the change, then shows the measurement move.
 - [ ] Rebuild the Android library (NDK line in Global Constraints) and the Linux one; run `tests/run_all.sh`;
   build the APK; push `afc` and `apk`.
 
-## Baseline
+## Baseline and results (gftest, CPU v CPU, 4 seeds x 90000 frames = 4 whole matches)
 
-(filled in by Task 1)
+| | baseline | after 2.39 |
+|---|---|---|
+| shots / on target | 120 / 59 | 110 / 62 |
+| on target kept out | 75 % | 74 % |
+| keeper dives / at shots going wide | 34 / 9 (26 %) | 25 / 3 (12 %) |
+| goals (4 matches) | 17 | 22 (within match-to-match noise) |
+| tap PASS -> ball leaves the foot (GF_PASS_TEST, 400+ passes) | 437 ms | 336 ms |
+
+Tried and dropped: capping the keeper 1.5 m off his line (depth at goal 4.8 -> 1.9 m but goals 17 -> 28: coming
+out was closing shots down). Reaction delay for the keeper: not done yet (would add goals; needs the cap's lesson).

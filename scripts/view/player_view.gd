@@ -36,7 +36,7 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabl
 void fragment() {
 	float d = length((UV - 0.5) * 2.0);
 	ALBEDO = vec3(0.0);
-	ALPHA = (1.0 - smoothstep(0.15, 1.0, d)) * 0.42;
+	ALPHA = (1.0 - smoothstep(0.1, 1.0, d)) * 0.6;   // a firm contact shadow: the player stands on the grass
 }
 """
 
@@ -65,7 +65,7 @@ func setup(p: PlayerSim, kit: Dictionary, gk_kit: Dictionary, seed: int) -> void
 		add_child(blob)
 	base_rot = model.rotation
 	height = rng.randf_range(0.99, 1.07)   # the body is 1.77 m: 1.75 to 1.90 m players
-	model.scale = Vector3.ONE * height
+	model.scale = Vector3(1.07, 1.0, 1.07) * height   # athletic: shoulders and chest a little broader than the stock body
 	ap = model.find_child("AnimationPlayer", true, false)
 	_loop_clips(ap)
 	PlayerView.dress(model, gk_kit if p.role == "GK" else kit, p.number, p.role == "GK", rng)
@@ -78,13 +78,21 @@ static func dress(model: Node3D, k: Dictionary, number: int, is_gk: bool, rng: R
 	var kit_mat := StandardMaterial3D.new()
 	kit_mat.albedo_texture = KitPainter.paint(k, number)
 	kit_mat.roughness = 0.8
-	# the painted kit was lit up to pastel (red read as pink) under the bright sun: a cloth-like albedo keeps colours deep
-	kit_mat.albedo_color = Color(0.8, 0.8, 0.8)
-	kit_mat.metallic_specular = 0.25
+	# the painted kit was lit up to pastel (red read as pink) under the bright sun: a cloth-like albedo keeps colours
+	# deep (2.39: 0.8 -> 0.66, the kits read as strongly as FC's against the grass)
+	kit_mat.albedo_color = Color(0.66, 0.66, 0.66)
+	kit_mat.metallic_specular = 0.2
+	# a light edge round the body (FC's players are outlined by the stadium light): the silhouette reads off the grass
+	kit_mat.rim_enabled = true
+	kit_mat.rim = 0.45
+	kit_mat.rim_tint = 0.25
 	var skin := StandardMaterial3D.new()
 	skin.albedo_color = SKIN_TONES[rng.randi() % SKIN_TONES.size()]
 	skin.vertex_color_use_as_albedo = true   # brows, lips and eyelids are vertex colours on the skin
 	skin.roughness = 0.55
+	skin.rim_enabled = true
+	skin.rim = 0.3
+	skin.rim_tint = 0.4
 	var boots := StandardMaterial3D.new()
 	boots.albedo_color = BOOTS[rng.randi() % (2 if is_gk else BOOTS.size())]
 	boots.roughness = 0.45

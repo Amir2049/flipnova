@@ -206,7 +206,7 @@ func _environment() -> void:
 	e.adjustment_contrast = 1.06
 	e.fog_enabled = not night
 	e.fog_mode = Environment.FOG_MODE_EXPONENTIAL
-	e.fog_density = 0.0016
+	e.fog_density = 0.0008   # 0.0016 washed the far half of the pitch pale (2.39)
 	e.fog_light_color = Color(0.74, 0.78, 0.84)
 	e.fog_sky_affect = 0.0
 	e.glow_enabled = true
@@ -221,10 +221,11 @@ func _environment() -> void:
 	if night:
 		# the floodlights: steep, white, a little cool
 		sun.rotation_degrees = Vector3(-72, 20, 0)
-		sun.light_energy = 1.15
+		sun.light_energy = 0.85    # 1.15 + bloom lit the grass neon under the lamps (2.39)
 		sun.light_color = Color(0.95, 0.97, 1.0)
-		e.glow_intensity = 0.6
-		e.glow_bloom = 0.15
+		e.glow_intensity = 0.5
+		e.glow_bloom = 0.04
+		e.adjustment_saturation = 1.0
 	elif rain:
 		sun.light_energy = 0.8
 		e.ambient_light_energy = 0.9
@@ -236,7 +237,7 @@ func _environment() -> void:
 	# a soft light from the other side so the players read as round shapes, not flat cut-outs
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-25, 145, 0)
-	fill.light_energy = 0.22
+	fill.light_energy = 0.6 if night else 0.22   # at night the other towers light the players' fronts
 	fill.light_color = Color(0.75, 0.85, 1.0)
 	fill.shadow_enabled = false
 	add_child(fill)

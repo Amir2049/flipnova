@@ -42,9 +42,10 @@ static void dump(FILE* f, const afc::TzObs& o, int frame) {
 // Shots, saves and what the keepers do, from the state alone (the same shot test as scripts/view/engine_stats.gd):
 // a shot = the ball leaves its man at > 12 m/s toward the goal his side attacks, from within 36 m, arriving within
 // 2.5 s inside 10 m of the goal's centre; a save = the defending keeper gets the ball while the shot is live; a dive =
-// the defending keeper's body (the "player" joint) goes below 0.55 m while it is live.
+// the defending keeper's body (the "player" joint, 0 standing) drops more than 0.45 m while it is live.
 struct KeeperStats {
-  int shots = 0, on_target = 0, saves = 0, goals = 0, dives = 0, dives_off = 0;
+  int shots = 0, on_target = 0, saves = 0, goals = 0, dives = 0, dives_off = 0, kept_out = 0;
+  int live_t = 0;
   double depth_sum = 0.0;
   int depth_n = 0;
   int live = -1;        // team of the live shot, -1 none
@@ -56,9 +57,14 @@ struct KeeperStats {
   void feed(const afc::GfState& s) {
     const float GOAL_X = 54.4f;
     int ot = s.ball_owner_team;
+    if (live >= 0 && ++live_t > 300) {   // 3 s and no goal: the shot was kept out (saved, blocked, wide)
+      if (live_on) kept_out++;
+      live = -1;
+    }
     if (ot >= 0) {
       int man = ot * 11 + s.ball_owner_player;
       if (live >= 0 && ot != live && s.ball_owner_player == 0 && live_on) saves++;
+      if (live >= 0 && live_on) kept_out++;
       live = -1;
       last_man = man;
     }
@@ -75,6 +81,7 @@ struct KeeperStats {
           shots++;
           live = team;
           live_on = std::fabs(y) < 3.66f && z < 2.44f + 0.4f;
+          live_t = 0;
           if (live_on) on_target++;
           dived = false;
         }
@@ -84,7 +91,7 @@ struct KeeperStats {
     if (live >= 0) {
       root_min = std::min(root_min, k.root[2]);
       root_max = std::max(root_max, k.root[2]);
-      if (!dived && k.root[2] < 0.55f) {
+      if (!dived && k.root[2] < -0.45f) {   // the "player" joint drops ~0.9 m in a dive, ~0 standing
         dived = true;
         dives++;
         if (!live_on) dives_off++;
@@ -233,9 +240,8 @@ int main(int argc, char** argv) {
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
   if (pass_test)
     printf("PASS taps %d passes %d mean_tap_to_ball_ms %.0f\n", taps, passes, passes ? 10.0 * pass_frames / passes : 0.0);
-  printf("KEEPER shots %d on_target %d saves %d goals %d dives %d dives_off_target %d depth_at_goal %.2f (keeper root z %.2f..%.2f)\n",
-         ks.shots, ks.on_target, ks.saves, ks.goals, ks.dives, ks.dives_off, ks.depth_n ? ks.depth_sum / ks.depth_n : 0.0,
-         ks.root_min, ks.root_max);
+  printf("KEEPER shots %d on_target %d kept_out %d caught %d goals %d dives %d dives_off_target %d depth_at_goal %.2f\n",
+         ks.shots, ks.on_target, ks.kept_out, ks.saves, ks.goals, ks.dives, ks.dives_off, ks.depth_n ? ks.depth_sum / ks.depth_n : 0.0);
   // where the engine reports the right team vs where it draws them (positions must agree, turned 180 degrees)
   afc::gf_brain_obs(&o, false);
   printf("right player 5: drawn (%.2f %.2f), observed (%.3f %.3f) -> metres (%.2f %.2f)\n", st.players[16].pos[0],

@@ -21,7 +21,7 @@ func setup(kit: Dictionary, number: int, is_gk: bool, seed: int) -> void:
 	model = PLAYER_SCENE.instantiate()
 	add_child(model)
 	height = rng.randf_range(0.99, 1.07)
-	model.scale = Vector3.ONE * height
+	model.scale = Vector3(1.07, 1.0, 1.07) * height   # athletic: shoulders and chest a little broader than the stock body
 	var ap := model.find_child("AnimationPlayer", true, false)
 	if ap:
 		ap.queue_free()   # the engine poses the skeleton itself

@@ -130,3 +130,34 @@
          AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
  
          commandQueue.push_back(command);
+--- a/src/onthepitch/player/controller/strategies/offtheball/goalie_default.cpp
++++ b/src/onthepitch/player/controller/strategies/offtheball/goalie_default.cpp
+@@ -244,7 +244,9 @@
+ 
+   int side = controller->GetTeam()->GetDynamicSide();
+ 
+-  float panic = 1.02f + (1.0f - (controller->GetPlayer()->GetStat(mental_defensivepositioning) * 0.6f + controller->GetPlayer()->GetStat(mental_vision) * 0.4f)) * 0.5f;
++  // AFC: the margin by which a keeper takes a shot going wide for one on target: was up to 50 % of the goal (he
++  // dived at a quarter of the shots going wide), now up to 15 %
++  float panic = 1.0f + (1.0f - (controller->GetPlayer()->GetStat(mental_defensivepositioning) * 0.6f + controller->GetPlayer()->GetStat(mental_vision) * 0.4f)) * 0.15f;
+   if (mentalImage->GetBallPrediction(4000).coords[0] * side > pitchHalfW &&
+       (controller->GetPlayer()->GetPosition() -
+        mentalImage->GetBallPrediction(250))
+@@ -287,6 +289,17 @@
+ 
+     Vector3 intersectPoint = ballToGoal.GetIntersectionPoint(goalLine).Get2D();
+     if (fabs(intersectPoint.coords[1]) > 3.7 * panic) intersect = false; else intersect = true;
++    // AFC: and the height (the 2D test let him dive at shots going over): when the ball crosses the line it must be
++    // under the bar plus 0.3 m
++    if (intersect) {
++      Vector3 b0 = mentalImage->GetBallPrediction(0).Get2D();
++      Vector3 b1 = mentalImage->GetBallPrediction(800).Get2D();
++      float along = (b1 - b0).GetLength();
++      if (along > 0.01f) {
++        float t_ms = clamp((intersectPoint - b0).GetLength() / along * 800.0f, 0.0f, 4000.0f);
++        if (mentalImage->GetBallPrediction((int)t_ms).coords[2] > 2.44f + 0.3f * panic) intersect = false;
++      }
++    }
+ 
+     if (intersect) {
+       DO_VALIDATION;
