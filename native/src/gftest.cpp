@@ -163,6 +163,10 @@ int main(int argc, char** argv) {
   KeeperStats ks;
   int hold = 0, tap_left = 0, tap_at = -1, taps = 0, passes = 0;
   long pass_frames = 0;
+  // GF_SHOT_STYLE=0/1/2: the tap is a SHOT (normal / chip / finesse) instead of a pass; prints the ball's launch
+  const int shot_style = getenv("GF_SHOT_STYLE") ? atoi(getenv("GF_SHOT_STYLE")) : -1;
+  double elev_sum = 0.0, speed_sum = 0.0;
+  int launches = 0;
   int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
   for (int f = 0; f < stop; f++) {
     if (pass_test) {
@@ -174,6 +178,12 @@ int main(int argc, char** argv) {
         if (!mine || bs > 7.f) {
           passes++;
           pass_frames += f - tap_at;
+          if (shot_style >= 0 && bs > 7.f) {
+            float sp = std::sqrt(bs * bs + ps.ball_vel[2] * ps.ball_vel[2]);
+            elev_sum += std::atan2(ps.ball_vel[2], bs) * 57.2958;
+            speed_sum += sp;
+            launches++;
+          }
           tap_at = -1;
           hold = 0;
         } else if (f - tap_at > 150) {
@@ -188,7 +198,10 @@ int main(int argc, char** argv) {
         taps++;
       }
       if (ps.game_mode != 0 && f % 120 == 0 && tap_left == 0) tap_left = tap_frames;   // take set pieces (not timed)
-      afc::gf_input(1.f, 0.f, tap_left > 0 ? afc::GF_SHORT_PASS : 0u);
+      unsigned tap_bits = afc::GF_SHORT_PASS;
+      if (shot_style >= 0 && ps.game_mode == 0)
+        tap_bits = afc::GF_SHOT | (shot_style == 1 ? afc::GF_CHIP : 0u) | (shot_style == 2 ? afc::GF_FINESSE : 0u);
+      afc::gf_input(1.f, 0.f, tap_left > 0 ? tap_bits : 0u);
       if (tap_left > 0) tap_left--;
     }
     afc::gf_frame();
@@ -240,6 +253,9 @@ int main(int argc, char** argv) {
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
   if (pass_test)
     printf("PASS taps %d passes %d mean_tap_to_ball_ms %.0f\n", taps, passes, passes ? 10.0 * pass_frames / passes : 0.0);
+  if (shot_style >= 0)
+    printf("SHOT style %d launches %d mean_elevation_deg %.1f mean_speed %.1f m/s\n", shot_style, launches,
+           launches ? elev_sum / launches : 0.0, launches ? speed_sum / launches : 0.0);
   printf("KEEPER shots %d on_target %d kept_out %d caught %d goals %d dives %d dives_off_target %d depth_at_goal %.2f\n",
          ks.shots, ks.on_target, ks.kept_out, ks.saves, ks.goals, ks.dives, ks.dives_off, ks.depth_n ? ks.depth_sum / ks.depth_n : 0.0);
   // where the engine reports the right team vs where it draws them (positions must agree, turned 180 degrees)

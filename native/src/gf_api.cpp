@@ -2,6 +2,8 @@
 #include "gf_api.h"
 #include "crash_guard.h"
 
+int afc_shot_style = 0;   // read by the engine's HumanController when it builds a shot (patch)
+
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -177,6 +179,8 @@ void gf_input(float dx, float dy, unsigned buttons) {
   g_dx = dx;
   g_dy = dy;
   g_buttons = buttons;
+  // the engine builds a shot when SHOOT is let go: the style chosen while it was held stays until the next press
+  if (buttons & GF_SHOT) afc_shot_style = (buttons & GF_CHIP) ? 1 : ((buttons & GF_FINESSE) ? 2 : 0);
 }
 
 // ---------------------------------------------------------------------------------------------------- TiZero

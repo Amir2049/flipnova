@@ -252,6 +252,19 @@ func _input(event: InputEvent) -> void:
 			return
 		for name in buttons:
 			var b: Dictionary = buttons[name]
+			# SHOOT fires on release, so a flick off it costs no wait: up = chip, sideways = finesse (curled, placed)
+			if name == "shoot" and not defending and b["touch"] == d.index and b["held"] and b["variant"] == "":
+				var sm: Vector2 = d.position - b["start"]
+				if -sm.y > FLICK * u and absf(sm.x) < -sm.y * 1.2:
+					b["variant"] = "up"
+				elif absf(sm.x) > FLICK * u and absf(sm.y) < absf(sm.x):
+					b["variant"] = "side"
+				if b["variant"] != "":
+					if vibrate and OS.has_feature("mobile"):
+						Input.vibrate_handheld(8)
+					queue_redraw()
+				get_viewport().set_input_as_handled()
+				return
 			if flick_loft and b["touch"] == d.index and b["held"] and name in SWIPEABLE and b["variant"] == "":
 				var mv: Vector2 = d.position - b["start"]
 				if -mv.y > FLICK * u and absf(mv.x) < -mv.y * 1.2:

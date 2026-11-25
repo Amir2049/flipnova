@@ -1,3 +1,17 @@
+--- a/src/gamedefines.hpp
++++ b/src/gamedefines.hpp
+@@ -126,7 +126,10 @@
+ 
+ enum e_PlayerCommandModifier {
+   e_PlayerCommandModifier_None = 0,
+-  e_PlayerCommandModifier_KnockOn = 1
++  e_PlayerCommandModifier_KnockOn = 1,
++  // AFC, from League-Soccer (Apache-2.0): shot styles
++  e_PlayerCommandModifier_Chip = 2,
++  e_PlayerCommandModifier_Finesse = 4
+ };
+ 
+ class IController;
 --- a/src/onthepitch/teamAIcontroller.cpp
 +++ b/src/onthepitch/teamAIcontroller.cpp
 @@ -15,6 +15,7 @@
@@ -105,7 +119,16 @@
  float PlayerBase::GetVelocityMultiplier() const {
 --- a/src/onthepitch/player/controller/humancontroller.cpp
 +++ b/src/onthepitch/player/controller/humancontroller.cpp
-@@ -127,7 +127,10 @@
+@@ -23,6 +23,8 @@
+ 
+ #include "../../../main.hpp"
+ 
++extern int afc_shot_style;   // AFC: 0 normal, 1 chip, 2 finesse (native/src/gf_api.cpp)
++
+ HumanController::HumanController(Match *match, AIControlledKeyboard *hid)
+     : PlayerController(match), hid(hid) {
+   DO_VALIDATION;
+@@ -127,7 +129,10 @@
      if (!hid->GetButton(actionButton) ||
          (hid->GetButton(actionButton) &&
           gauge_ms >
@@ -117,7 +140,7 @@
                        // button is released), it will usually touch ball after
                        // the remaining time anyway, so we still have time to add
                        // more power, yet still respond as fast as possible
-@@ -173,8 +176,10 @@
+@@ -173,8 +178,10 @@
          float inputPower = clamp(std::pow(gaugeFactor, 0.7f), 0.01f, 1.0f);
          command.touchInfo.inputDirection = inputDirection;
          command.touchInfo.inputPower = inputPower;
@@ -130,6 +153,16 @@
          AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
  
          commandQueue.push_back(command);
+@@ -221,6 +228,9 @@
+         command.useDesiredMovement = false;
+         command.useDesiredLookAt = false;
+         command.desiredVelocityFloat = inputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
++        // AFC: the shot style the player asked for (a flick on SHOOT: chip, a curl: finesse), set by gf_input
++        if (afc_shot_style == 1) command.modifier |= e_PlayerCommandModifier_Chip;
++        else if (afc_shot_style == 2) command.modifier |= e_PlayerCommandModifier_Finesse;
+         command.touchInfo.inputDirection = inputDirection;
+         command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection);
+         command.touchInfo.autoDirectionBias = 1.0f;
 --- a/src/onthepitch/player/controller/strategies/offtheball/goalie_default.cpp
 +++ b/src/onthepitch/player/controller/strategies/offtheball/goalie_default.cpp
 @@ -244,7 +244,9 @@
@@ -161,3 +194,81 @@
  
      if (intersect) {
        DO_VALIDATION;
+--- a/src/onthepitch/player/humanoid/humanoid.cpp
++++ b/src/onthepitch/player/humanoid/humanoid.cpp
+@@ -528,6 +528,11 @@
+         } else {
+           ballDirection = ballDirectionAltered;
+         }
++        // AFC, from League-Soccer (Apache-2.0): GetShotVector reads the command, so the late aim correction (the
++        // stick moved during the wind-up) must be written into it - it was worked out and thrown away. For the
++        // human's player only: for the CPU it made every shot truer (gftest: goals 22 -> 31 in 4 matches)
++        if (CastPlayer()->ExternalControllerActive())
++          currentAnim.originatingCommand.touchInfo.desiredDirection = ballDirection;
+ 
+         radian xRot = 0;
+         radian yRot = 0;
+--- a/src/onthepitch/player/humanoid/humanoid_utils.cpp
++++ b/src/onthepitch/player/humanoid/humanoid_utils.cpp
+@@ -469,7 +469,17 @@
+ 
+   // best case result
+ 
++  // AFC, from League-Soccer (Apache-2.0): chip (scooped, soft, heavy backspin) and finesse (placed, curled) shots
++  const bool chip = (currentAnim.originatingCommand.modifier & e_PlayerCommandModifier_Chip) != 0;
++  const bool finesse = !chip && (currentAnim.originatingCommand.modifier & e_PlayerCommandModifier_Finesse) != 0;
+   float desiredHeight = 0.05f;
++  if (chip) {
++    desiredHeight = 0.42f;
++    power = clamp(power * 0.62f, 10.0f, 26.0f);
++  } else if (finesse) {
++    desiredHeight = 0.08f;
++    power = power * 0.88f;
++  }
+   Vector3 desiredShot = (currentAnim.originatingCommand.touchInfo.desiredDirection.Get2D() + Vector3(0, 0, desiredHeight)).GetNormalized() * power;
+ 
+   // worst case result
+@@ -488,6 +498,7 @@
+   worstCaseDirection.Normalize();
+ 
+   float worstCaseHeight = curve(std::pow(difficultyFactor, 0.7f), 0.7f) * 0.7f;
++  if (chip) worstCaseHeight = std::max(worstCaseHeight, 0.35f);
+ 
+   float worstCasePower =
+       power * (1.0f - std::pow(difficultyFactor, 0.7f) * 0.5f);
+@@ -499,6 +510,7 @@
+   float worstCaseFactor = boostrandom(0.0f, 1.0f);
+   worstCaseFactor =
+       std::pow(worstCaseFactor, player->GetStat(technical_shot) * 0.7f);
++  if (finesse) worstCaseFactor *= 0.5f;   // a placed shot: half the scatter
+ 
+   Vector3 shot = desiredShot * (1.0f - worstCaseFactor) +
+                  worstCaseShot * worstCaseFactor;
+@@ -509,12 +521,13 @@
+   float randomCurveFactor = 0.3f + worstCaseFactor * 0.7f;
+   float plannedCurveFactor = 0.7f;
+ 
+-  // forward/backward 'curve'
++  // forward/backward 'curve' (a chip gets heavy backspin)
++  const float backspin = chip ? 2.5f : 1.0f;
+   xRot = -currentAnim.originatingCommand.touchInfo.desiredDirection.coords[1] *
+-             20.0f +
++             20.0f * backspin +
+          (boostrandom(-20, 20) * randomCurveFactor);
+   yRot = -currentAnim.originatingCommand.touchInfo.desiredDirection.coords[0] *
+-             20.0f +
++             20.0f * backspin +
+          (boostrandom(-20, 20) * randomCurveFactor);
+ 
+   // lateral curve
+@@ -523,8 +536,9 @@
+   bodyTouchAngle *= 2.0f;
+   //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
+   radian amount = bodyTouchAngle * 0.25f;
++  if (finesse) amount = (fabs(amount) < 0.05f) ? 0.12f * (bodyTouchAngle < 0 ? -1.0f : 1.0f) : amount * 1.7f;
+   shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
+-  zRot = amount * -420 + (boostrandom(-20, 20) * plannedCurveFactor);
++  zRot = amount * -420 * (finesse ? 1.6f : 1.0f) + (boostrandom(-20, 20) * plannedCurveFactor);
+ 
+   //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
+ 

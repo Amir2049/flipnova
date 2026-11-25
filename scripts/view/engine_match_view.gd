@@ -20,6 +20,8 @@ const B_SLIDE := 64
 const B_PRESS := 128
 const B_TEAM_PRESS := 256
 const B_SWITCH := 512
+const B_CHIP := 2048                     # with B_SHOT (native/src/gf_api.h GF_CHIP)
+const B_FINESSE := 4096
 const MODE_NAMES := ["", "KICK OFF", "GOAL KICK", "FREE KICK", "CORNER", "THROW-IN", "PENALTY"]
 var guarded := false
 var force_touch := false                 # tests: show and use the touch controls without a touchscreen
@@ -57,6 +59,9 @@ var poses_prev := PackedFloat32Array()   # the engine frame before `poses`: the 
 var ball_prev := Vector3.ZERO
 var draw := PackedFloat32Array()         # the poses drawn this display frame (interpolated)
 var rec_acc := 0.0
+var skills := EngineSkills.new()        # skill moves played into the engine (gestures, keys 1-0, right stick)
+var step_dt := 0.0
+var rs_armed := true
 var stride := 66
 var match_seconds := 480.0
 var last_goals := Vector2i.ZERO
@@ -330,7 +335,12 @@ func _input_to_engine() -> void:
 		var r: Array = test_input.call()
 		var tw: Vector2 = r[0]
 		tw = _steady(_ball_assist(tw.normalized())) if tw.length() > STICK_DEAD else _steady(Vector2.ZERO)
-		engine.set_input(tw.x, -tw.y, _carry_buttons(int(r[1])))
+		var tb := int(r[1])
+		var sk := _skill_tick()
+		if not sk.is_empty():
+			tw = sk[0]
+			tb = sk[1]
+		engine.set_input(tw.x, -tw.y, _carry_buttons(tb))
 		return
 	var stick := Vector2.ZERO
 	if touch and touch.active:
@@ -359,7 +369,14 @@ func _input_to_engine() -> void:
 	if atk:
 		# a flick up off PASS / THROUGH lofts it (FC Mobile)
 		if on.call("pass", "pass"): b |= B_HIGH if _flick("pass") else B_SHORT
-		if on.call("shoot", "shoot"): b |= B_SHOT
+		if on.call("shoot", "shoot"):
+			b |= B_SHOT
+			# a flick up off SHOOT: a chip; sideways: a finesse shot (pad: skill modifier / close control + SHOOT)
+			var sv: String = touch.variant("shoot") if touch != null and touch.active else ""
+			if sv == "up" or reader._pad("skill_mod"):
+				b |= B_CHIP
+			elif sv == "side" or reader._pad("close"):
+				b |= B_FINESSE
 		if on.call("through", "through"): b |= B_HIGH if _flick("through") else B_LONG
 		if on.call("lob", "lob"): b |= B_HIGH
 		if reader._pad("close"): b |= B_DRIBBLE
@@ -380,9 +397,98 @@ func _input_to_engine() -> void:
 		b |= B_SPRINT
 	elif stick.length() > STICK_DEAD and stick.length() < 0.6:
 		b |= B_DRIBBLE   # the stick pushed part way: a controlled jog (3.5 m/s) instead of the 5 m/s run
+	if atk:
+		_skill_inputs(stick)
+	elif touch:
+		touch.take_gestures()   # a swipe while defending is not a skill move later
+	var sk := _skill_tick()
+	if not sk.is_empty():
+		w = sk[0]
+		b = sk[1]
 	# pitch axes: Godot (x, z) -> engine (x, -z)
 	last_buttons = _carry_buttons(b)
 	engine.set_input(w.x, -w.y, last_buttons)
+
+
+## The human's dribbler: has he got the ball (a skill move needs it)?
+func _on_ball() -> bool:
+	return not st.is_empty() and int(st["mode"]) == 0 and int(st["owner_team"]) == 0 \
+		and int(st["owner_player"]) == int(st["controlled"]) and int(st["controlled"]) >= 0
+
+
+## The controlled player's facing on the pitch (Godot x, z): his body joint's forward (the pose's yaw slot is not
+## kept up to date by the engine; the body joint carries the facing, as in EnginePlayerView.play_clip).
+func _facing() -> Vector2:
+	return facing_of(poses, int(st["controlled"]) * stride)
+
+
+static func facing_of(p: PackedFloat32Array, o: int) -> Vector2:
+	var k := o + 10 + 4   # joint 1: body
+	var q := Quaternion(p[k], p[k + 2], -p[k + 1], p[k + 3]).normalized()
+	var f := q * Vector3(0, 0, 1)
+	var v := Vector2(f.x, f.z)
+	return v.normalized() if v.length() > 0.01 else Vector2.RIGHT
+
+
+## Start a skill move by name (+1 / -1: to his right / left). Tests and the input below call it.
+func request_skill(move: String, side: float) -> bool:
+	if not _on_ball():
+		return false
+	return skills.start(move, side, _facing())
+
+
+func _skill_tick() -> Array:
+	if skills.busy() and not _on_ball():
+		skills.cancel()
+	return skills.tick(step_dt)
+
+
+## Gestures on the free right side of the screen, keys 1-0, the right stick: the same moves as the built-in engine.
+func _skill_inputs(stick: Vector2) -> void:
+	var gs: Array = touch.take_gestures() if touch else []
+	if not _on_ball():
+		return
+	var f := _facing()
+	var right := Vector2(-f.y, f.x)
+	var sw := cam.screen_to_world(stick.normalized()) if stick.length() > STICK_DEAD else Vector2.ZERO
+	var stick_side := 1.0 if sw.dot(right) >= 0.0 else -1.0
+	for g in gs:
+		var d: Vector2 = g.get("dir", Vector2.ZERO)
+		match g["kind"]:
+			"swipe":
+				if d.length() > 0.0:
+					var wd := cam.screen_to_world(d.normalized())
+					var pick := Skills.from_direction(Vector2(wd.dot(f), wd.dot(right)), false)
+					request_skill(pick[0], pick[1])
+			"double":
+				request_skill("stepover", stick_side)
+			"zigzag":
+				var zd := cam.screen_to_world(d.normalized()) if d.length() > 0.0 else right
+				request_skill("elastico", 1.0 if zd.dot(right) >= 0.0 else -1.0)
+			"vee":
+				request_skill("cruyff", stick_side)
+			"circle":
+				request_skill("rainbow", stick_side)   # the catalogue's gesture for it (Skills.LIST)
+	for i in InputReader.KEY_CODES.size():
+		var down := Input.is_physical_key_pressed(InputReader.KEY_CODES[i])
+		if down and not held_was.get("k%d" % i, false):
+			var ks: Array = InputReader.KEY_SKILLS[i]
+			request_skill(ks[0], float(ks[1]) if ks[0] == "feint" else stick_side)
+		held_was["k%d" % i] = down
+	var so := reader._pad("stepover")
+	if so and not held_was.get("pad_stepover", false):
+		request_skill("stepover", stick_side)
+	held_was["pad_stepover"] = so
+	var dev := Pad.device()
+	if dev >= 0 and Pad.confirmed():
+		var rs := Vector2(Input.get_joy_axis(dev, JOY_AXIS_RIGHT_X), -Input.get_joy_axis(dev, JOY_AXIS_RIGHT_Y))
+		if rs.length() < 0.3:
+			rs_armed = true
+		elif rs.length() > 0.75 and rs_armed:
+			rs_armed = false
+			var wd := cam.screen_to_world(rs.normalized())
+			var pick := Skills.from_direction(Vector2(wd.dot(f), wd.dot(right)), reader._pad("skill_mod"))
+			request_skill(pick[0], pick[1])
 
 
 func _flick(n: String) -> bool:
@@ -468,6 +574,7 @@ func _physics_process(_dt: float) -> void:
 ## picture is drawn between the last two engine frames at the display frame's exact time (one engine frame, 10 ms,
 ## behind), so motion is even at 60, 90 or 120 Hz.
 func _step(dt: float) -> void:
+	step_dt = minf(dt, 0.1)
 	_input_to_engine()
 	acc += minf(dt, 0.1) * SettingsPanel.game_speed(opts)
 	var n := int(acc / FRAME)

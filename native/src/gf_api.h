@@ -20,6 +20,8 @@ enum GfButton : unsigned {
   GF_TEAM_PRESSURE = 1u << 8,
   GF_SWITCH = 1u << 9,
   GF_KEEPER_RUSH = 1u << 10,
+  GF_CHIP = 1u << 11,      // with SHOT: a chip (scooped over the keeper)
+  GF_FINESSE = 1u << 12,   // with SHOT: a placed, curled shot
 };
 
 // Skeleton joints, in the order of AFC's player model (tools/make_player_glb.py SKELETON).
