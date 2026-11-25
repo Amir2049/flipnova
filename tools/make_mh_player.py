@@ -194,6 +194,7 @@ def build(mh_data, anim_dir, out_glb, verbose=True):
 
     # ---------------------------------------------------------------- the body mesh (quads)
     bfaces = np.array([f[0] for f, g in zip(body["faces"], body["groups"]) if g == "body"], int)
+    tfaces = np.array([f[1] for f, g in zip(body["faces"], body["groups"]) if g == "body"], int)   # MakeHuman's own UVs
     used = np.unique(bfaces)
     # smooth vertex normals of the whole body (directions for the cloth offsets)
     def vnormals(pts, quads):
@@ -534,8 +535,15 @@ def build(mh_data, anim_dir, out_glb, verbose=True):
             sd = "left_" if fc[fi][0] >= 0 else "right_"
             pa = math.degrees(math.atan2(fc[fi][0] - ankle[sd][0], fc[fi][2] - ankle[sd][2]))
         ids = []
-        for v in q:
-            uv = kit_uv(reg, P[v], v, pa) if surf == "kit" else (0.0, 0.0)
+        for k_, v in enumerate(q):
+            if surf == "kit":
+                uv = kit_uv(reg, P[v], v, pa)
+            elif surf == "skin" and tfaces[fi][k_] >= 0:
+                # MakeHuman's skin UVs: the skin detail maps (tools/make_skin_detail.py) are laid out on them
+                t_ = body["uv"][tfaces[fi][k_]]
+                uv = (float(t_[0]) * 1024.0, (1.0 - float(t_[1])) * 1024.0)
+            else:
+                uv = (0.0, 0.0)
             ids.append(vert(surf, v, reg, uv))
         surfaces[surf]["tri"] += [ids[0], ids[1], ids[2], ids[0], ids[2], ids[3]]
         for k in range(4):

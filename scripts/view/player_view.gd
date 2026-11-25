@@ -9,8 +9,12 @@ const KIT_NORMAL := preload("res://assets/kit_normal.png")
 ## (tools/blender/bake_player_ao.py + make_kit_shade.py); multiplied over the painted kit
 const KIT_SHADE_PATH := "res://assets/kit_shade.png"
 static var kit_shade: Texture2D
-const SKIN_TONES := [Color8(241, 201, 165), Color8(217, 164, 122), Color8(176, 122, 79), Color8(125, 81, 53), Color8(90, 58, 38)]
-const HAIR := [Color8(27, 22, 18), Color8(59, 39, 22), Color8(107, 74, 43), Color8(181, 138, 82), Color8(138, 59, 29)]
+static var _skin_maps := {}   # dark (bool) -> skin detail map
+static var _hair_noise: NoiseTexture2D
+# 2.41: the palest tone read as white under the textured skin; tones weighted to a league in Egypt and Africa
+const SKIN_TONES := [Color8(226, 182, 146), Color8(205, 152, 112), Color8(176, 122, 79), Color8(150, 101, 66), Color8(125, 81, 53), Color8(90, 58, 38)]
+# mostly black and dark brown, now and then a lighter brown or a bleached top - not the orange caps of before
+const HAIR := [Color8(14, 12, 11), Color8(20, 16, 13), Color8(28, 20, 15), Color8(45, 31, 21), Color8(70, 48, 30), Color8(196, 170, 120)]
 const BOOTS := [Color8(17, 17, 17), Color8(242, 242, 242), Color8(198, 255, 61), Color8(255, 106, 43), Color8(45, 108, 223)]
 const LOOP_SPEED := PlayerSim.LOOP_SPEED   # root speed of each locomotion loop (m/s)
 
@@ -87,7 +91,18 @@ static func dress(model: Node3D, k: Dictionary, number: int, is_gk: bool, rng: R
 	kit_mat.rim = 0.45
 	kit_mat.rim_tint = 0.25
 	var skin := StandardMaterial3D.new()
-	skin.albedo_color = SKIN_TONES[rng.randi() % SKIN_TONES.size()]
+	var tone: Color = SKIN_TONES[rng.randi() % SKIN_TONES.size()]
+	# the face, hands and pores of MakeHuman's CC0 skins (tools/make_skin_detail.py), in the player's own tone: the
+	# maps are stored x0.78, so the tone is lifted by 1 / 0.78
+	var dark := tone.get_luminance() < 0.45
+	if not _skin_maps.has(dark):
+		var path := "res://assets/skin_detail_dark.jpg" if dark else "res://assets/skin_detail_light.jpg"
+		_skin_maps[dark] = load(path) if ResourceLoader.exists(path) else null
+	if _skin_maps[dark] != null:
+		skin.albedo_texture = _skin_maps[dark]
+		skin.albedo_color = Color(minf(tone.r / 0.78, 1.6), minf(tone.g / 0.78, 1.6), minf(tone.b / 0.78, 1.6))
+	else:
+		skin.albedo_color = tone
 	skin.vertex_color_use_as_albedo = true   # brows, lips and eyelids are vertex colours on the skin
 	skin.roughness = 0.55
 	skin.rim_enabled = true
@@ -100,7 +115,27 @@ static func dress(model: Node3D, k: Dictionary, number: int, is_gk: bool, rng: R
 	sole.albedo_color = Color(0.9, 0.9, 0.9)
 	var hair := StandardMaterial3D.new()
 	hair.albedo_color = HAIR[rng.randi() % HAIR.size()]
-	hair.roughness = 0.85
+	hair.roughness = 0.75
+	# strands: a fine streaky noise so the hair is not a painted cap
+	if _hair_noise == null:
+		var nz := FastNoiseLite.new()
+		nz.frequency = 0.09
+		nz.fractal_octaves = 3
+		var nt := NoiseTexture2D.new()
+		nt.width = 128
+		nt.height = 128
+		nt.noise = nz
+		nt.seamless = true
+		var gr := Gradient.new()
+		gr.set_color(0, Color(0.55, 0.55, 0.55))
+		gr.set_color(1, Color(1.25, 1.25, 1.25))
+		nt.color_ramp = gr
+		_hair_noise = nt
+	hair.detail_enabled = true
+	hair.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+	hair.detail_albedo = _hair_noise
+	hair.uv1_triplanar = true
+	hair.uv1_scale = Vector3(14, 40, 14)
 	# cloth folds on the kit
 	kit_mat.normal_enabled = true
 	kit_mat.normal_texture = KIT_NORMAL
