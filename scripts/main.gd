@@ -3,6 +3,9 @@ extends Node
 ## A CPU v CPU match plays behind the menus.
 
 var match_view: MatchView
+var backdrop: CanvasLayer
+var menu_crowd: AudioStreamPlayer
+var loading := false
 var ui: CanvasLayer
 var screen: Control
 var nav: Array[Callable] = []          # back stack of screen builders
@@ -17,12 +20,8 @@ func _ready() -> void:
 	ui = CanvasLayer.new()
 	ui.layer = 10
 	add_child(ui)
-	# the title first: the match behind the menus (stadium, crowd, 22 players, and on a phone the first compile of
-	# all their shaders) comes a moment later instead of holding the first picture back
+	_start_demo()
 	_go(_title, false)
-	get_tree().create_timer(0.35).timeout.connect(func():
-		if match_view == null:
-			_start_demo())
 
 
 # ------------------------------------------------------------------ navigation
@@ -54,6 +53,9 @@ func _set_screen(c: Control) -> void:
 	screen = c
 	if c:
 		ui.add_child(c)
+		# a menu with no match behind it: the stadium still and the murmur
+		if match_view == null and backdrop and not backdrop.visible:
+			_start_demo()
 
 
 const STREAKS := """shader_type canvas_item;
@@ -116,18 +118,39 @@ func _clear_match() -> void:
 		match_view = null
 
 
+## Behind the menus: a still of the stadium (rendered by the game itself) and the crowd's murmur. Until 2.30 a whole
+## match ran there - stadium, crowd, 22 players, AI - which made the game slow to open and every menu sluggish
+## (and the phone hot) on ordinary phones. The 3D world is now built only when a match starts.
 func _start_demo() -> void:
 	_clear_match()
-	match_view = MatchView.new()
-	add_child(match_view)
-	var h := randi() % GameData.CLUBS.size()
-	var a := (h + 1 + randi() % (GameData.CLUBS.size() - 1)) % GameData.CLUBS.size()
-	var o := _opts()
-	o["replays"] = false
-	match_view.start({"home": h, "away": a, "human_team": -1, "half_minutes": 20.0, "difficulty": 0.7, "camera": "tele",
-		"edits": Profile.squads(), "opts": o})
-	match_view.hud.visible = false
-	match_view.sfx.crowd(0.15)
+	if backdrop == null:
+		backdrop = CanvasLayer.new()
+		backdrop.layer = -1
+		var tr := TextureRect.new()
+		tr.texture = load("res://assets/menu_backdrop.jpg")
+		tr.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		backdrop.add_child(tr)
+		add_child(backdrop)
+		menu_crowd = AudioStreamPlayer.new()
+		var bed = load("res://assets/sounds/crowd_bed.ogg") if ResourceLoader.exists("res://assets/sounds/crowd_bed.ogg") else null
+		if bed is AudioStreamOggVorbis:
+			bed.loop = true
+			menu_crowd.stream = bed
+		menu_crowd.volume_db = -26.0
+		add_child(menu_crowd)
+	backdrop.visible = true
+	if menu_crowd.stream and not menu_crowd.playing:
+		menu_crowd.play()
+
+
+func _hide_backdrop() -> void:
+	if backdrop:
+		backdrop.visible = false
+	if menu_crowd:
+		menu_crowd.stop()
 
 
 func _match_config(home: int, away: int, human: int) -> Dictionary:
@@ -144,6 +167,7 @@ func _play(config: Dictionary, ctx: Dictionary) -> void:
 	context = ctx
 	context["config"] = config
 	_clear_match()
+	_hide_backdrop()
 	_set_screen(null)
 	# 11-a-side matches (kick off, career, cup) are played by the football engine (Google Research Football, native)
 	context["swapped"] = false
@@ -164,6 +188,31 @@ func _play(config: Dictionary, ctx: Dictionary) -> void:
 		match_view.start(config)
 	match_view.finished.connect(_on_match_finished)
 	match_view.quit_to_menu.connect(_on_match_quit)
+
+
+## From a menu button: "LOADING MATCH" shows at once, then the match is built (stadium, players, and on a phone the
+## first compile of their shaders: a few seconds that used to look like a frozen tap).
+func _play_soon(config: Dictionary, ctx: Dictionary) -> void:
+	if loading:
+		return
+	_set_screen(null)
+	loading = true
+	var cover := ColorRect.new()
+	cover.color = Color(0, 0, 0, 0.55)
+	cover.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var l := Label.new()
+	l.text = "LOADING MATCH…"
+	l.add_theme_font_size_override("font_size", 44)
+	l.set_anchors_preset(Control.PRESET_FULL_RECT)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cover.add_child(l)
+	ui.add_child(cover)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_play(config, ctx)
+	cover.queue_free()
+	loading = false
 
 
 func _on_match_finished(r: Dictionary) -> void:
@@ -578,7 +627,7 @@ func _club_card(key: String, title: String) -> Control:
 func _kickoff() -> void:
 	var play := UI.button("PLAY  ▶", func():
 		var side := int(Profile.get_s("side"))
-		_play(_match_config(int(Profile.get_s("home")), int(Profile.get_s("away")), side if side < 2 else -1), {"type": "friendly"}),
+		_play_soon(_match_config(int(Profile.get_s("home")), int(Profile.get_s("away")), side if side < 2 else -1), {"type": "friendly"}),
 		Vector2(220, 64), "accent", 26)
 	var pg := _page("KICK OFF", play)
 	var vb: VBoxContainer = pg[1]
@@ -867,7 +916,7 @@ func _street() -> void:
 		cfg["no_intro"] = true
 		cfg["half_minutes"] = 3.0
 		cfg["camera"] = "broadcast"
-		_play(cfg, {"type": "friendly"}))
+		_play_soon(cfg, {"type": "friendly"}))
 
 
 func _scenario_stars() -> int:
@@ -914,7 +963,7 @@ func _scenario_play(id: String) -> void:
 	cfg["scenario"] = sc
 	cfg["no_intro"] = true
 	cfg["half_minutes"] = 6.0
-	_play(cfg, {"type": "scenario", "id": id})
+	_play_soon(cfg, {"type": "scenario", "id": id})
 
 
 func _scenario_result(r: Dictionary) -> void:
@@ -936,7 +985,7 @@ func _practice(mode: String) -> void:
 	var cfg := _match_config(int(Profile.get_s("home")), int(Profile.get_s("away")), 0)
 	cfg["mode"] = mode
 	cfg["half_minutes"] = 999.0
-	_play(cfg, {"type": "practice"})
+	_play_soon(cfg, {"type": "practice"})
 
 
 # ------------------------------------------------------------------ career
@@ -1214,7 +1263,7 @@ func _career_play() -> void:
 	var cfg := _match_config(int(fx[0]), int(fx[1]), human)
 	cfg["competition"] = true
 	cfg["edits"] = CareerLife.match_edits(c, Profile.squads())
-	_play(cfg, {"type": "career"})
+	_play_soon(cfg, {"type": "career"})
 
 
 func _career_sim() -> void:
@@ -1376,7 +1425,7 @@ func _cup_play() -> void:
 	var human := 0 if int(tie[0]) == int(cup["club"]) else 1
 	var cfg := _match_config(int(tie[0]), int(tie[1]), human)
 	cfg["competition"] = true
-	_play(cfg, {"type": "cup"})
+	_play_soon(cfg, {"type": "cup"})
 
 
 func _cup_sim() -> void:
