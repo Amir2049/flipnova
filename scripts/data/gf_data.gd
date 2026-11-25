@@ -40,9 +40,25 @@ static func unpack(dir: String) -> int:
 	if complete(dir):
 		return 0
 	var ver := _version()
+	if ver == "":
+		push_error("GFData: no " + ZIP)
+		return -1
+	# Read the zip from the game in ONE pass into a real file, and unzip that. Inside an Android APK the zip is a
+	# compressed asset: every seek of ZIPReader there (386 files, a header each) decompresses the asset again from
+	# its start, which took minutes on phones - the start looked stuck at "Loading" (2.27-2.36).
+	var local := dir.get_base_dir() + "/gfdata_unpack.zip"
+	var raw := FileAccess.get_file_as_bytes(ZIP)
+	var lf := FileAccess.open(local, FileAccess.WRITE)
+	if raw.is_empty() or lf == null:
+		push_error("GFData: cannot copy " + ZIP)
+		return -1
+	lf.store_buffer(raw)
+	lf.close()
+	raw = PackedByteArray()
 	var z := ZIPReader.new()
-	if ver == "" or z.open(ZIP) != OK:
-		push_error("GFData: cannot open " + ZIP)
+	if z.open(local) != OK:
+		push_error("GFData: cannot open " + local)
+		DirAccess.remove_absolute(local)
 		return -1
 	# no stamp while files are being rewritten: an unpack cut off half way (app killed) must not look complete
 	DirAccess.remove_absolute(dir + "/.version")
@@ -72,6 +88,7 @@ static func unpack(dir: String) -> int:
 		else:
 			failed += 1
 	z.close()
+	DirAccess.remove_absolute(local)
 	if failed > 0:
 		# no stamp: the next start tries again instead of running on half the files forever (a full disk)
 		push_error("GFData: %d files could not be written into %s" % [failed, dir])

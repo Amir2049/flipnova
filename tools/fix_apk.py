@@ -124,6 +124,10 @@ def main():
             # they also map on 16 KB page devices)
             is_so = info.filename.startswith("lib/") and info.filename.endswith(".so")
             zi.compress_type = info.compress_type
+            # files the game reads with random access (zip archives, weights) are stored: inside a compressed asset
+            # every seek decompresses from the start again (GFData once took minutes on a phone to unpack the zip)
+            if info.filename.startswith("assets/") and info.filename.endswith((".zip", ".bin")):
+                zi.compress_type = zipfile.ZIP_STORED
             zi.external_attr = info.external_attr
             if zi.compress_type == zipfile.ZIP_STORED:
                 align = 16384 if is_so else 4

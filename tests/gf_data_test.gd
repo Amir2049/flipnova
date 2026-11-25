@@ -14,7 +14,10 @@ func _initialize():
 		quit(1 if fails > 0 else 0)
 		return
 	var dir := OS.get_user_data_dir() + "/gfdata_test"
+	var t0 := Time.get_ticks_msec()
 	check(GFData.prepare(dir), "unpacks and is complete")
+	print("     (unpacked in %d ms)" % (Time.get_ticks_msec() - t0))
+	check(not FileAccess.file_exists(dir.get_base_dir() + "/gfdata_unpack.zip"), "the one-pass copy of the zip is removed")
 	check(GFData.unpack(dir) == 0, "a second start does not unpack again")
 	GFData._ready_dir = ""
 	# a file the engine needs disappears (cleaner app, earlier unpack cut off): must unpack again
