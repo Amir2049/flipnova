@@ -6,3 +6,8 @@ dist/FLIPNOVA-Windows.zip
 *.keystore
 keystore.properties
 *.keystore.properties
+
+# b66: build outputs sent to the owner directly (the Play bundle is kept in dist/google-play/)
+dist/Flippo-b66.apk
+dist/Flippo-google-play.zip
+dist/Flippo.aab
