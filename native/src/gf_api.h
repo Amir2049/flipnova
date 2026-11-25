@@ -88,7 +88,8 @@ void gf_frame();
 void gf_state(GfState* out);
 void gf_input(float dx, float dy, unsigned buttons);  // the human's stick (engine axes, length 0..1) and held buttons
 void gf_stop();
-void gf_substitute(int team, int player);           // a fresh player comes on: tiredness back to none
+void gf_substitute(int team, int player);
+void gf_set_tactics(int team, float mentality, float width, float pressing);  // team instructions, each -1..1 (0 = engine's own)           // a fresh player comes on: tiredness back to none
 bool gf_running();
 
 }  // namespace afc

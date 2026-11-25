@@ -4,6 +4,7 @@
 
 int afc_shot_style = 0;
 extern float afc_pitch_wetness;   // ball.cpp (patch)   // read by the engine's HumanController when it builds a shot (patch)
+extern float afc_tactics[2][3];      // teamAIcontroller.cpp (patch): team instructions
 
 #include <cmath>
 #include <cstdio>
@@ -80,6 +81,8 @@ bool gf_start(const GfSetup& s) {
   }
   crash_stage("setting up the match (teams, formations)");
   afc_pitch_wetness = s.wetness;
+  for (int t = 0; t < 2; t++)
+    for (int k = 0; k < 3; k++) afc_tactics[t][k] = 0.f;   // every match starts on the engine's own tactics
   SetGame(g_env);
   auto cfg = ScenarioConfig::make();
   for (int i = 0; i < 11; i++) {
@@ -148,6 +151,14 @@ bool gf_brain_on() { return g_tz_on; }
 int gf_brain_last(int i) { return i >= 0 && i < 11 ? g_tz_last[i] : -1; }
 
 bool gf_running() { return g_env != nullptr; }
+
+void gf_set_tactics(int team, float mentality, float width, float pressing) {
+  if (team < 0 || team > 1) return;
+  auto c = [](float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); };
+  afc_tactics[team][0] = c(mentality);
+  afc_tactics[team][1] = c(width);
+  afc_tactics[team][2] = c(pressing);
+}
 
 void gf_substitute(int team, int player) {
   if (!g_env || team < 0 || team > 1) return;

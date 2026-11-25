@@ -79,6 +79,8 @@ var cele_fov := 22.0
 var last_mode := -1
 var full_time := false
 var half_done := false
+var added := -1                   # stoppage minutes for the second half, announced at 89' (League-Soccer's rule)
+var goals_at_half := 0
 var reader: InputReader
 var ui: CanvasLayer
 var score_lbl: Label
@@ -292,6 +294,10 @@ func start(config: Dictionary) -> void:
 	engine.start(dir, eo)
 	stride = engine.stride()
 	_pull()
+	# the other manager has his own way: a mild style per club (the same club, the same style)
+	var opp := int(config.get("away", 1)) if human_team != 1 else int(config.get("home", 0))
+	cpu_tactic = Vector3([-0.5, 0.0, 0.5][opp % 3], [0.0, 0.6, -0.4][(opp / 3) % 3], [0.0, 0.5, -0.5][(opp / 2) % 3])
+	_apply_tactics()
 	brain = bool(st.get("brain", false))
 	level_lbl.text = LEVELS[level] + ("  ·  TiZero AI" if brain else "")
 	if is_inside_tree():
@@ -1058,7 +1064,23 @@ func _update_hud(dt: float) -> void:
 	var g: Vector2i = st["goals"]
 	score_lbl.text = "%s  %d - %d  %s" % [team_defs[0]["short"], g.x, g.y, team_defs[1]["short"]]
 	var minute: float = st["minute"]
-	clock_lbl.text = "%02d:%02d" % [int(minute), int(fmod(minute * 60.0, 60.0))]
+	if minute >= 90.0:
+		clock_lbl.text = "90+%d'" % (int(minute - 90.0) + 1)
+	else:
+		clock_lbl.text = "%02d:%02d" % [int(minute), int(fmod(minute * 60.0, 60.0))]
+	# added time (from League-Soccer, Apache-2.0): a minute, one for the end of normal time, one per goal in the half
+	if added < 0 and minute >= 89.0:
+		added = clampi(2 + g.x + g.y - goals_at_half, 1, 5)
+		_banner("ADDED TIME  +%d" % added, 2.5)
+	# the afternoon goes on: over a day match the sun sinks and warms, the shadows grow long (2.44)
+	if not night and not rain and sun != null:
+		var tday := clampf(minute / 95.0, 0.0, 1.0)
+		sun.rotation_degrees.x = lerpf(-38.0, -20.0, tday)
+		sun.light_color = Color(1.0, 0.93, 0.82).lerp(Color(1.0, 0.8, 0.6), tday)
+	# the CPU manager looks at the score again every half minute or so
+	if int(minute * 2.0) != tac_tick:
+		tac_tick = int(minute * 2.0)
+		_apply_tactics()
 	if g != last_goals:
 		var t := 0 if g.x > last_goals.x else 1
 		last_goals = g
@@ -1115,11 +1137,14 @@ func _update_hud(dt: float) -> void:
 	# half time: the engine restarts for the second half at 45:00 - stop there for the team talk
 	if not half_done and minute >= 45.0 and minute < 60.0 and (not bool(st["in_play"]) or mode == 1):
 		half_done = true
+		var hg: Vector2i = st["goals"]
+		goals_at_half = hg.x + hg.y
 		if menus:
 			_half_time()
 		else:
 			_banner("HALF TIME", 2.0)
-	if not full_time and minute >= 90.0 and (not bool(st["in_play"]) or minute >= 93.0):
+	var end_at := 90.0 + float(maxi(added, 0))
+	if not full_time and minute >= end_at and (not bool(st["in_play"]) or minute >= end_at + 1.0):
 		_full_time()
 
 
@@ -1168,6 +1193,72 @@ func _overlay(title: String, w: float = 820.0, h: float = 600.0) -> VBoxContaine
 	return vb
 
 
+## Team instructions (the engine's team AI, patch): mentality moves the block up or down the pitch, width spreads or
+## squeezes it, pressing sets how far from the ball a man still goes to hunt it.
+const TAC_MENTALITY := ["Very defensive", "Defensive", "Balanced", "Attacking", "All-out attack"]
+const TAC_MENTALITY_V := [-1.0, -0.5, 0.0, 0.5, 1.0]
+const TAC_WIDTH := ["Narrow", "Normal", "Wide"]
+const TAC_WIDTH_V := [-0.8, 0.0, 0.8]
+const TAC_PRESS := ["Low block", "Normal", "High press"]
+const TAC_PRESS_V := [-1.0, 0.0, 1.0]
+var cpu_tactic := Vector3.ZERO
+var tac_tick := -1
+
+
+func _human_tactic() -> Vector3:
+	return Vector3(TAC_MENTALITY_V[clampi(int(Profile.get_s("tac_mentality")), 0, 4)],
+		TAC_WIDTH_V[clampi(int(Profile.get_s("tac_width")), 0, 2)], TAC_PRESS_V[clampi(int(Profile.get_s("tac_press")), 0, 2)])
+
+
+func _apply_tactics() -> void:
+	if engine == null or not engine.has_method("set_tactics"):
+		return
+	for t in 2:
+		var v := cpu_tactic
+		if t == human_team:
+			v = _human_tactic()
+		elif t == 0 and human_team < 0:
+			v = Vector3.ZERO
+		# the CPU manager reacts to the score late on: chasing the game he goes for it, holding a lead he sits deep
+		if t != human_team and st.has("goals"):
+			var g: Vector2i = st["goals"]
+			var diff := (g.x - g.y) * (1 if t == 0 else -1)
+			var mnt: float = st.get("minute", 0.0)
+			if mnt >= 70.0 and diff < 0:
+				v = Vector3(1.0, 0.5, 1.0)
+			elif mnt >= 80.0 and diff > 0:
+				v = Vector3(-0.8, -0.3, -0.5)
+		engine.set_tactics(t, v.x, v.y, v.z)
+
+
+func _tactics_page(back: Callable) -> void:
+	var vb := _overlay("TACTICS", 980, 560)
+	vb.add_child(UI.label("Team instructions for %s - they work at once." % str(team_defs[human_team]["name"]), 17, UI.MUTED))
+	var row := UI.hbox(20)
+	vb.add_child(row)
+	var col := UI.vbox(8)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(col)
+	var board := TacticsBoard.new()
+	var form: String = str(team_defs[human_team].get("formation", "4-3-3"))
+	var kit := Color(0.85, 0.1, 0.2)
+	var kd = team_defs[human_team].get("kit", {})
+	if kd is Dictionary and kd.has("shirt"):
+		kit = KitPainter.hex(kd["shirt"])
+	board.setup(GameData.FORMATIONS.get(form, GameData.FORMATIONS["4-3-3"]), kit, _human_tactic())
+	row.add_child(board)
+	var changed := func(key: String, i: int) -> void:
+		Profile.set_s(key, i)
+		_apply_tactics()
+		board.set_tactic(_human_tactic())
+	col.add_child(UI.choice_row("Mentality", TAC_MENTALITY, clampi(int(Profile.get_s("tac_mentality")), 0, 4), func(i: int): changed.call("tac_mentality", i)))
+	col.add_child(UI.choice_row("Width", TAC_WIDTH, clampi(int(Profile.get_s("tac_width")), 0, 2), func(i: int): changed.call("tac_width", i)))
+	col.add_child(UI.choice_row("Pressing", TAC_PRESS, clampi(int(Profile.get_s("tac_press")), 0, 2), func(i: int): changed.call("tac_press", i)))
+	vb.add_child(UI.label("The other manager changes his too: chasing the game late on he attacks and presses,\nholding a lead he sits deep.", 16, UI.MUTED))
+	vb.add_child(UI.spacer(0, 0, true))
+	vb.add_child(UI.button("BACK", back, Vector2(220, 56)))
+
+
 func _pause_menu() -> void:
 	var vb := _overlay("PAUSED")
 	var row := UI.hbox(24)
@@ -1178,6 +1269,7 @@ func _pause_menu() -> void:
 	col.add_child(UI.button("RESUME", func(): set_paused(false), Vector2(300, 60), "accent", 24))
 	col.add_child(UI.button("MATCH FACTS", func(): _facts_page(_pause_menu), Vector2(300, 56)))
 	if human_team >= 0:
+		col.add_child(UI.button("TACTICS", func(): _tactics_page(_pause_menu), Vector2(300, 56)))
 		col.add_child(UI.button("SUBSTITUTIONS", func(): _subs_page(_pause_menu), Vector2(300, 56)))
 	col.add_child(UI.button("CAMERA:  " + CameraRig.NAMES.get(cam.mode, cam.mode), func():
 		cam.cycle()
@@ -1279,6 +1371,7 @@ func _half_menu() -> void:
 		paused = false
 		_close_overlay(), Vector2(280, 60), "accent", 22))
 	if human_team >= 0:
+		row.add_child(UI.button("TACTICS", func(): _tactics_page(_half_menu), Vector2(200, 60)))
 		row.add_child(UI.button("SUBSTITUTIONS", func(): _subs_page(_half_menu), Vector2(260, 60)))
 	vb.add_child(row)
 

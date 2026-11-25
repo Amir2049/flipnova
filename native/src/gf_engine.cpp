@@ -15,6 +15,7 @@ void GFEngine::_bind_methods() {
   ClassDB::bind_method(D_METHOD("poses"), &GFEngine::poses);
   ClassDB::bind_method(D_METHOD("stride"), &GFEngine::stride);
   ClassDB::bind_method(D_METHOD("substitute", "team", "player"), &GFEngine::substitute);
+  ClassDB::bind_method(D_METHOD("set_tactics", "team", "mentality", "width", "pressing"), &GFEngine::set_tactics);
 }
 
 bool GFEngine::start(const String& data_dir, const Dictionary& o) {
@@ -47,6 +48,10 @@ void GFEngine::set_crash_file(const String& path) { afc::crash_guard_install(pat
 void GFEngine::frames(int n) {
   for (int i = 0; i < n; i++) afc::gf_frame();
   fresh_ = false;
+}
+
+void GFEngine::set_tactics(int team, float mentality, float width, float pressing) {
+  afc::gf_set_tactics(team, mentality, width, pressing);
 }
 
 void GFEngine::substitute(int team, int player) {

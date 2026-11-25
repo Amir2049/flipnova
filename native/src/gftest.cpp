@@ -148,6 +148,15 @@ int main(int argc, char** argv) {
     return 2;
   }
   printf("right team: %s\n", afc::gf_brain_on() ? "TiZero" : "built-in AI");
+  // GF_TAC_L / GF_TAC_R="mentality,width,pressing" (each -1..1): team instructions; TAC prints the left team's shape
+  for (int t = 0; t < 2; t++) {
+    const char* e = getenv(t == 0 ? "GF_TAC_L" : "GF_TAC_R");
+    float m = 0.f, w = 0.f, pr = 0.f;
+    if (e && sscanf(e, "%f,%f,%f", &m, &w, &pr) >= 1) afc::gf_set_tactics(t, m, w, pr);
+  }
+  double tac_depth = 0.0, tac_width = 0.0;
+  long tac_n = 0;
+  int regains_left = 0;
   auto t1 = std::chrono::steady_clock::now();
   printf("started in %.0f ms\n", std::chrono::duration<double, std::milli>(t1 - t0).count());
   afc::GfState st;
@@ -278,6 +287,8 @@ int main(int argc, char** argv) {
         }
       }
       hold = mine ? hold + 1 : 0;
+      // GF_SHOT_NEAR: dribble at the goal and only shoot inside ~20 m (the stick straight at goal: the aim is the engine's)
+      if (getenv("GF_SHOT_NEAR") && mine && ps.ball[0] < 34.f && hold >= 40) hold = 39;
       if (hold == 40 && tap_at < 0) {
         tap_at = f;
         tap_left = tap_frames;
@@ -297,11 +308,23 @@ int main(int argc, char** argv) {
       afc::gf_state(&ms);
       if (ms.ball_owner_team >= 0 && ms.ball_owner_team != last_owner) {
         if (last_owner >= 0) poss_changes++;
+        if (last_owner >= 0 && ms.ball_owner_team == 0) regains_left++;
         last_owner = ms.ball_owner_team;
       }
       if (ms.game_mode != prev_mode && ms.game_mode > 0 && ms.game_mode < 7) restarts[ms.game_mode]++;
       prev_mode = ms.game_mode;
       if (ms.game_mode == 0) in_play++;
+      if (ms.game_mode == 0 && f % 10 == 0) {
+        // the left team's shape: outfield distance up the pitch from its own keeper, and spread across it
+        float cx = 0.f, cy = 0.f;
+        for (int i = 1; i < 11; i++) { cx += ms.players[i].pos[0]; cy += ms.players[i].pos[1]; }
+        cx /= 10.f; cy /= 10.f;
+        float w = 0.f;
+        for (int i = 1; i < 11; i++) w += std::fabs(ms.players[i].pos[1] - cy);
+        tac_depth += std::fabs(cx - ms.players[0].pos[0]);
+        tac_width += w / 10.f;
+        tac_n++;
+      }
       ks.feed(ms);
     }
     if (df && f % 50 == 0) {
@@ -335,6 +358,7 @@ int main(int argc, char** argv) {
   printf("%d frames in %.0f ms (%.3f ms per frame, %.1fx real time)\n", frames, ms, ms / frames, frames * 10.0 / ms);
   afc::gf_state(&st);
   printf("FINAL %d-%d\n", st.goals[0], st.goals[1]);
+  if (tac_n) printf("TAC left depth %.2f m  width %.2f m  regains %d\n", tac_depth / tac_n, tac_width / tac_n, regains_left);
   printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
   if (feel_test)

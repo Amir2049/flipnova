@@ -13,6 +13,28 @@
  };
  
  class IController;
+--- a/src/onthepitch/AIsupport/AIfunctions.cpp
++++ b/src/onthepitch/AIsupport/AIfunctions.cpp
+@@ -1187,6 +1187,19 @@
+ 
+   goalPos.coords[1] =
+       sideFactor * goalHalfWidth * 0.9f * player->GetTeam()->GetDynamicSide();
++  // zocram4cc c9c0cfa: a shot nobody steers to a side goes where the keeper is not. Aimed "at the goal" the side
++  // factor is ~0, so every such shot went down the middle, at the keeper. Finishing (and calm) decides how near the
++  // post he dares: the far post inset 0.2 m at 0.99, 1.6 m at 0.6.
++  if (autoDirectionBias > 0.5f && fabs(sideFactor) < 0.25f) {
++    Player *keeper = player->GetTeam()->GetMatch()->GetTeam(abs(player->GetTeam()->GetID() - 1))->GetGoalie();
++    if (keeper) {
++      float shooting = clamp(player->GetStat(technical_shot) * 0.7f + player->GetStat(mental_calmness) * 0.3f, 0.0f, 1.0f);
++      float open = goalHalfWidth - (0.2f + (1.0f - shooting) * 3.5f);
++      if (open > 0.0f) {
++        goalPos.coords[1] = keeper->GetPosition().coords[1] >= 0.0f ? -open : open;
++      }
++    }
++  }
+   Vector3 autoDirection = (goalPos - (player->GetPosition() + player->GetMovement() * 0.12f)).GetNormalized(0);
+ 
+   return (manualDirection * (1.0f - autoDirectionBias) + autoDirection * autoDirectionBias).GetNormalized(inputDirection);
 --- a/src/onthepitch/ball.cpp
 +++ b/src/onthepitch/ball.cpp
 @@ -30,7 +30,8 @@
@@ -55,8 +77,21 @@
  #include "../../../main.hpp"
  
  #include "elizacontroller.hpp"
-@@ -344,8 +345,17 @@
-     if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000) {
+@@ -341,11 +342,29 @@
+            (!CastPlayer()->ExternalControllerActive() && CastPlayer()->ExternalController())) &&
+            CastPlayer()->GetFormationEntry().role != e_PlayerRole_GK) {
+     DO_VALIDATION;
+-    if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000) {
++    if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000 && !CastPlayer()->HasPossession() &&
++        match->GetBallRetainer() != player && match->GetBall()->GetMovement().GetLength() < 0.5f &&
++        (match->GetBall()->Predict(0) - player->GetPosition()).Get2D().GetLength() > 0.1f) {
++      // zocram4cc 287d868: movement first, decision second - beside a still ball he does not have, pass selection ran
++      // and the step onto the ball never did (stalls of 5-14 s). Step onto it.
++      Vector3 toBall = (match->GetBall()->Predict(0) - player->GetPosition()).Get2D();
++      rawInputDirection = toBall.GetNormalized(player->GetDirectionVec());
++      rawInputVelocityFloat = sprintVelocity;
++      extraHaste = true;
++    } else if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000) {
        DO_VALIDATION;
        GetOnTheBallCommands(commandQueue, rawInputDirection, rawInputVelocityFloat);
 +      extraHaste = false;
@@ -74,7 +109,7 @@
    }
  
    else if (match->IsInPlay() && !match->IsInSetPiece() &&
-@@ -364,7 +374,7 @@
+@@ -364,7 +383,7 @@
      if (!hasUniquePossession || possessionAmount < 3.4f) {
        DO_VALIDATION;
        bool onlyPickupAnims = false;
@@ -83,7 +118,17 @@
        _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
      }
  
-@@ -869,6 +879,7 @@
+@@ -423,6 +442,9 @@
+ 
+       float mindSet = AI_GetMindSet(CastPlayer()->GetDynamicFormationEntry().role);
+       float huntDistanceThreshold = 10.0f + (1.0f - mindSet) * 10.0f; // 10 + .. * 10
++      // AFC team instruction "pressing": how far from the ball a man still goes to hunt it (low block .. high press)
++      extern float afc_tactics[2][3];
++      huntDistanceThreshold *= 1.0f + 0.45f * afc_tactics[team->GetID() == 0 ? 0 : 1][2];
+       huntDistanceThreshold *= 0.5f * CastPlayer()->GetFatigueFactorInv() +
+                                0.5f * (1.0f - NormalizedClamp(CastPlayer()->GetAverageVelocity(10), idleVelocity, sprintVelocity));
+       huntDistanceThreshold *=
+@@ -869,6 +891,7 @@
      float tacticalDiffRating = 0.0f;
      float passRating = 0.0f;
      float proximityRating = 0.0f;
@@ -91,7 +136,7 @@
      e_FunctionType passType;
    };
  
-@@ -897,12 +908,19 @@
+@@ -897,12 +920,19 @@
        mateRating.player = mates[i];
        mateRating.tacticalRating = mateTacticalRating;
  
@@ -113,7 +158,7 @@
          float passingOddsShort = _GetPassingOdds(mates[i], e_FunctionType_ShortPass, opponentPlayerImages);
          float passingOddsLong  = _GetPassingOdds(mates[i], e_FunctionType_LongPass,  opponentPlayerImages);
          float passingOddsHigh  = _GetPassingOdds(mates[i], e_FunctionType_HighPass,  opponentPlayerImages);
-@@ -921,7 +939,7 @@
+@@ -921,7 +951,7 @@
          }
  
          float totalRating = mateRating.tacticalDiffRating * tacticalDiffWeight +
@@ -207,7 +252,26 @@
  #include "goalie_default.hpp"
  
  #include "../../../../../base/geometry/triangle.hpp"
-@@ -85,6 +86,7 @@
+@@ -29,7 +30,17 @@
+ 
+   // base position
+   float lineDistance = 10.0f; // default distance keeper stays in front of goal line
+-  Vector3 ballPos = mentalImage->GetBallPrediction(600 + static_cast<Player*>(controller->GetPlayer())->GetTimeNeededToGetToBall_ms() * 0.2f).Get2D();
++  // zocram4cc 2f005a8: the 600 ms read can put a fast shot already past the goal line, where the angle to the posts
++  // has collapsed and the keeper stands central whatever the aim. Stop the read 10 % short of the line.
++  unsigned int readAhead_ms = 600;
++  {
++    Vector3 ballNow = mentalImage->GetBallPrediction(0).Get2D();
++    float lineX = pitchHalfW * controller->GetTeam()->GetDynamicSide();
++    float toLine = std::fabs(lineX - ballNow.coords[0]);
++    float vx = std::fabs(controller->GetMatch()->GetBall()->GetMovement().coords[0]);
++    if (vx > 0.1f) readAhead_ms = std::min(readAhead_ms, (unsigned int)(toLine / vx * 1000.0f * 0.9f));
++  }
++  Vector3 ballPos = mentalImage->GetBallPrediction(readAhead_ms + static_cast<Player*>(controller->GetPlayer())->GetTimeNeededToGetToBall_ms() * 0.2f).Get2D();
+   Vector3 targetPos = Vector3(
+       (pitchHalfW - lineDistance) * controller->GetTeam()->GetDynamicSide(), 0,
+       0);
+@@ -85,6 +96,7 @@
        float awayFromGoalOffset_m = 0.7f; // meters away from goal line (over the ballToGoal line, not straight forward)
        float awayFromGoalBias = 0.3f; // factor between goal and ball
        awayFromGoalBias *= NormalizedClamp(controller->GetFadingTeamPossessionAmount(), 1.0f, 1.5f);
@@ -215,7 +279,7 @@
  
  
        // when opponent comes rushing in and team mates are too far away to help, come out to 'reduce goal size'
-@@ -93,6 +95,7 @@
+@@ -93,6 +105,7 @@
          DO_VALIDATION;
  
          Player *opp = controller->GetOppTeam()->GetDesignatedTeamPossessionPlayer();
@@ -223,7 +287,7 @@
          Vector3 oppPos = opp->GetPosition() + opp->GetMovement() * 0.32f;
  
          // if opp isn't in ball control, don't use ball pos but opp pos
-@@ -244,7 +247,9 @@
+@@ -244,7 +257,9 @@
  
    int side = controller->GetTeam()->GetDynamicSide();
  
@@ -234,7 +298,7 @@
    if (mentalImage->GetBallPrediction(4000).coords[0] * side > pitchHalfW &&
        (controller->GetPlayer()->GetPosition() -
         mentalImage->GetBallPrediction(250))
-@@ -276,26 +281,28 @@
+@@ -276,26 +291,28 @@
          }
      */
  
@@ -357,6 +421,18 @@
      if (currentAnim.functionType == e_FunctionType_BallControl && command.desiredFunctionType == e_FunctionType_Trap) return false;
      if (currentAnim.functionType == e_FunctionType_Trap && command.desiredFunctionType == e_FunctionType_Trap && (!allowTrapReQueue || currentAnim.frameNum + minRemainingTrapReQueueFrames > currentAnim.touchFrame || reQueueDelayFrames > 0)) return false;
      if (currentAnim.functionType == e_FunctionType_Trap && command.desiredFunctionType == e_FunctionType_BallControl && (!allowTrapReQueue || currentAnim.frameNum + minRemainingTrapReQueueFrames > currentAnim.touchFrame || reQueueDelayFrames > 0)) return false;
+@@ -2292,7 +2310,10 @@
+   resultTouch = resultTouch * (1.0f - ballMovementFactor) +
+                 match->GetBall()->GetMovement() * ballMovementFactor;
+ 
+-  resultTouch.coords[2] += difficultyFactor * 5.0f * boostrandom(0.2f, 1.0f);
++  // zocram4cc 092248a: a misplayed GROUND pass is misdirected or underhit, not chipped - up to 5 m/s of loft made
++  // balls the receiver (1 m height gate) could never control. Aerial balls keep the full loft.
++  const bool groundPass = functionType == e_FunctionType_ShortPass || functionType == e_FunctionType_LongPass;
++  resultTouch.coords[2] += difficultyFactor * (groundPass ? 1.25f : 5.0f) * boostrandom(0.2f, 1.0f);
+ 
+   return resultTouch;
+ }
 --- a/src/onthepitch/player/humanoid/humanoid_utils.cpp
 +++ b/src/onthepitch/player/humanoid/humanoid_utils.cpp
 @@ -15,6 +15,7 @@
@@ -572,7 +648,32 @@
            AI_GetClosestPlayers(team->GetMatch()->GetTeam(abs(team->GetID() - 1)), spot, false, opponents, 4);
            float oppDensityRating = 1.0f;
            for (unsigned int i = 0; i < opponents.size(); i++) {
-@@ -706,6 +733,12 @@
+@@ -318,6 +345,9 @@
+   }
+ }
+ 
++// AFC team instructions, per engine team id: [mentality, width, pressing], each -1..1 (0 = the engine's own)
++float afc_tactics[2][3] = {{0.f, 0.f, 0.f}, {0.f, 0.f, 0.f}};
++
+ Vector3 TeamAIController::GetAdaptedFormationPosition(
+     Player *player, bool useDynamicFormationPosition) {
+   DO_VALIDATION;
+@@ -469,6 +499,14 @@
+ 
+   Vector3 desiredPos = AI_GetAdaptedFormationPosition(team->GetMatch(), player, backXBound, frontXBound, lowYBound, highYBound, xFocus, xFocusStrength, yFocus, yFocusStrength, microFocus, microFocusStrength, midfieldFocus, midfieldFocusStrength, useDynamicFormationPosition);
+ 
++  // AFC team instructions: mentality pushes the whole block up (or drops it) by up to 7 m, width spreads or
++  // squeezes the shape by up to 22 % - the keeper stays home
++  if (role != e_PlayerRole_GK) {
++    const float *afc = afc_tactics[team->GetID() == 0 ? 0 : 1];
++    desiredPos.coords[0] += -team->GetDynamicSide() * afc[0] * 7.0f;
++    desiredPos.coords[1] *= 1.0f + afc[1] * 0.22f;
++  }
++
+   desiredPos.coords[0] = clamp(desiredPos.coords[0], -pitchHalfW, pitchHalfW);
+   desiredPos.coords[1] = clamp(desiredPos.coords[1], -pitchHalfH, pitchHalfH);
+ 
+@@ -706,6 +744,12 @@
      if (players.size() == 0) break;
    }
    //printf("\n");
@@ -585,7 +686,7 @@
  }
  
  void TeamAIController::ApplyOffsideTrap(Vector3 &position) const {
-@@ -1200,6 +1233,35 @@
+@@ -1200,6 +1244,35 @@
    }
  }
  
@@ -621,6 +722,24 @@
  void TeamAIController::ApplyKeeperRush() {
    DO_VALIDATION;
    endApplyKeeperRush_ms = match->GetActualTime_ms() + 300;
+@@ -1277,6 +1350,17 @@
+     }
+     iter++;
+   }
++
++  // AFC team instructions: mentality moves the whole block (how high the line holds, how far up it pushes, how much
++  // it attacks the flanks), width spreads or tightens the shape in and out of possession
++  const float *afc = afc_tactics[team->GetID() == 0 ? 0 : 1];
++  offensivenessBias = clamp(offensivenessBias + afc[0] * 0.3f, 0.0f, 1.0f);
++  const char *depth[2] = {"position_offense_depth_factor", "position_defense_depth_factor"};
++  const char *width[2] = {"position_offense_width_factor", "position_defense_width_factor"};
++  for (int i = 0; i < 2; i++) {
++    liveTeamTactics.Set(depth[i], clamp(liveTeamTactics.GetReal(depth[i], 0.8f) + afc[0] * 0.1f, 0.0f, 1.0f));
++    liveTeamTactics.Set(width[i], clamp(liveTeamTactics.GetReal(width[i], 0.85f) + afc[1] * 0.14f, 0.0f, 1.0f));
++  }
+ }
+ 
+ void TeamAIController::Reset() {
 --- a/src/onthepitch/teamAIcontroller.hpp
 +++ b/src/onthepitch/teamAIcontroller.hpp
 @@ -46,6 +46,14 @@

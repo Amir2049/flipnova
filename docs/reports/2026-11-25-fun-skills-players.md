@@ -62,6 +62,22 @@ pass = its fake shot). A move straight after another runs 30 % slower (the FC Mo
 - Not taken: zocram4cc's "catch by pace" (our retain code needs the catch animation; without it the ball would go
   in), its shot scatter (our engine already scatters, and long shots were cut in 2.42).
 
+## 2.44: more foundations, tactics, stoppage time
+
+- zocram4cc: the keeper's read of a shot stops 10 % short of the goal line (from past it he stood central whatever
+  the aim); a ball-goer beside a still ball steps onto it before choosing a pass; a misplayed ground pass skids
+  along the floor instead of lofting (8 matches: possession lost 916 -> 884); a shot aimed straight at goal goes to
+  the corner away from the keeper (the human's shots inside 20 m: on target 52 % -> 57 %). The CPU already picks its
+  corner from three lanes, so this changes only the human's.
+- Tried and dropped: zocram4cc's receiver-pressure term for passes (possession lost 884 -> 946).
+- Team instructions (pause and half-time menus): mentality, width, pressing, with a board whose dots move to the new
+  shape. gftest GF_TAC_L, 4 matches each: all-out attack + high press holds the block 2.6 m further up and wins the
+  ball back 106 times (normal 102, low block 90); wide 12.8 m across, narrow 7.3 m (normal 10.0 m). The CPU has a
+  mild style per club, attacks and presses when losing after 70', sits deep when winning after 80'.
+- Stoppage time (League-Soccer): announced at 89' (a minute, one for the end, one per goal in the half, 1-5), the
+  clock reads 90+1'.
+- Day matches: the sun sinks and warms over the 90 minutes.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.
