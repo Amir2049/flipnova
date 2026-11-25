@@ -672,8 +672,8 @@ func _club_hub() -> void:
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(left)
 	var club := _my_club()
-	var sq := _card("SQUADS", "Line-ups, formations, names", func(): _go(_squads), KitPainter.hex(GameData.CLUBS[club]["kit"]["shirt"]),
-		UI.crest(club, 110), true, "Edit squads  ▶", GameData.club_formation(club, Profile.squads()))
+	var sq := _card("SQUADS", "Plays %s. Line-ups, formations, names" % GameData.club_formation(club, Profile.squads()), func(): _go(_squads),
+		KitPainter.hex(GameData.CLUBS[club]["kit"]["shirt"]), UI.crest(club, 110), true, "Edit squads  ▶")
 	left.add_child(sq)
 	var low := UI.hbox(14)
 	low.custom_minimum_size = Vector2(0, 150)
