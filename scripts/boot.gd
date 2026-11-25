@@ -8,12 +8,23 @@ const RUNNING := "user://running.flag"     # there while the game runs; gone aft
 const NATIVE := "res://native/afcgf.gdextension"
 const NATIVE_STATE := "user://native_state.cfg"
 static var native_note := ""               # why the match engine is off, for the title screen
+static var safe_mode := false              # the last start never reached the title: start without the heavy parts
+static var safe_note := ""                 # where that start stopped
+## The steps of a start, in order: a previous run whose last step is one of these never got to the title.
+const START_STEPS := ["starting", "loading the engine library", "library loaded", "loading the game files",
+	"game files loaded", "unpacking the engine data", "engine data ready", "opening the menus"]
 
 var status: Label
+var step_lbl: Label
+var t0 := 0
 
 
 func _ready() -> void:
-	_load_native()
+	t0 = Time.get_ticks_msec()
+	_check_last_start()
+	step("starting")
+	if not safe_mode:
+		_load_native()
 	var bg := ColorRect.new()
 	bg.color = Color(0.03, 0.05, 0.1)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -27,7 +38,7 @@ func _ready() -> void:
 	var logo := Label.new()
 	logo.text = "AFC"
 	logo.add_theme_font_size_override("font_size", 110)
-	logo.add_theme_color_override("font_color", Color(0.78, 1.0, 0.24))
+	logo.add_theme_color_override("font_color", Color("f3f5f2"))
 	logo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(logo)
 	status = Label.new()
@@ -35,6 +46,11 @@ func _ready() -> void:
 	status.add_theme_font_size_override("font_size", 24)
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(status)
+	step_lbl = Label.new()
+	step_lbl.add_theme_font_size_override("font_size", 16)
+	step_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
+	step_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(step_lbl)
 	var ver := Label.new()
 	ver.text = "v" + str(ProjectSettings.get_setting("application/config/version", "2.2")) + \
 		("   match engine ON" if ClassDB.class_exists("GFEngine") else "   match engine OFF")
@@ -120,12 +136,48 @@ const NATIVE_TRACE := "user://native_trace.txt"     # crash reports written by t
 const NATIVE_TRACE_SEEN := "user://native_trace_seen.txt"
 
 
-## Note what is about to happen with the engine (flushed to disk: it must survive a crash right after).
+## Note what is about to happen (flushed to disk: it must survive a crash or a hang right after).
 static func step(what: String) -> void:
 	var f := FileAccess.open(NATIVE_STEP, FileAccess.WRITE)
 	if f:
 		f.store_string("%s  (%s)" % [what, Time.get_datetime_string_from_system()])
 		f.flush()
+	last_step = what
+
+
+static var last_step := ""
+
+
+func _process(_dt: float) -> void:
+	if step_lbl:
+		step_lbl.text = "%s  ·  %d s%s" % [last_step, (Time.get_ticks_msec() - t0) / 1000, "  ·  safe mode" if safe_mode else ""]
+
+
+## The previous start never reached the title (it hung or died on a start step): this version starts in safe mode
+## (no native engine, no 3D player, no animated stage) until the player asks for the full game again.
+static func _check_last_start() -> void:
+	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
+	var cfg := ConfigFile.new()
+	cfg.load(NATIVE_STATE)
+	var prev := FileAccess.get_file_as_string(NATIVE_STEP).strip_edges() if FileAccess.file_exists(NATIVE_STEP) else ""
+	var name := prev.split("  (")[0] if prev != "" else ""
+	if name in START_STEPS:
+		cfg.set_value("safe", ver, prev)
+		cfg.save(NATIVE_STATE)
+	var s := str(cfg.get_value("safe", ver, ""))
+	if s != "":
+		safe_mode = true
+		safe_note = s
+
+
+## The player asks for the full game again (title, safe mode panel).
+static func leave_safe_mode() -> void:
+	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
+	var cfg := ConfigFile.new()
+	cfg.load(NATIVE_STATE)
+	cfg.set_value("safe", ver, "")
+	cfg.save(NATIVE_STATE)
+	step("title shown")
 
 
 ## From now on the engine writes its own crash reports.
@@ -204,6 +256,8 @@ static func native_report() -> String:
 	lines.append("Version %s   %s %s   %s" % [ver, OS.get_name(), OS.get_version(), OS.get_model_name()])
 	lines.append("CPU: %s (%d cores)   arm64: %s" % [OS.get_processor_name(), OS.get_processor_count(), OS.has_feature("arm64")])
 	lines.append("Match engine: " + ("ON" if ClassDB.class_exists("GFEngine") else "OFF"))
+	if safe_mode:
+		lines.append("SAFE MODE: the previous start stopped at: " + safe_note)
 	var cfg := ConfigFile.new()
 	cfg.load(NATIVE_STATE)
 	if cfg.has_section("native"):
@@ -272,11 +326,13 @@ func _load_game() -> void:
 	# let this screen draw before the heavy loading starts, then load the game on a thread with a live percentage
 	await get_tree().process_frame
 	await get_tree().process_frame
+	step("loading the game files")
 	ResourceLoader.load_threaded_request(MAIN)
 	var progress := []
 	while ResourceLoader.load_threaded_get_status(MAIN, progress) == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
 		status.text = "Loading… %d%%" % int(100.0 * float(progress[0]) if progress.size() > 0 else 0.0)
 		await get_tree().process_frame
+	step("game files loaded")
 	# unpack the match engine's data here, behind "Loading", not when PLAY is pressed (first run / new version)
 	if EngineMatchView.available():
 		status.text = "Preparing the match engine…"
@@ -286,6 +342,9 @@ func _load_game() -> void:
 		GFData.prepare(EngineMatchView.data_dir())
 		step("engine data ready")
 	var scene := ResourceLoader.load_threaded_get(MAIN) as PackedScene
+	step("opening the menus")
+	# this screen stays up until the menus draw: if they never do, it says where it stopped
+	await get_tree().process_frame
 	if scene:
 		get_tree().change_scene_to_packed(scene)
 	else:

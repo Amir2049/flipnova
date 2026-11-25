@@ -63,11 +63,22 @@ func _ready() -> void:
 	rect = ColorRect.new()
 	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tex: Texture2D = load(ART)
+	if load("res://scripts/boot.gd").safe_mode:
+		# safe mode: the picture only (no shader, no particles)
+		var tr := TextureRect.new()
+		tr.texture = tex
+		tr.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(tr)
+		rect.queue_free()
+		return
 	mat = ShaderMaterial.new()
 	var sh := Shader.new()
 	sh.code = SHADER
 	mat.shader = sh
-	var tex: Texture2D = load(ART)
 	mat.set_shader_parameter("art", tex)
 	mat.set_shader_parameter("art_aspect", float(tex.get_width()) / float(tex.get_height()))
 	mat.set_shader_parameter("lamp", LAMP)
@@ -79,6 +90,8 @@ func _ready() -> void:
 
 
 func _fit() -> void:
+	if mat == null:
+		return
 	var s := rect.size
 	if s.y > 0.0:
 		mat.set_shader_parameter("rect_aspect", s.x / s.y)
@@ -126,6 +139,8 @@ func _dust() -> void:
 
 ## A camera-flash burst over the whole stand (a goal, a title landing).
 func burst() -> void:
+	if mat == null:
+		return
 	var f := ColorRect.new()
 	f.set_anchors_preset(Control.PRESET_FULL_RECT)
 	f.mouse_filter = Control.MOUSE_FILTER_IGNORE

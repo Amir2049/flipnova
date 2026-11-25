@@ -23,6 +23,9 @@ func _ready() -> void:
 	add_child(ui)
 	_start_demo()
 	_go(_title, false)
+	# the start is over once the title is on the screen (boot.gd: a start that never gets here means safe mode next)
+	await RenderingServer.frame_post_draw
+	load("res://scripts/boot.gd").step("title shown")
 
 
 # ------------------------------------------------------------------ navigation
@@ -333,7 +336,8 @@ func _title() -> void:
 	# the user's club in the hero shot
 	var hc: Dictionary = Profile.data["career"]
 	var club_i := int(hc.get("club", 0)) if not hc.is_empty() else 0
-	var hero := HeroPlayer.new().setup(GameData.CLUBS[club_i]["kit"], 10, Vector2i(380, 560), -28.0)
+	var safe: bool = load("res://scripts/boot.gd").safe_mode
+	var hero: Control = Control.new() if safe else HeroPlayer.new().setup(GameData.CLUBS[club_i]["kit"], 10, Vector2i(380, 560), -28.0)
 	hero.anchor_left = 1.0
 	hero.anchor_right = 1.0
 	hero.anchor_top = 0.5
@@ -345,7 +349,7 @@ func _title() -> void:
 	root.add_child(hero)
 	var ok := EngineMatchView.can_play()
 	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
-	if ok:
+	if ok and not safe:
 		var credit := UI.label("v%s   match engine on" % ver, 15, Color(1, 1, 1, 0.5))
 		credit.anchor_left = 1.0
 		credit.anchor_right = 1.0
@@ -361,7 +365,8 @@ func _title() -> void:
 		root.add_child(_engine_off_panel(ver))
 	_set_screen(root)
 	start.grab_focus()
-	Motion.sheen(start, 1.5)
+	if not safe:
+		Motion.sheen(start, 1.5)
 	_title_intro(name_l, bar, tag, start, hero)
 
 
@@ -380,12 +385,15 @@ func _engine_off_panel(ver: String) -> Control:
 	p.offset_bottom = -16
 	var vb := UI.vbox(8)
 	p.add_child(vb)
-	var why := UI.label("v%s: match engine off. %s" % [ver, EngineMatchView.load_error()], 17, UI.CHALK)
+	var boot = load("res://scripts/boot.gd")
+	var msg: String = "v%s: match engine off. %s" % [ver, EngineMatchView.load_error()]
+	if boot.safe_mode:
+		msg = "v%s safe mode: the last start stopped at \"%s\". Send the report, then try the full game." % [ver, boot.safe_note]
+	var why := UI.label(msg, 17, UI.CHALK)
 	why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	why.custom_minimum_size = Vector2(580, 0)
 	vb.add_child(why)
 	var row := UI.hbox(10)
-	var boot = load("res://scripts/boot.gd")
 	row.add_child(UI.button("Send report", func(): OS.shell_open(boot.report_url()), Vector2(170, 50), "accent", 18))
 	var copy: Button
 	copy = UI.button("Copy report", func():
@@ -393,7 +401,8 @@ func _engine_off_panel(ver: String) -> Control:
 		copy.text = "Copied", Vector2(170, 50), "normal", 18)
 	row.add_child(copy)
 	var again: Button
-	again = UI.button("Try again", func():
+	again = UI.button("Full game" if boot.safe_mode else "Try again", func():
+		boot.leave_safe_mode()
 		boot.retry_native()
 		again.text = "Close and reopen"
 		again.disabled = true, Vector2(170, 50), "ghost", 18)
@@ -576,7 +585,7 @@ func _card(title: String, sub: String, cb: Callable, col: Color, art: Control = 
 		go.add_child(UI.title(cta, 30, UI.CHALK))
 		vb.add_child(go)
 	b.add_child(vb)
-	if big:
+	if big and not load("res://scripts/boot.gd").safe_mode:
 		Motion.sheen(b, randf() * 5.0)
 	return b
 
@@ -610,6 +619,8 @@ func _field_art() -> Control:
 
 ## The hub screens: the plates on the left, one player standing on the right (the only live 3D in the menus).
 func _with_hero(row: HBoxContainer, kit: Dictionary, number: int, facing: float) -> void:
+	if load("res://scripts/boot.gd").safe_mode:
+		return
 	var hero := HeroPlayer.new().setup(kit, number, Vector2i(300, 540), facing)
 	hero.size_flags_vertical = Control.SIZE_SHRINK_END
 	row.add_child(hero)
