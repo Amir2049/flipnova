@@ -78,6 +78,23 @@ pass = its fake shot). A move straight after another runs 30 % slower (the FC Mo
   clock reads 90+1'.
 - Day matches: the sun sinks and warms over the 90 minutes.
 
+## 2.45: zocram4cc, the next batch
+
+zocram4cc/GameplayFootball is League-Soccer's fork taken much further; the repository holds no PES content (its
+docs/ASSETS.md: PES-derived packs are built from a local install and git-ignored), its code is Apache-2.0.
+Measured each, 8 matches CPU v CPU (possession lost / goals; 2.44: 884 / 31):
+
+- taken: a receiver kills up to half a hard ball's pace (885 / 27); DOGSO - a man brought down through on goal is a
+  red card, a yellow in the box for a genuine attempt at the ball; a panic clearance probes three lanes and takes
+  the safest; an interceptor half-way down a pass lane priced at the ball's real flight time (it was u squared);
+  passing and ball-control skill count for more (with the two before: 867 / 32); the man on an attacking run is
+  always a pass option, and a little preferred; close in the CPU places its shot (856 / 31); the CPU shoots only
+  when the chance (zocram4cc's xG: distance, angle, bodies in the lane) clears its bar (872 / 35)
+- tried, not taken: the touch radius 0.4 -> 0.8 m (985 lost), the wider gate for hard balls (948, goals 49)
+- not for our engine: the deferred card (our referee plays no advantage on cards), keeper "sharpness" (its own
+  keeper model), the net's cloth (our net is drawn in Godot); already ours: no offside from corners, throw-ins and
+  goal kicks, the offside restart where the offence was
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

@@ -358,6 +358,13 @@ int main(int argc, char** argv) {
   printf("%d frames in %.0f ms (%.3f ms per frame, %.1fx real time)\n", frames, ms, ms / frames, frames * 10.0 / ms);
   afc::gf_state(&st);
   printf("FINAL %d-%d\n", st.goals[0], st.goals[1]);
+  {
+    afc::GfState fs;
+    afc::gf_state(&fs);
+    int reds = 0, yellows = 0;
+    for (int i = 0; i < 22; i++) { reds += fs.players[i].active == 0; yellows += fs.players[i].card == 1; }
+    printf("CARDS red %d yellow %d\n", reds, yellows);
+  }
   if (tac_n) printf("TAC left depth %.2f m  width %.2f m  regains %d\n", tac_depth / tac_n, tac_width / tac_n, regains_left);
   printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
