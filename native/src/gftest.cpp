@@ -1,3 +1,4 @@
+#include <string>
 // AFC native check: plays a match with Google Research Football's engine, headless, and prints what happened.
 //   gftest <gfootball data dir> [physics frames] [tizero.bin [left difficulty [temperature [obs dump file]]]]
 // With tizero.bin the right team is played by TiZero against the engine's built-in AI on the left.
@@ -124,7 +125,13 @@ int main(int argc, char** argv) {
   // GF_TAP frames, default 12 = 120 ms like a thumb); prints the mean time from the tap to the ball leaving his feet
   const bool pass_test = getenv("GF_PASS_TEST") != nullptr;
   const int tap_frames = getenv("GF_TAP") ? atoi(getenv("GF_TAP")) : 12;
-  setup.human_players = pass_test ? 1 : 0;
+  // GF_FEEL_TEST: a scripted human who defends like a person (stick at the man on the ball, PRESSURE held, SWITCH
+  // when a team-mate is much nearer) and, on the ball, flips the stick back to time the turn. GF_FEEL_TEST=ai: the
+  // same numbers with the left team all CPU (the reference for the defending).
+  const char* feel_env = getenv("GF_FEEL_TEST");
+  const bool feel_test = feel_env != nullptr;
+  const bool feel_ai = feel_test && std::string(feel_env) == "ai";
+  setup.human_players = (pass_test || (feel_test && !feel_ai)) ? 1 : 0;
   setup.match_frames = frames;
   if (getenv("GF_SEED")) setup.seed = (unsigned)atoi(getenv("GF_SEED"));
   if (argc > 3) {
@@ -161,6 +168,12 @@ int main(int argc, char** argv) {
   // match numbers: possession changes, set pieces by kind, time in play
   int poss_changes = 0, last_owner = -1, prev_mode = 0, in_play = 0;
   KeeperStats ks;
+  // feel test
+  int spell_start = -1, spells = 0, switch_cd = 0;
+  long spell_frames = 0;
+  int turn_phase = 0, turn_t0 = 0, turns = 0, turn_face_n = 0, turn_vel_n = 0;
+  long turn_face_ms = 0, turn_vel_ms = 0;
+  float prevx = 0.f;
   int hold = 0, tap_left = 0, tap_at = -1, taps = 0, passes = 0;
   long pass_frames = 0;
   // GF_SHOT_STYLE=0/1/2: the tap is a SHOT (normal / chip / finesse) instead of a pass; prints the ball's launch
@@ -169,6 +182,65 @@ int main(int argc, char** argv) {
   int launches = 0;
   int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
   for (int f = 0; f < stop; f++) {
+    if (feel_test) {
+      afc::GfState ps;
+      afc::gf_state(&ps);
+      // the defending spells: from the right team winning the ball to the left team having it back
+      if (ps.game_mode == 0 && ps.ball_owner_team == 1 && spell_start < 0) spell_start = f;
+      if (spell_start >= 0 && (ps.ball_owner_team == 0 || ps.game_mode != 0)) {
+        if (ps.ball_owner_team == 0) { spells++; spell_frames += f - spell_start; }
+        spell_start = -1;
+      }
+      if (!feel_ai) {
+        int c = ps.controlled;
+        float dx = 0.f, dy = 0.f;
+        unsigned b = 0;
+        if (getenv("GF_PASSIVE_DEF") && ps.ball_owner_team == 1) {
+          // a player who leaves the defending to his team-mates: the stick at rest, no buttons
+        } else if (c >= 0 && ps.game_mode == 0 && ps.ball_owner_team == 1) {
+          const afc::GfPlayer& me = ps.players[c];
+          dx = ps.ball[0] - me.pos[0];
+          dy = ps.ball[1] - me.pos[1];
+          float d = std::sqrt(dx * dx + dy * dy);
+          b = afc::GF_PRESSURE | (d > 6.f ? afc::GF_SPRINT : 0u) | (getenv("GF_TEAM_PRESS") ? afc::GF_TEAM_PRESSURE : 0u);
+          float best = 1e9f;
+          for (int i = 1; i < 11; i++) {
+            float ex = ps.ball[0] - ps.players[i].pos[0], ey = ps.ball[1] - ps.players[i].pos[1];
+            best = std::min(best, std::sqrt(ex * ex + ey * ey));
+          }
+          if (!getenv("GF_NO_SWITCH") && switch_cd <= 0 && d > 8.f && d > best * 1.6f) { b |= afc::GF_SWITCH; switch_cd = 60; }
+          if (d > 0.01f) { dx /= d; dy /= d; }
+          turn_phase = 0;
+        } else if (c >= 0 && ps.game_mode == 0 && ps.ball_owner_team == 0 && ps.ball_owner_player == c) {
+          // on the ball: run +x for 1 s, then flip the stick and time the turn
+          const afc::GfPlayer& me = ps.players[c];
+          if (turn_phase == 0) { turn_phase = 1; turn_t0 = f; }
+          if (turn_phase == 1) {
+            dx = 1.f;
+            if (f - turn_t0 >= 100) { turn_phase = 2; turn_t0 = f; turns++; }
+          }
+          if (turn_phase == 2) {
+            dx = -1.f;
+            float qx = me.joints[afc::J_BODY][0], qy = me.joints[afc::J_BODY][1], qz = me.joints[afc::J_BODY][2], qw = me.joints[afc::J_BODY][3];
+            // the body's forward in engine axes: Godot q = (x, z, -y, w) applied to (0, 0, 1), back to engine (x, -z)
+            float gx = qx, gy = qz, gz = -qy;
+            float fx = 2.f * (gx * gz + qw * gy), fz = 1.f - 2.f * (gx * gx + gy * gy);
+            float ex = fx;   // engine x of the facing
+            (void)fz;
+            if (ex < 0.f && turn_face_n < turns) { turn_face_n++; turn_face_ms += 10 * (f - turn_t0); }
+            float vx = me.pos[0] - prevx;
+            if (vx < -0.005f && turn_vel_n < turns) { turn_vel_n++; turn_vel_ms += 10 * (f - turn_t0); }
+            if (f - turn_t0 > 150) { turn_phase = 3; b = afc::GF_SHORT_PASS; }
+          }
+          prevx = me.pos[0];
+        } else {
+          turn_phase = 0;
+          if (ps.game_mode != 0 && f % 120 == 0) b = afc::GF_SHORT_PASS;   // take set pieces
+        }
+        if (switch_cd > 0) switch_cd--;
+        afc::gf_input(dx, dy, b);
+      }
+    }
     if (pass_test) {
       afc::GfState ps;
       afc::gf_state(&ps);
@@ -251,6 +323,10 @@ int main(int argc, char** argv) {
   printf("FINAL %d-%d\n", st.goals[0], st.goals[1]);
   printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
+  if (feel_test)
+    printf("FEEL %s defending: %d spells, ball back after %.0f ms | turns %d: facing past 90 deg after %.0f ms (%d), moving back after %.0f ms (%d)\n",
+           feel_ai ? "cpu" : "human", spells, spells ? 10.0 * spell_frames / spells : 0.0, turns,
+           turn_face_n ? (double)turn_face_ms / turn_face_n : 0.0, turn_face_n, turn_vel_n ? (double)turn_vel_ms / turn_vel_n : 0.0, turn_vel_n);
   if (pass_test)
     printf("PASS taps %d passes %d mean_tap_to_ball_ms %.0f\n", taps, passes, passes ? 10.0 * pass_frames / passes : 0.0);
   if (shot_style >= 0)

@@ -389,6 +389,10 @@ func _input_to_engine() -> void:
 		if on.call("shoot", "d_slide"): b |= B_SLIDE
 		if on.call("through", "d_switch"): b |= B_SWITCH
 		if on.call("lob", "d_tackle"): b |= B_TEAM_PRESS
+		# the second man presses on his own when they are in our half (gftest: the ball back 13% sooner); the
+		# human's team always attacks +x in the engine
+		if opts.get("auto_team_press", true) and float((st["ball"] as Vector3).x) < 5.0:
+			b |= B_TEAM_PRESS
 		if Input.is_physical_key_pressed(KEY_K): b |= B_PRESS
 		if Input.is_physical_key_pressed(KEY_L): b |= B_SLIDE
 		if Input.is_physical_key_pressed(KEY_Q): b |= B_SWITCH
