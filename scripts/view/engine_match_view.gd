@@ -53,6 +53,10 @@ var pitch := Pitch.new()
 var acc := 0.0
 var st := {}
 var poses := PackedFloat32Array()
+var poses_prev := PackedFloat32Array()   # the engine frame before `poses`: the picture is drawn between the two
+var ball_prev := Vector3.ZERO
+var draw := PackedFloat32Array()         # the poses drawn this display frame (interpolated)
+var rec_acc := 0.0
 var stride := 66
 var match_seconds := 480.0
 var last_goals := Vector2i.ZERO
@@ -253,6 +257,9 @@ func start(config: Dictionary) -> void:
 	var dir := data_dir()
 	if not GFData.prepare(dir):
 		push_error("EngineMatchView: the engine's data is not ready in " + dir)
+	# the players are placed every displayed frame from the engine's own 100 Hz frames (_step, _blend): the 60 Hz
+	# physics interpolation must stay out of it (it would lag them a tick and judder against the camera)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	engine = ClassDB.instantiate("GFEngine")
 	match_seconds = float(config.get("half_minutes", 4.0)) * 120.0
 	# The engine scales every stat of a side by 0.3 + 0.7 * difficulty (Player::GetStat), its AI too. The human's
@@ -448,23 +455,78 @@ func _attacking() -> bool:
 
 # ------------------------------------------------------------------ the loop
 
-func _physics_process(dt: float) -> void:
-	if engine == null or paused or full_time or replay_t >= 0.0:
+func _physics_process(_dt: float) -> void:
+	if engine == null:
 		return
-	_input_to_engine()
-	acc += dt * SettingsPanel.game_speed(opts)
-	var n := int(acc / FRAME)
-	if n > 0:
-		acc -= n * FRAME
-		engine.frames(mini(n, 6))
-		_pull()
-		stats.feed(st, n * FRAME)
-		_record()
-		_sounds()
-		_cpu_subs()
-	if reader._pad("pause") and not held_was.get("pause", false):
+	if reader._pad("pause") and not held_was.get("pause", false) and not paused:
 		set_paused(true)
 	held_was["pause"] = reader._pad("pause")
+
+
+## The engine runs at its own 100 Hz, advanced every DISPLAYED frame (not in the 60 Hz physics tick: on a 120 Hz
+## phone that left every other frame frozen, and 1-2-1-2 engine frames per tick made the players judder). The
+## picture is drawn between the last two engine frames at the display frame's exact time (one engine frame, 10 ms,
+## behind), so motion is even at 60, 90 or 120 Hz.
+func _step(dt: float) -> void:
+	_input_to_engine()
+	acc += minf(dt, 0.1) * SettingsPanel.game_speed(opts)
+	var n := int(acc / FRAME)
+	if n <= 0:
+		return
+	acc -= n * FRAME
+	if n > 6:
+		n = 6
+		acc = 0.0
+	if n > 1:
+		engine.frames(n - 1)
+		poses_prev = engine.poses()
+		ball_prev = engine.state()["ball"]
+	else:
+		poses_prev = poses
+		ball_prev = st["ball"]
+	engine.frames(1)
+	_pull()
+	stats.feed(st, n * FRAME)
+	rec_acc += n * FRAME
+	while rec_acc >= REC_EVERY / 60.0:
+		rec_acc -= REC_EVERY / 60.0
+		_record()
+	_sounds()
+	_cpu_subs()
+
+
+## The poses between the last two engine frames at fraction a (positions and yaw straight, joints nlerp).
+func _blend(a: float) -> PackedFloat32Array:
+	if poses_prev.size() != poses.size() or a >= 0.999:
+		return poses
+	if draw.size() != poses.size():
+		draw.resize(poses.size())
+	var q := poses_prev
+	var c := poses
+	for i in 22:
+		var o := i * stride
+		# a player who jumped (a substitution, a reset for a set piece): no sliding across the pitch
+		if absf(c[o] - q[o]) + absf(c[o + 1] - q[o + 1]) > 1.5:
+			for k in stride:
+				draw[o + k] = c[o + k]
+			continue
+		for k in 3:
+			draw[o + k] = lerpf(q[o + k], c[o + k], a)
+		draw[o + 3] = lerp_angle(q[o + 3], c[o + 3], a)
+		for k in range(4, 10):
+			draw[o + k] = lerpf(q[o + k], c[o + k], a) if k < 7 else c[o + k]
+		var j := o + 10
+		var end := o + stride
+		while j < end:
+			# the shorter way round (q and -q are the same rotation)
+			var dot := q[j] * c[j] + q[j + 1] * c[j + 1] + q[j + 2] * c[j + 2] + q[j + 3] * c[j + 3]
+			var s := -1.0 if dot < 0.0 else 1.0
+			draw[j] = lerpf(q[j] * s, c[j], a)
+			draw[j + 1] = lerpf(q[j + 1] * s, c[j + 1], a)
+			draw[j + 2] = lerpf(q[j + 2] * s, c[j + 2], a)
+			draw[j + 3] = lerpf(q[j + 3] * s, c[j + 3], a)
+			j += 4
+	return draw
 
 
 func _pull() -> void:
@@ -473,9 +535,6 @@ func _pull() -> void:
 
 
 func _record() -> void:
-	rec_tick += 1
-	if rec_tick % REC_EVERY != 0:
-		return
 	rec.append([poses, st["ball"], st["ball_vel"]])
 	if rec.size() > REC_FRAMES:
 		rec.pop_front()
@@ -487,6 +546,8 @@ func _process(dt: float) -> void:
 	if replay_t >= 0.0:
 		_replay_step(dt)
 		return
+	if not paused and not full_time:
+		_step(dt)
 	_update_views(dt)
 	if not paused and not full_time:
 		var ctl: int = st["controlled"]
@@ -580,7 +641,11 @@ func _celebrate(team: int, scorer: int) -> void:
 
 
 func _update_views(dt: float) -> void:
-	_draw_frame(poses, st["ball"], st["ball_vel"], dt)
+	var a := clampf(acc / FRAME, 0.0, 1.0)
+	var b: Vector3 = st["ball"]
+	if poses_prev.size() == poses.size() and b.distance_to(ball_prev) < 3.0:
+		b = ball_prev.lerp(b, a)
+	_draw_frame(_blend(a), b, st["ball_vel"], dt)
 	# the human's player: ring under him
 	var ctl: int = st["controlled"]
 	if ring and ctl >= 0 and human_team >= 0:

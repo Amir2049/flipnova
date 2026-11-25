@@ -103,3 +103,30 @@
  }
  
  float PlayerBase::GetVelocityMultiplier() const {
+--- a/src/onthepitch/player/controller/humancontroller.cpp
++++ b/src/onthepitch/player/controller/humancontroller.cpp
+@@ -127,7 +127,10 @@
+     if (!hid->GetButton(actionButton) ||
+         (hid->GetButton(actionButton) &&
+          gauge_ms >
+-             500) ||  // allow anim to kick in before queue is complete (before
++             500) ||
++        // AFC: a short pass goes on the press (20 ms), not on the release - on a touch screen the wait for the
++        // thumb to lift made every pass feel ~0.5 s late; its power is automatic (below)
++        (actionButton == e_ButtonFunction_ShortPass && gauge_ms >= 20) ||  // allow anim to kick in before queue is complete (before
+                       // button is released), it will usually touch ball after
+                       // the remaining time anyway, so we still have time to add
+                       // more power, yet still respond as fast as possible
+@@ -173,8 +176,10 @@
+         float inputPower = clamp(std::pow(gaugeFactor, 0.7f), 0.01f, 1.0f);
+         command.touchInfo.inputDirection = inputDirection;
+         command.touchInfo.inputPower = inputPower;
+-        command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shortpass_autodirection", _default_ShortPass_AutoDirection);
+-        command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_shortpass_autopower", _default_ShortPass_AutoPower);
++        // AFC: the pass picks its power to reach the man (it goes on the press, there is no gauge), and leans a
++        // little more on the team-mate the stick points at
++        command.touchInfo.autoDirectionBias = 0.55f;
++        command.touchInfo.autoPowerBias = 1.0f;
+         AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
+ 
+         commandQueue.push_back(command);

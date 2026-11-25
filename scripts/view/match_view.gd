@@ -199,11 +199,11 @@ func _environment() -> void:
 	e.ambient_light_energy = 0.42 if not night else 0.35
 	# broadcast look: filmic curve, slightly lower saturation, a touch more contrast, haze over the far stands
 	e.tonemap_mode = Environment.TONE_MAPPER_ACES
-	e.tonemap_exposure = 0.8          # measured against FC 27 frames: grass luminance ~127
+	e.tonemap_exposure = 0.92
 	e.tonemap_white = 6.0
 	e.adjustment_enabled = true
-	e.adjustment_saturation = 1.22    # the "traditional sports look" (BBC): FC grass saturation ~0.73
-	e.adjustment_contrast = 1.12
+	e.adjustment_saturation = 1.1    # 1.22 made the grass neon and the kits shout on phone screens (2.38)
+	e.adjustment_contrast = 1.06
 	e.fog_enabled = not night
 	e.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	e.fog_density = 0.0016

@@ -113,7 +113,11 @@ int main(int argc, char** argv) {
   auto t0 = std::chrono::steady_clock::now();
   afc::GfSetup setup;
   setup.data_dir = argv[1];
-  setup.human_players = 0;
+  // GF_PASS_TEST: the left team is "human": whenever its man has had the ball 0.4 s, a tap on SHORT PASS (held
+  // GF_TAP frames, default 12 = 120 ms like a thumb); prints the mean time from the tap to the ball leaving his feet
+  const bool pass_test = getenv("GF_PASS_TEST") != nullptr;
+  const int tap_frames = getenv("GF_TAP") ? atoi(getenv("GF_TAP")) : 12;
+  setup.human_players = pass_test ? 1 : 0;
   setup.match_frames = frames;
   if (getenv("GF_SEED")) setup.seed = (unsigned)atoi(getenv("GF_SEED"));
   if (argc > 3) {
@@ -150,8 +154,36 @@ int main(int argc, char** argv) {
   // match numbers: possession changes, set pieces by kind, time in play
   int poss_changes = 0, last_owner = -1, prev_mode = 0, in_play = 0;
   KeeperStats ks;
+  int hold = 0, tap_left = 0, tap_at = -1, taps = 0, passes = 0;
+  long pass_frames = 0;
   int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
   for (int f = 0; f < stop; f++) {
+    if (pass_test) {
+      afc::GfState ps;
+      afc::gf_state(&ps);
+      bool mine = ps.game_mode == 0 && ps.ball_owner_team == 0 && ps.ball_owner_player == ps.controlled;
+      if (tap_at >= 0) {
+        float bs = std::sqrt(ps.ball_vel[0] * ps.ball_vel[0] + ps.ball_vel[1] * ps.ball_vel[1]);
+        if (!mine || bs > 7.f) {
+          passes++;
+          pass_frames += f - tap_at;
+          tap_at = -1;
+          hold = 0;
+        } else if (f - tap_at > 150) {
+          tap_at = -1;   // never went: not counted as a pass
+          hold = 0;
+        }
+      }
+      hold = mine ? hold + 1 : 0;
+      if (hold == 40 && tap_at < 0) {
+        tap_at = f;
+        tap_left = tap_frames;
+        taps++;
+      }
+      if (ps.game_mode != 0 && f % 120 == 0 && tap_left == 0) tap_left = tap_frames;   // take set pieces (not timed)
+      afc::gf_input(1.f, 0.f, tap_left > 0 ? afc::GF_SHORT_PASS : 0u);
+      if (tap_left > 0) tap_left--;
+    }
     afc::gf_frame();
     if (getenv("GF_CRASH_TEST") && f == 50) *(volatile int*)nullptr = 1;   // proves the crash report works
     {
@@ -199,6 +231,8 @@ int main(int argc, char** argv) {
   printf("FINAL %d-%d\n", st.goals[0], st.goals[1]);
   printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
+  if (pass_test)
+    printf("PASS taps %d passes %d mean_tap_to_ball_ms %.0f\n", taps, passes, passes ? 10.0 * pass_frames / passes : 0.0);
   printf("KEEPER shots %d on_target %d saves %d goals %d dives %d dives_off_target %d depth_at_goal %.2f (keeper root z %.2f..%.2f)\n",
          ks.shots, ks.on_target, ks.saves, ks.goals, ks.dives, ks.dives_off, ks.depth_n ? ks.depth_sum / ks.depth_n : 0.0,
          ks.root_min, ks.root_max);

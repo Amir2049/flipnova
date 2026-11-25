@@ -8,7 +8,7 @@ const DIFFS := ["Amateur", "Pro", "World Class", "Legendary", "Ultimate"]
 const DIFF_VALUES := [0.25, 0.5, 0.72, 0.92, 1.0]
 const DIFF_NOTES := ["", "", "", "TiZero AI", "TiZero AI, full strength"]
 const SPEEDS := ["Slow", "Normal", "Fast"]
-const SPEED_VALUES := [0.8, 0.9, 1.0]
+const SPEED_VALUES := [0.95, 1.1, 1.25]   # x real time; mobile football plays a little faster than life
 
 
 static func game_speed(o: Dictionary) -> float:

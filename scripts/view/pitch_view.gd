@@ -17,8 +17,9 @@ uniform float circle_r = 9.15;
 uniform float spot_d = 11.0;
 // measured against EA FC 27 broadcast frames (grass hue 65-90 deg, saturation 0.66-0.73, luminance spread 20-25):
 // a yellower, richer green than before (hue ~101, sat 0.54, spread 17), stripes with more contrast
-uniform vec3 grass_a : source_color = vec3(0.13, 0.24, 0.032);
-uniform vec3 grass_b : source_color = vec3(0.21, 0.345, 0.045);   // ~8 % darker: FC frames sit at luminance ~127
+// 2.38: a deeper, cooler broadcast green (the yellow-lime of before read as neon on phones), calmer stripes
+uniform vec3 grass_a : source_color = vec3(0.1, 0.245, 0.062);
+uniform vec3 grass_b : source_color = vec3(0.155, 0.315, 0.078);   // ~8 % darker: FC frames sit at luminance ~127
 uniform float wet = 0.0;
 // the main stand behind the camera (not drawn) still throws its roof's shadow across the near part of the pitch
 uniform vec3 sun_to = vec3(0.0, 1.0, 0.0);   // direction from the ground toward the sun
@@ -49,7 +50,7 @@ void fragment() {
 	// mowed grass leans one way per stripe: which stripe looks light depends on where the camera looks from
 	vec3 vdir = normalize(wpos - CAMERA_POSITION_WORLD);
 	float lean = mix(1.0, -1.0, s) * clamp(vdir.x * 1.6, -1.0, 1.0);
-	vec3 col = mix(grass_a, grass_b, 0.5 + 0.5 * mix(-1.0, 1.0, s) * 0.95 + lean * 0.45);
+	vec3 col = mix(grass_a, grass_b, 0.5 + 0.5 * mix(-1.0, 1.0, s) * 0.8 + lean * 0.3);
 	col *= 0.93 + 0.12 * noise(p * 0.9) + 0.05 * noise(p * 6.0) + 0.04 * noise(p * 31.0);
 	if (detail > 0.0) {
 		vec3 d1 = texture(grass_tex, p / 2.2).rgb / grass_avg;
