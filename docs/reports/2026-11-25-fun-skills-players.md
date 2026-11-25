@@ -50,9 +50,19 @@ pass = its fake shot). A move straight after another runs 30 % slower (the FC Mo
 - Next for the body itself: a higher-detail model (Meshy, needs the owner's go-ahead to spend credits) or sculpting
   the MakeHuman body in Blender (shoulders, calves, hair).
 
-## Foundations still to take
+## Foundations taken in 2.43
 
-- League-Soccer: one-two runs started on the pass contact, knock-on by double-tapping sprint, the referee's
-  advantage and deferred cautions.
-- vi3itor/GameplayFootball: not yet reviewed for gameplay fixes.
+- League-Soccer (Apache-2.0): one-two runs started on the pass contact, a first-touch penalty under pressure, fatigue
+  from workload, the ball rolling slower, a wet pitch in the rain.
+- zocram4cc/GameplayFootball (Apache-2.0, code only, none of its PES data): attacking runners actually run (the gate
+  that let them was unreachable), the keeper may hold a ball that is going in, a keeper's parry or slide can no
+  longer push the ball into his own net, and the player sent for a loose ball runs at it instead of standing.
+  8 matches (gftest, CPU v CPU): goals 39 -> 38, shots on target kept out 73 %.
+- vi3itor/GameplayFootball: reviewed, no gameplay changes to take.
+- Not taken: zocram4cc's "catch by pace" (our retain code needs the catch animation; without it the ball would go
+  in), its shot scatter (our engine already scatters, and long shots were cut in 2.42).
+
+## Still to take
+
+- League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.
 - Open Football / Buckland rules for the built-in engine's defending (Task 5 of the gameplay plan).

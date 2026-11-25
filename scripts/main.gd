@@ -97,7 +97,7 @@ static var _streak_mat: ShaderMaterial
 func _base(dim: float = 0.55) -> Control:
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var wash := UI.gradient_rect(Color(UI.TURF.r, UI.TURF.g, UI.TURF.b, minf(dim + 0.35, 0.96)), Color(UI.TURF.r, UI.TURF.g, UI.TURF.b, dim * 0.4), 0.0)
+	var wash := UI.gradient_rect(Color(UI.TURF.r, UI.TURF.g, UI.TURF.b, minf(dim * 0.75 + 0.15, 0.78)), Color(UI.PITCH.r, UI.PITCH.g, UI.PITCH.b, dim * 0.2), 0.0)
 	wash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(wash)
 	if _streak_mat == null:
@@ -555,12 +555,13 @@ func _card(title: String, sub: String, cb: Callable, col: Color, art: Control = 
 		art.offset_bottom = 24 + h
 		b.add_child(art)
 	if fact != "":
-		var fl := UI.title(fact, 40 if big else 28, UI.BRASS)
+		var fl := UI.title(fact, 40 if big else 24, UI.BRASS)
 		fl.anchor_left = 1.0
 		fl.anchor_right = 1.0
 		fl.offset_left = -300
 		fl.offset_right = -26
-		fl.offset_top = 10
+		# small cards: the fact rides on the card's top edge, clear of a long title ("Challenges" ran into it)
+		fl.offset_top = 10 if big else -18
 		fl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		b.add_child(fl)
 	var vb := UI.vbox(0)

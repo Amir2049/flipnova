@@ -48,6 +48,8 @@ void fragment() {
 
 	// the film: a touch of moving grain
 	float grain = (hash(UV * 900.0 + fract(t) * 37.0) - 0.5) * 0.035;
+	// 2.43: lift the night picture so the menus read bright, not gloomy
+	c = pow(max(c, vec3(0.0)), vec3(0.8)) * 1.12;
 	c = c + (light + vec3(flash) * 1.6) * intensity + grain;
 	COLOR = vec4(c, 1.0);
 }

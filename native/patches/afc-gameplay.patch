@@ -1,6 +1,6 @@
 --- a/src/gamedefines.hpp
 +++ b/src/gamedefines.hpp
-@@ -126,7 +126,10 @@
+@@ -126,7 +126,11 @@
  
  enum e_PlayerCommandModifier {
    e_PlayerCommandModifier_None = 0,
@@ -8,10 +8,505 @@
 +  e_PlayerCommandModifier_KnockOn = 1,
 +  // AFC, from League-Soccer (Apache-2.0): shot styles
 +  e_PlayerCommandModifier_Chip = 2,
-+  e_PlayerCommandModifier_Finesse = 4
++  e_PlayerCommandModifier_Finesse = 4,
++  e_PlayerCommandModifier_OneTwo = 8   // the passer breaks forward once the pass is struck
  };
  
  class IController;
+--- a/src/onthepitch/ball.cpp
++++ b/src/onthepitch/ball.cpp
+@@ -30,7 +30,8 @@
+ constexpr float linearBounce = 0.06f;  // bigger = more brake force
+ constexpr float drag = 0.015f;  // bigger = more
+ constexpr float friction = 0.04f;  // bigger = more
+-constexpr float linearFriction = 1.6f;  // bigger = more, arbitrary scale;
++constexpr float linearFriction = 1.38f;  // AFC, from League-Soccer: 1.6 -> 1.38, the ground roll of PES 5/6
++float afc_pitch_wetness = 0.0f;  // AFC: 0 dry .. 1 soaked (rain), set by gf_start; from League-Soccer's weather
+ constexpr float gravity = -9.81f;
+ constexpr float grassHeight = 0.025f;
+ 
+@@ -218,7 +219,9 @@
+ 
+     if (nextPos.coords[2] < 0.11f + grassHeight && groundFriction_enabled) {
+       DO_VALIDATION;
+-      float adaptedFriction = (friction * grassInfluenceBias);
++      // a wet pitch is slicker: up to half the ground friction, the ball skids on
++      const float wetScale = 1.0f - clamp(afc_pitch_wetness, 0.0f, 1.0f) * 0.5f;
++      float adaptedFriction = (friction * grassInfluenceBias) * wetScale;
+ 
+       // v(t) = v(0) * (k ^ t)
+ 
+@@ -228,7 +231,7 @@
+       float newVelo = velo - adaptedFriction * std::pow(velo, 2.0f) * timeStep;
+ 
+       // linear friction
+-      newVelo = clamp(newVelo - (linearFriction * grassInfluenceBias * timeStep), 0.0f, 100000.0f);
++      newVelo = clamp(newVelo - (linearFriction * grassInfluenceBias * wetScale * timeStep), 0.0f, 100000.0f);
+ 
+       xy.Normalize(Vector3(0));
+       xy *= newVelo;
+--- a/src/onthepitch/player/controller/elizacontroller.cpp
++++ b/src/onthepitch/player/controller/elizacontroller.cpp
+@@ -15,6 +15,7 @@
+ // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
+ // i do not offer support, so don't ask. to be used for inspiration :)
+ 
++#include "../../aitactics.hpp"
+ #include "../../../main.hpp"
+ 
+ #include "elizacontroller.hpp"
+@@ -344,8 +345,17 @@
+     if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000) {
+       DO_VALIDATION;
+       GetOnTheBallCommands(commandQueue, rawInputDirection, rawInputVelocityFloat);
++      extraHaste = false;
++    } else {
++      // zocram4cc 7c5dee1: out of reach he queued nothing and stood still, and with everyone else holding
++      // shape a loose ball could freeze the pitch. The ball-goer runs at it.
++      Vector3 toBall = _mentalImage->GetBallPrediction(CastPlayer()->GetTimeNeededToGetToBall_ms()).Get2D() - player->GetPosition();
++      if (toBall.GetLength() > 0.5f) {
++        rawInputDirection = toBall.GetNormalized(player->GetDirectionVec());
++        rawInputVelocityFloat = sprintVelocity;
++      }
++      extraHaste = true;
+     }
+-    extraHaste = false;
+   }
+ 
+   else if (match->IsInPlay() && !match->IsInSetPiece() &&
+@@ -364,7 +374,7 @@
+     if (!hasUniquePossession || possessionAmount < 3.4f) {
+       DO_VALIDATION;
+       bool onlyPickupAnims = false;
+-      if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
++      if (possessionAmount > 1.3f) onlyPickupAnims = true;  // zocram4cc efd50d9: he may hold the ball that is going in
+       _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
+     }
+ 
+@@ -869,6 +879,7 @@
+     float tacticalDiffRating = 0.0f;
+     float passRating = 0.0f;
+     float proximityRating = 0.0f;
++    float supportRating = 0.0f;
+     e_FunctionType passType;
+   };
+ 
+@@ -897,12 +908,19 @@
+       mateRating.player = mates[i];
+       mateRating.tacticalRating = mateTacticalRating;
+ 
+-      if (mateTacticalRating > tacticalRating + tacticalImprovementThreshold) {
++      // AFC, from League-Soccer (Apache-2.0): besides a pass forward to a better place, a support pass - when the
++      // man on the ball is crowded or has had it a while, to a team-mate with clearly more space
++      const bool progressiveCandidate = mateTacticalRating > tacticalRating + tacticalImprovementThreshold;
++      const bool supportCandidate = AITactics::ShouldConsiderSupportPass(
++          tacticalRating, sit.spaceRating, mateTacticalRating, mateSit.spaceRating, longPossessionFactor);
++      if (progressiveCandidate || supportCandidate) {
+         DO_VALIDATION;
+ 
+         float tacticalDiffRating = mateRating.tacticalRating - tacticalRating;
+ 
+-        mateRating.tacticalDiffRating = tacticalDiffRating;
++        mateRating.tacticalDiffRating = std::max(tacticalDiffRating, 0.0f);
++        mateRating.supportRating = supportCandidate
++            ? AITactics::GetSupportPassBonus(sit.spaceRating, mateSit.spaceRating, longPossessionFactor) : 0.0f;
+         float passingOddsShort = _GetPassingOdds(mates[i], e_FunctionType_ShortPass, opponentPlayerImages);
+         float passingOddsLong  = _GetPassingOdds(mates[i], e_FunctionType_LongPass,  opponentPlayerImages);
+         float passingOddsHigh  = _GetPassingOdds(mates[i], e_FunctionType_HighPass,  opponentPlayerImages);
+@@ -921,7 +939,7 @@
+         }
+ 
+         float totalRating = mateRating.tacticalDiffRating * tacticalDiffWeight +
+-                            mateRating.passRating * passWeight -
++                            mateRating.passRating * passWeight + mateRating.supportRating -
+                             oneTouchIsHard;
+ 
+         totalRating /= totalWeight2;
+--- a/src/onthepitch/player/controller/humancontroller.cpp
++++ b/src/onthepitch/player/controller/humancontroller.cpp
+@@ -23,6 +23,8 @@
+ 
+ #include "../../../main.hpp"
+ 
++extern int afc_shot_style;   // AFC: 0 normal, 1 chip, 2 finesse (native/src/gf_api.cpp)
++
+ HumanController::HumanController(Match *match, AIControlledKeyboard *hid)
+     : PlayerController(match), hid(hid) {
+   DO_VALIDATION;
+@@ -127,7 +129,10 @@
+     if (!hid->GetButton(actionButton) ||
+         (hid->GetButton(actionButton) &&
+          gauge_ms >
+-             500) ||  // allow anim to kick in before queue is complete (before
++             500) ||
++        // AFC: a short pass goes on the press (20 ms), not on the release - on a touch screen the wait for the
++        // thumb to lift made every pass feel ~0.5 s late; its power is automatic (below)
++        (actionButton == e_ButtonFunction_ShortPass && gauge_ms >= 20) ||  // allow anim to kick in before queue is complete (before
+                       // button is released), it will usually touch ball after
+                       // the remaining time anyway, so we still have time to add
+                       // more power, yet still respond as fast as possible
+@@ -169,12 +174,17 @@
+         command.desiredFunctionType = e_FunctionType_ShortPass;
+         command.useDesiredMovement = false;
+         command.useDesiredLookAt = false;
++        // AFC, from League-Soccer (Apache-2.0): a one-two - SWITCH (AFC: sprint) held with the pass sends the passer
++        // on a run when the pass is struck
++        if (hid->GetButton(e_ButtonFunction_Switch)) command.modifier |= e_PlayerCommandModifier_OneTwo;
+ 
+         float inputPower = clamp(std::pow(gaugeFactor, 0.7f), 0.01f, 1.0f);
+         command.touchInfo.inputDirection = inputDirection;
+         command.touchInfo.inputPower = inputPower;
+-        command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shortpass_autodirection", _default_ShortPass_AutoDirection);
+-        command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_shortpass_autopower", _default_ShortPass_AutoPower);
++        // AFC: the pass picks its power to reach the man (it goes on the press, there is no gauge), and leans a
++        // little more on the team-mate the stick points at
++        command.touchInfo.autoDirectionBias = 0.55f;
++        command.touchInfo.autoPowerBias = 1.0f;
+         AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
+ 
+         commandQueue.push_back(command);
+@@ -221,6 +231,9 @@
+         command.useDesiredMovement = false;
+         command.useDesiredLookAt = false;
+         command.desiredVelocityFloat = inputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
++        // AFC: the shot style the player asked for (a flick on SHOOT: chip, a curl: finesse), set by gf_input
++        if (afc_shot_style == 1) command.modifier |= e_PlayerCommandModifier_Chip;
++        else if (afc_shot_style == 2) command.modifier |= e_PlayerCommandModifier_Finesse;
+         command.touchInfo.inputDirection = inputDirection;
+         command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection);
+         command.touchInfo.autoDirectionBias = 1.0f;
+--- a/src/onthepitch/player/controller/strategies/offtheball/default_mid.cpp
++++ b/src/onthepitch/player/controller/strategies/offtheball/default_mid.cpp
+@@ -42,7 +42,7 @@
+     // support position
+     float attackBias = NormalizedClamp((controller->GetFadingTeamPossessionAmount() - 0.5f) * 1.0f, 0.1f, 0.7f);
+     bool makeRun = false;
+-    if (attackBias > 0.9f) {
++    if (true) {  // zocram4cc 33ef680: attackBias <= 0.7, the old > 0.9 gate was dead
+       DO_VALIDATION;
+       if (controller->GetTeam()->GetController()->GetEndApplyAttackingRun_ms() >
+               controller->GetMatch()->GetActualTime_ms() &&
+--- a/src/onthepitch/player/controller/strategies/offtheball/default_off.cpp
++++ b/src/onthepitch/player/controller/strategies/offtheball/default_off.cpp
+@@ -41,7 +41,7 @@
+     // support position
+     float attackBias = NormalizedClamp((controller->GetFadingTeamPossessionAmount() - 0.5f) * 1.0f, 0.1f, 0.6f);
+     bool makeRun = false;
+-    if (attackBias > 0.7f) {
++    if (true) {  // zocram4cc 33ef680: attackBias <= 0.6, the old > 0.7 gate was dead
+       DO_VALIDATION;
+       if (controller->GetTeam()->GetController()->GetEndApplyAttackingRun_ms() >
+               controller->GetMatch()->GetActualTime_ms() &&
+--- a/src/onthepitch/player/controller/strategies/offtheball/goalie_default.cpp
++++ b/src/onthepitch/player/controller/strategies/offtheball/goalie_default.cpp
+@@ -15,6 +15,7 @@
+ // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
+ // i do not offer support, so don't ask. to be used for inspiration :)
+ 
++#include "../../../../gameplaytuning.hpp"
+ #include "goalie_default.hpp"
+ 
+ #include "../../../../../base/geometry/triangle.hpp"
+@@ -85,6 +86,7 @@
+       float awayFromGoalOffset_m = 0.7f; // meters away from goal line (over the ballToGoal line, not straight forward)
+       float awayFromGoalBias = 0.3f; // factor between goal and ball
+       awayFromGoalBias *= NormalizedClamp(controller->GetFadingTeamPossessionAmount(), 1.0f, 1.5f);
++      awayFromGoalBias *= 0.85f;   // AFC, from League-Soccer: a little tighter to his line
+ 
+ 
+       // when opponent comes rushing in and team mates are too far away to help, come out to 'reduce goal size'
+@@ -93,6 +95,7 @@
+         DO_VALIDATION;
+ 
+         Player *opp = controller->GetOppTeam()->GetDesignatedTeamPossessionPlayer();
++        if (!opp) opp = controller->GetOppTeam()->GetBestPossessionPlayer();
+         Vector3 oppPos = opp->GetPosition() + opp->GetMovement() * 0.32f;
+ 
+         // if opp isn't in ball control, don't use ball pos but opp pos
+@@ -244,7 +247,9 @@
+ 
+   int side = controller->GetTeam()->GetDynamicSide();
+ 
+-  float panic = 1.02f + (1.0f - (controller->GetPlayer()->GetStat(mental_defensivepositioning) * 0.6f + controller->GetPlayer()->GetStat(mental_vision) * 0.4f)) * 0.5f;
++  // AFC: the margin by which a keeper takes a shot going wide for one on target: was up to 50 % of the goal (he
++  // dived at a quarter of the shots going wide), now up to 15 %
++  float panic = 1.0f + (1.0f - (controller->GetPlayer()->GetStat(mental_defensivepositioning) * 0.6f + controller->GetPlayer()->GetStat(mental_vision) * 0.4f)) * 0.15f;
+   if (mentalImage->GetBallPrediction(4000).coords[0] * side > pitchHalfW &&
+       (controller->GetPlayer()->GetPosition() -
+        mentalImage->GetBallPrediction(250))
+@@ -276,26 +281,28 @@
+         }
+     */
+ 
+-    // 2d version
+-
+-    Line ballToGoal;
+-    ballToGoal.SetVertex(0, mentalImage->GetBallPrediction(0).Get2D());
+-    ballToGoal.SetVertex(1, mentalImage->GetBallPrediction(800).Get2D());
+-    Line goalLine;
+-    goalLine.SetVertex(0, Vector3(pitchHalfW * side, -pitchHalfH, 0));
+-    goalLine.SetVertex(1, Vector3(pitchHalfW * side,  pitchHalfH, 0));
+-
+-    Vector3 intersectPoint = ballToGoal.GetIntersectionPoint(goalLine).Get2D();
+-    if (fabs(intersectPoint.coords[1]) > 3.7 * panic) intersect = false; else intersect = true;
+-
+-    if (intersect) {
+-      DO_VALIDATION;
+-      //SetGreenDebugPilon(intersectPoint);
+-      ballBoundForGoal_ycoord = intersectPoint.coords[1];
+-      ballBoundForGoal = true;
+-    } else {
+-      //SetGreenDebugPilon(Vector3(0, 0, -10));
++    // AFC, from League-Soccer (Apache-2.0): walk the ball's physics prediction until it crosses the goal line and
++    // judge the spot there - width and height (the original 2D projection took shots over the bar for shots on
++    // goal, and dived at them)
++    const float goalLineX = pitchHalfW * side;
++    const unsigned int finalPrediction_ms = ballPredictionSize_ms - 10;
++    unsigned int previousTime_ms = 0;
++    Vector3 previousPosition = mentalImage->GetBallPrediction(previousTime_ms);
++    while (previousTime_ms < finalPrediction_ms) {
++      const unsigned int predictionTime_ms = std::min(previousTime_ms + 50U, finalPrediction_ms);
++      const Vector3 predictedPosition = mentalImage->GetBallPrediction(predictionTime_ms);
++      if (previousPosition.coords[0] * side < pitchHalfW && predictedPosition.coords[0] * side >= pitchHalfW) {
++        const float xTravel = predictedPosition.coords[0] - previousPosition.coords[0];
++        const float crossingBias = fabs(xTravel) > 0.0001f ? clamp((goalLineX - previousPosition.coords[0]) / xTravel, 0.0f, 1.0f) : 1.0f;
++        const Vector3 at = previousPosition + (predictedPosition - previousPosition) * crossingBias;
++        intersect = GameplayTuning::IsGoalMouthThreat(at.coords[1], at.coords[2], 3.66f, 2.44f, panic);
++        if (intersect) ballBoundForGoal_ycoord = at.coords[1];
++        break;
++      }
++      previousTime_ms = predictionTime_ms;
++      previousPosition = predictedPosition;
+     }
++    ballBoundForGoal = intersect;
+   }
+ }
+ 
+--- a/src/onthepitch/player/humanoid/humanoid.cpp
++++ b/src/onthepitch/player/humanoid/humanoid.cpp
+@@ -146,7 +146,11 @@
+     float actionDistance = ((spatialState.position + spatialState.movement * 0.1f) - match->GetBall()->Predict(100).Get2D()).GetLength();
+ 
+     int team_id = team->GetID() == match->SecondTeam() ? 1 : 0;
+-    if (match->GetDesignatedPossessionPlayer() == player &&
++    if (CastPlayer()->ExternalControllerActive()) {
++      // AFC: the human's own player looks at a new command every frame (the CPU's every 20-80 ms, staggered): the
++      // stick answers at once (gftest GF_FEEL_TEST)
++      frameNumPredicate = true;
++    } else if (match->GetDesignatedPossessionPlayer() == player &&
+         actionDistance < 3.0f) {
+       DO_VALIDATION;
+       frameNumPredicate = ((match->GetActualTime_ms() + team_id * 10) % 20) ==
+@@ -291,7 +295,8 @@
+       if (interruptAnim == e_InterruptAnim_ReQueue &&
+           previousAnim_functionType == currentAnim.functionType) {
+         DO_VALIDATION;
+-        reQueueDelayFrames = initialReQueueDelayFrames; // don't try requeueing (some types of anims, see selectanim()) too often
++        // AFC: 120 ms (not 220) before the human's player may change his mind again
++        reQueueDelayFrames = CastPlayer()->ExternalControllerActive() ? 12 : initialReQueueDelayFrames; // don't try requeueing (some types of anims, see selectanim()) too often
+       }
+     }
+   }
+@@ -507,6 +512,10 @@
+         match->GetBall()->SetRotation(xRot, yRot, zcurve, 0.9f * (1.0f - bumpyRideBias));
+ 
+         team->SetLastTouchPlayer(CastPlayer(), GetTouchTypeForBodyPart(currentAnim.anim->GetVariable("touch_bodypart")));
++        // AFC, from League-Soccer: a one-two - the passer goes on his run once the ball is struck
++        if (currentAnim.functionType == e_FunctionType_ShortPass &&
++            (currentAnim.originatingCommand.modifier & e_PlayerCommandModifier_OneTwo))
++          team->GetController()->ApplyAttackingRun(CastPlayer());
+       }
+ 
+       else if (currentAnim.functionType == e_FunctionType_Shot) {
+@@ -528,6 +537,11 @@
+         } else {
+           ballDirection = ballDirectionAltered;
+         }
++        // AFC, from League-Soccer (Apache-2.0): GetShotVector reads the command, so the late aim correction (the
++        // stick moved during the wind-up) must be written into it - it was worked out and thrown away. For the
++        // human's player only: for the CPU it made every shot truer (gftest: goals 22 -> 31 in 4 matches)
++        if (CastPlayer()->ExternalControllerActive())
++          currentAnim.originatingCommand.touchInfo.desiredDirection = ballDirection;
+ 
+         radian xRot = 0;
+         radian yRot = 0;
+@@ -592,6 +606,8 @@
+               (currentBallMovement.GetLength() * 0.3f +
+                playerMovement.GetLength() * 2.5f);
+           touchVec.coords[2] += 1.2f;
++          // zocram4cc 93618b4: a parry may not push the ball goalwards
++          if (touchVec.coords[0] * -team->GetDynamicSide() < 0.0f) touchVec.coords[0] = 0.0f;
+ 
+           touchVec = touchVec * (1.0f - bumpyRideBias) + currentBallVec * bumpyRideBias;
+ 
+@@ -606,6 +622,8 @@
+         Vector3 touchVec = GetVectorFromString(currentAnim.anim->GetVariable("balldirection")).GetRotated2D(spatialState.angle);
+         touchVec = touchVec * 6.0f + match->GetBall()->GetMovement() * -0.28f;
+         touchVec += Vector3(0, 0, 6);
++        // zocram4cc 93618b4: the slide sends the ball back along its path, over the line when he stands on it
++        if (CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK && touchVec.coords[0] * -team->GetDynamicSide() < 0.0f) touchVec.coords[0] = 0.0f;
+ 
+         touchVec = touchVec * (1.0f - bumpyRideBias) + currentBallVec * bumpyRideBias;
+ 
+@@ -1161,7 +1179,7 @@
+     if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && (CastPlayer()->HasPossession()/* || team->GetTeamPossessionAmount() >= 1.0f*/ || focusDistance > 12.0f)) return false;
+     if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && currentAnim.frameNum + minRemainingMovementReQueueFrames > currentAnim.anim->GetEffectiveFrameCount()) return false;
+     if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && (!allowMovementReQueue || reQueueDelayFrames > 0)) return false;
+-    if (currentAnim.functionType == e_FunctionType_BallControl && command.desiredFunctionType == e_FunctionType_BallControl && (!allowBallControlReQueue || currentAnim.frameNum > maxBallControlReQueueFrame || reQueueDelayFrames > 0)) return false;
++    if (currentAnim.functionType == e_FunctionType_BallControl && command.desiredFunctionType == e_FunctionType_BallControl && (!allowBallControlReQueue || currentAnim.frameNum > (CastPlayer()->ExternalControllerActive() ? 12 : maxBallControlReQueueFrame) || reQueueDelayFrames > 0)) return false;
+     if (currentAnim.functionType == e_FunctionType_BallControl && command.desiredFunctionType == e_FunctionType_Trap) return false;
+     if (currentAnim.functionType == e_FunctionType_Trap && command.desiredFunctionType == e_FunctionType_Trap && (!allowTrapReQueue || currentAnim.frameNum + minRemainingTrapReQueueFrames > currentAnim.touchFrame || reQueueDelayFrames > 0)) return false;
+     if (currentAnim.functionType == e_FunctionType_Trap && command.desiredFunctionType == e_FunctionType_BallControl && (!allowTrapReQueue || currentAnim.frameNum + minRemainingTrapReQueueFrames > currentAnim.touchFrame || reQueueDelayFrames > 0)) return false;
+--- a/src/onthepitch/player/humanoid/humanoid_utils.cpp
++++ b/src/onthepitch/player/humanoid/humanoid_utils.cpp
+@@ -15,6 +15,7 @@
+ // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
+ // i do not offer support, so don't ask. to be used for inspiration :)
+ 
++#include "../../gameplaytuning.hpp"
+ #include "humanoid_utils.hpp"
+ #include <cmath>
+ 
+@@ -188,6 +189,21 @@
+   heightFactor += ballBodyVeloPenalty * 2.0f;
+   heightFactor += fartherAwayPenalty;
+ 
++  // AFC, from League-Soccer (Apache-2.0): the first touch is worse with a man on you, a fast ball, and the ball
++  // coming from behind you; calm, balanced players suffer less
++  {
++    float incomingFacingAlignment = 1.0f;
++    const Vector3 incomingBallMovement = ball->GetMovement().Get2D();
++    if (incomingBallMovement.GetLength() > 0.1f)
++      incomingFacingAlignment = player->GetDirectionVec().GetDotProduct(incomingBallMovement.GetNormalized(0) * -1.0f);
++    const float contextPenalty = GameplayTuning::GetFirstTouchContextPenalty(
++        player->GetClosestOpponentDistance(), player->GetStat(mental_calmness), player->GetStat(physical_balance),
++        incomingBallMovement.GetLength(), incomingFacingAlignment, 3);
++    distanceFactor += contextPenalty;
++    heightFactor += contextPenalty * 0.25f;
++    ballMovementFactor += contextPenalty * 0.35f;
++  }
++
+   // make intercepting passes harder
+   if (match->GetLastTouchTeamID() != player->GetTeam()->GetID()) {
+     DO_VALIDATION;
+@@ -467,9 +483,26 @@
+                          (0.6f + powerEasinessFactor * 0.4f);
+   float difficultyFactor = clamp(1.0f - easinessFactor, 0.0f, 1.0f);
+ 
++  // AFC: distance to goal. A shot from far out is harder to place: from 18 m on it scatters more, from ~43 m it
++  // is mostly a hopeful one (gftest GF_SHOT_STYLE: 59 % of shots from 45 m+ were on target)
++  const Vector3 oppGoal(-pitchHalfW * player->GetTeam()->GetDynamicSide(), 0, 0);
++  const float shotDistance = (match->GetBall()->Predict(0).Get2D() - oppGoal).GetLength();
++  const float longRange = clamp((shotDistance - 18.0f) / 25.0f, 0.0f, 1.0f);
++  difficultyFactor = std::max(difficultyFactor, longRange * 0.9f);
++
+   // best case result
+ 
++  // AFC, from League-Soccer (Apache-2.0): chip (scooped, soft, heavy backspin) and finesse (placed, curled) shots
++  const bool chip = (currentAnim.originatingCommand.modifier & e_PlayerCommandModifier_Chip) != 0;
++  const bool finesse = !chip && (currentAnim.originatingCommand.modifier & e_PlayerCommandModifier_Finesse) != 0;
+   float desiredHeight = 0.05f;
++  if (chip) {
++    desiredHeight = 0.42f;
++    power = clamp(power * 0.62f, 10.0f, 26.0f);
++  } else if (finesse) {
++    desiredHeight = 0.08f;
++    power = power * 0.88f;
++  }
+   Vector3 desiredShot = (currentAnim.originatingCommand.touchInfo.desiredDirection.Get2D() + Vector3(0, 0, desiredHeight)).GetNormalized() * power;
+ 
+   // worst case result
+@@ -488,6 +521,7 @@
+   worstCaseDirection.Normalize();
+ 
+   float worstCaseHeight = curve(std::pow(difficultyFactor, 0.7f), 0.7f) * 0.7f;
++  if (chip) worstCaseHeight = std::max(worstCaseHeight, 0.35f);
+ 
+   float worstCasePower =
+       power * (1.0f - std::pow(difficultyFactor, 0.7f) * 0.5f);
+@@ -499,6 +533,8 @@
+   float worstCaseFactor = boostrandom(0.0f, 1.0f);
+   worstCaseFactor =
+       std::pow(worstCaseFactor, player->GetStat(technical_shot) * 0.7f);
++  if (finesse) worstCaseFactor *= 0.5f;   // a placed shot: half the scatter
++  worstCaseFactor = std::max(worstCaseFactor, longRange * boostrandom(0.35f, 1.0f));
+ 
+   Vector3 shot = desiredShot * (1.0f - worstCaseFactor) +
+                  worstCaseShot * worstCaseFactor;
+@@ -509,12 +545,13 @@
+   float randomCurveFactor = 0.3f + worstCaseFactor * 0.7f;
+   float plannedCurveFactor = 0.7f;
+ 
+-  // forward/backward 'curve'
++  // forward/backward 'curve' (a chip gets heavy backspin)
++  const float backspin = chip ? 2.5f : 1.0f;
+   xRot = -currentAnim.originatingCommand.touchInfo.desiredDirection.coords[1] *
+-             20.0f +
++             20.0f * backspin +
+          (boostrandom(-20, 20) * randomCurveFactor);
+   yRot = -currentAnim.originatingCommand.touchInfo.desiredDirection.coords[0] *
+-             20.0f +
++             20.0f * backspin +
+          (boostrandom(-20, 20) * randomCurveFactor);
+ 
+   // lateral curve
+@@ -523,8 +560,9 @@
+   bodyTouchAngle *= 2.0f;
+   //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
+   radian amount = bodyTouchAngle * 0.25f;
++  if (finesse) amount = (fabs(amount) < 0.05f) ? 0.12f * (bodyTouchAngle < 0 ? -1.0f : 1.0f) : amount * 1.7f;
+   shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
+-  zRot = amount * -420 + (boostrandom(-20, 20) * plannedCurveFactor);
++  zRot = amount * -420 * (finesse ? 1.6f : 1.0f) + (boostrandom(-20, 20) * plannedCurveFactor);
+ 
+   //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
+ 
+--- a/src/onthepitch/player/player.cpp
++++ b/src/onthepitch/player/player.cpp
+@@ -15,6 +15,7 @@
+ // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
+ // i do not offer support, so don't ask. to be used for inspiration :)
+ 
++#include "../gameplaytuning.hpp"
+ #include "player.hpp"
+ 
+ #include <cmath>
+@@ -326,7 +327,9 @@
+     if (match->IsInPlay()) {
+       Vector3 posAfter = CastHumanoid()->GetPosition();
+       float distance = (posAfter - posBefore).GetLength();
+-      fatigueFactorInv -= distance * 0.00003f * (2.0f - GetStaminaStat()) * (1.0f / match->GetMatchDurationFactor());
++      // AFC, from League-Soccer: sprinting, above all with the ball, tires a man faster than jogging
++      const float fatigueWorkload = GameplayTuning::GetFatigueWorkloadFactor(distance * 100.0f, GetMaxVelocity(), HasPossession());
++      fatigueFactorInv -= distance * 0.00003f * (2.0f - GetStaminaStat()) * fatigueWorkload * (1.0f / match->GetMatchDurationFactor());
+       fatigueFactorInv = clamp(fatigueFactorInv, 0.01f, 1.0f);
+     }
+     // Don't send off the last player on the team.
+--- a/src/onthepitch/player/playerbase.cpp
++++ b/src/onthepitch/player/playerbase.cpp
+@@ -127,7 +127,8 @@
+ 
+ float PlayerBase::GetMaxVelocity() const {
+   // see humanoidbase's physics function
+-  return sprintVelocity * GetVelocityMultiplier();
++  // AFC (from League-Soccer): a tired player sprints slower - rested 100 %, exhausted 80 %
++  return sprintVelocity * GetVelocityMultiplier() * (0.8f + 0.2f * fatigueFactorInv);
+ }
+ 
+ float PlayerBase::GetVelocityMultiplier() const {
+--- a/src/onthepitch/referee.cpp
++++ b/src/onthepitch/referee.cpp
+@@ -352,7 +352,9 @@
+   if (match->IsInPlay() &&
+       (buffer.active == false ||
+        (buffer.active == true && buffer.desiredSetPiece != e_GameMode_ThrowIn &&
+-        buffer.desiredSetPiece != e_GameMode_Corner))) {
++        buffer.desiredSetPiece != e_GameMode_Corner &&
++        // AFC, from League-Soccer (Law 11): no offside from a goal kick either
++        buffer.desiredSetPiece != e_GameMode_GoalKick))) {
+     DO_VALIDATION;
+     // check for offside players at moment of touch
+     MentalImage mentalImage(match);
 --- a/src/onthepitch/teamAIcontroller.cpp
 +++ b/src/onthepitch/teamAIcontroller.cpp
 @@ -15,6 +15,7 @@
@@ -143,415 +638,6 @@
      void ApplyOffsideTrap(Vector3 &position) const;
      float GetOffsideTrapX() const { return offsideTrapX; }
      void PrepareSetPiece(e_GameMode setPiece, Team* other_team,
---- a/src/onthepitch/referee.cpp
-+++ b/src/onthepitch/referee.cpp
-@@ -352,7 +352,9 @@
-   if (match->IsInPlay() &&
-       (buffer.active == false ||
-        (buffer.active == true && buffer.desiredSetPiece != e_GameMode_ThrowIn &&
--        buffer.desiredSetPiece != e_GameMode_Corner))) {
-+        buffer.desiredSetPiece != e_GameMode_Corner &&
-+        // AFC, from League-Soccer (Law 11): no offside from a goal kick either
-+        buffer.desiredSetPiece != e_GameMode_GoalKick))) {
-     DO_VALIDATION;
-     // check for offside players at moment of touch
-     MentalImage mentalImage(match);
---- a/src/onthepitch/player/playerbase.cpp
-+++ b/src/onthepitch/player/playerbase.cpp
-@@ -127,7 +127,8 @@
- 
- float PlayerBase::GetMaxVelocity() const {
-   // see humanoidbase's physics function
--  return sprintVelocity * GetVelocityMultiplier();
-+  // AFC (from League-Soccer): a tired player sprints slower - rested 100 %, exhausted 80 %
-+  return sprintVelocity * GetVelocityMultiplier() * (0.8f + 0.2f * fatigueFactorInv);
- }
- 
- float PlayerBase::GetVelocityMultiplier() const {
---- a/src/onthepitch/player/controller/humancontroller.cpp
-+++ b/src/onthepitch/player/controller/humancontroller.cpp
-@@ -23,6 +23,8 @@
- 
- #include "../../../main.hpp"
- 
-+extern int afc_shot_style;   // AFC: 0 normal, 1 chip, 2 finesse (native/src/gf_api.cpp)
-+
- HumanController::HumanController(Match *match, AIControlledKeyboard *hid)
-     : PlayerController(match), hid(hid) {
-   DO_VALIDATION;
-@@ -127,7 +129,10 @@
-     if (!hid->GetButton(actionButton) ||
-         (hid->GetButton(actionButton) &&
-          gauge_ms >
--             500) ||  // allow anim to kick in before queue is complete (before
-+             500) ||
-+        // AFC: a short pass goes on the press (20 ms), not on the release - on a touch screen the wait for the
-+        // thumb to lift made every pass feel ~0.5 s late; its power is automatic (below)
-+        (actionButton == e_ButtonFunction_ShortPass && gauge_ms >= 20) ||  // allow anim to kick in before queue is complete (before
-                       // button is released), it will usually touch ball after
-                       // the remaining time anyway, so we still have time to add
-                       // more power, yet still respond as fast as possible
-@@ -173,8 +178,10 @@
-         float inputPower = clamp(std::pow(gaugeFactor, 0.7f), 0.01f, 1.0f);
-         command.touchInfo.inputDirection = inputDirection;
-         command.touchInfo.inputPower = inputPower;
--        command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shortpass_autodirection", _default_ShortPass_AutoDirection);
--        command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_shortpass_autopower", _default_ShortPass_AutoPower);
-+        // AFC: the pass picks its power to reach the man (it goes on the press, there is no gauge), and leans a
-+        // little more on the team-mate the stick points at
-+        command.touchInfo.autoDirectionBias = 0.55f;
-+        command.touchInfo.autoPowerBias = 1.0f;
-         AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
- 
-         commandQueue.push_back(command);
-@@ -221,6 +228,9 @@
-         command.useDesiredMovement = false;
-         command.useDesiredLookAt = false;
-         command.desiredVelocityFloat = inputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
-+        // AFC: the shot style the player asked for (a flick on SHOOT: chip, a curl: finesse), set by gf_input
-+        if (afc_shot_style == 1) command.modifier |= e_PlayerCommandModifier_Chip;
-+        else if (afc_shot_style == 2) command.modifier |= e_PlayerCommandModifier_Finesse;
-         command.touchInfo.inputDirection = inputDirection;
-         command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection);
-         command.touchInfo.autoDirectionBias = 1.0f;
---- a/src/onthepitch/player/controller/elizacontroller.cpp
-+++ b/src/onthepitch/player/controller/elizacontroller.cpp
-@@ -15,6 +15,7 @@
- // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
- // i do not offer support, so don't ask. to be used for inspiration :)
- 
-+#include "../../aitactics.hpp"
- #include "../../../main.hpp"
- 
- #include "elizacontroller.hpp"
-@@ -869,6 +870,7 @@
-     float tacticalDiffRating = 0.0f;
-     float passRating = 0.0f;
-     float proximityRating = 0.0f;
-+    float supportRating = 0.0f;
-     e_FunctionType passType;
-   };
- 
-@@ -897,12 +899,19 @@
-       mateRating.player = mates[i];
-       mateRating.tacticalRating = mateTacticalRating;
- 
--      if (mateTacticalRating > tacticalRating + tacticalImprovementThreshold) {
-+      // AFC, from League-Soccer (Apache-2.0): besides a pass forward to a better place, a support pass - when the
-+      // man on the ball is crowded or has had it a while, to a team-mate with clearly more space
-+      const bool progressiveCandidate = mateTacticalRating > tacticalRating + tacticalImprovementThreshold;
-+      const bool supportCandidate = AITactics::ShouldConsiderSupportPass(
-+          tacticalRating, sit.spaceRating, mateTacticalRating, mateSit.spaceRating, longPossessionFactor);
-+      if (progressiveCandidate || supportCandidate) {
-         DO_VALIDATION;
- 
-         float tacticalDiffRating = mateRating.tacticalRating - tacticalRating;
- 
--        mateRating.tacticalDiffRating = tacticalDiffRating;
-+        mateRating.tacticalDiffRating = std::max(tacticalDiffRating, 0.0f);
-+        mateRating.supportRating = supportCandidate
-+            ? AITactics::GetSupportPassBonus(sit.spaceRating, mateSit.spaceRating, longPossessionFactor) : 0.0f;
-         float passingOddsShort = _GetPassingOdds(mates[i], e_FunctionType_ShortPass, opponentPlayerImages);
-         float passingOddsLong  = _GetPassingOdds(mates[i], e_FunctionType_LongPass,  opponentPlayerImages);
-         float passingOddsHigh  = _GetPassingOdds(mates[i], e_FunctionType_HighPass,  opponentPlayerImages);
-@@ -921,7 +930,7 @@
-         }
- 
-         float totalRating = mateRating.tacticalDiffRating * tacticalDiffWeight +
--                            mateRating.passRating * passWeight -
-+                            mateRating.passRating * passWeight + mateRating.supportRating -
-                             oneTouchIsHard;
- 
-         totalRating /= totalWeight2;
---- a/src/onthepitch/player/controller/strategies/offtheball/goalie_default.cpp
-+++ b/src/onthepitch/player/controller/strategies/offtheball/goalie_default.cpp
-@@ -15,6 +15,7 @@
- // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
- // i do not offer support, so don't ask. to be used for inspiration :)
- 
-+#include "../../../../gameplaytuning.hpp"
- #include "goalie_default.hpp"
- 
- #include "../../../../../base/geometry/triangle.hpp"
-@@ -85,6 +86,7 @@
-       float awayFromGoalOffset_m = 0.7f; // meters away from goal line (over the ballToGoal line, not straight forward)
-       float awayFromGoalBias = 0.3f; // factor between goal and ball
-       awayFromGoalBias *= NormalizedClamp(controller->GetFadingTeamPossessionAmount(), 1.0f, 1.5f);
-+      awayFromGoalBias *= 0.85f;   // AFC, from League-Soccer: a little tighter to his line
- 
- 
-       // when opponent comes rushing in and team mates are too far away to help, come out to 'reduce goal size'
-@@ -93,6 +95,7 @@
-         DO_VALIDATION;
- 
-         Player *opp = controller->GetOppTeam()->GetDesignatedTeamPossessionPlayer();
-+        if (!opp) opp = controller->GetOppTeam()->GetBestPossessionPlayer();
-         Vector3 oppPos = opp->GetPosition() + opp->GetMovement() * 0.32f;
- 
-         // if opp isn't in ball control, don't use ball pos but opp pos
-@@ -244,7 +247,9 @@
- 
-   int side = controller->GetTeam()->GetDynamicSide();
- 
--  float panic = 1.02f + (1.0f - (controller->GetPlayer()->GetStat(mental_defensivepositioning) * 0.6f + controller->GetPlayer()->GetStat(mental_vision) * 0.4f)) * 0.5f;
-+  // AFC: the margin by which a keeper takes a shot going wide for one on target: was up to 50 % of the goal (he
-+  // dived at a quarter of the shots going wide), now up to 15 %
-+  float panic = 1.0f + (1.0f - (controller->GetPlayer()->GetStat(mental_defensivepositioning) * 0.6f + controller->GetPlayer()->GetStat(mental_vision) * 0.4f)) * 0.15f;
-   if (mentalImage->GetBallPrediction(4000).coords[0] * side > pitchHalfW &&
-       (controller->GetPlayer()->GetPosition() -
-        mentalImage->GetBallPrediction(250))
-@@ -276,26 +281,28 @@
-         }
-     */
- 
--    // 2d version
--
--    Line ballToGoal;
--    ballToGoal.SetVertex(0, mentalImage->GetBallPrediction(0).Get2D());
--    ballToGoal.SetVertex(1, mentalImage->GetBallPrediction(800).Get2D());
--    Line goalLine;
--    goalLine.SetVertex(0, Vector3(pitchHalfW * side, -pitchHalfH, 0));
--    goalLine.SetVertex(1, Vector3(pitchHalfW * side,  pitchHalfH, 0));
--
--    Vector3 intersectPoint = ballToGoal.GetIntersectionPoint(goalLine).Get2D();
--    if (fabs(intersectPoint.coords[1]) > 3.7 * panic) intersect = false; else intersect = true;
--
--    if (intersect) {
--      DO_VALIDATION;
--      //SetGreenDebugPilon(intersectPoint);
--      ballBoundForGoal_ycoord = intersectPoint.coords[1];
--      ballBoundForGoal = true;
--    } else {
--      //SetGreenDebugPilon(Vector3(0, 0, -10));
-+    // AFC, from League-Soccer (Apache-2.0): walk the ball's physics prediction until it crosses the goal line and
-+    // judge the spot there - width and height (the original 2D projection took shots over the bar for shots on
-+    // goal, and dived at them)
-+    const float goalLineX = pitchHalfW * side;
-+    const unsigned int finalPrediction_ms = ballPredictionSize_ms - 10;
-+    unsigned int previousTime_ms = 0;
-+    Vector3 previousPosition = mentalImage->GetBallPrediction(previousTime_ms);
-+    while (previousTime_ms < finalPrediction_ms) {
-+      const unsigned int predictionTime_ms = std::min(previousTime_ms + 50U, finalPrediction_ms);
-+      const Vector3 predictedPosition = mentalImage->GetBallPrediction(predictionTime_ms);
-+      if (previousPosition.coords[0] * side < pitchHalfW && predictedPosition.coords[0] * side >= pitchHalfW) {
-+        const float xTravel = predictedPosition.coords[0] - previousPosition.coords[0];
-+        const float crossingBias = fabs(xTravel) > 0.0001f ? clamp((goalLineX - previousPosition.coords[0]) / xTravel, 0.0f, 1.0f) : 1.0f;
-+        const Vector3 at = previousPosition + (predictedPosition - previousPosition) * crossingBias;
-+        intersect = GameplayTuning::IsGoalMouthThreat(at.coords[1], at.coords[2], 3.66f, 2.44f, panic);
-+        if (intersect) ballBoundForGoal_ycoord = at.coords[1];
-+        break;
-+      }
-+      previousTime_ms = predictionTime_ms;
-+      previousPosition = predictedPosition;
-     }
-+    ballBoundForGoal = intersect;
-   }
- }
- 
---- a/src/onthepitch/player/humanoid/humanoid.cpp
-+++ b/src/onthepitch/player/humanoid/humanoid.cpp
-@@ -146,7 +146,11 @@
-     float actionDistance = ((spatialState.position + spatialState.movement * 0.1f) - match->GetBall()->Predict(100).Get2D()).GetLength();
- 
-     int team_id = team->GetID() == match->SecondTeam() ? 1 : 0;
--    if (match->GetDesignatedPossessionPlayer() == player &&
-+    if (CastPlayer()->ExternalControllerActive()) {
-+      // AFC: the human's own player looks at a new command every frame (the CPU's every 20-80 ms, staggered): the
-+      // stick answers at once (gftest GF_FEEL_TEST)
-+      frameNumPredicate = true;
-+    } else if (match->GetDesignatedPossessionPlayer() == player &&
-         actionDistance < 3.0f) {
-       DO_VALIDATION;
-       frameNumPredicate = ((match->GetActualTime_ms() + team_id * 10) % 20) ==
-@@ -291,7 +295,8 @@
-       if (interruptAnim == e_InterruptAnim_ReQueue &&
-           previousAnim_functionType == currentAnim.functionType) {
-         DO_VALIDATION;
--        reQueueDelayFrames = initialReQueueDelayFrames; // don't try requeueing (some types of anims, see selectanim()) too often
-+        // AFC: 120 ms (not 220) before the human's player may change his mind again
-+        reQueueDelayFrames = CastPlayer()->ExternalControllerActive() ? 12 : initialReQueueDelayFrames; // don't try requeueing (some types of anims, see selectanim()) too often
-       }
-     }
-   }
-@@ -528,6 +533,11 @@
-         } else {
-           ballDirection = ballDirectionAltered;
-         }
-+        // AFC, from League-Soccer (Apache-2.0): GetShotVector reads the command, so the late aim correction (the
-+        // stick moved during the wind-up) must be written into it - it was worked out and thrown away. For the
-+        // human's player only: for the CPU it made every shot truer (gftest: goals 22 -> 31 in 4 matches)
-+        if (CastPlayer()->ExternalControllerActive())
-+          currentAnim.originatingCommand.touchInfo.desiredDirection = ballDirection;
- 
-         radian xRot = 0;
-         radian yRot = 0;
-@@ -1161,7 +1171,7 @@
-     if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && (CastPlayer()->HasPossession()/* || team->GetTeamPossessionAmount() >= 1.0f*/ || focusDistance > 12.0f)) return false;
-     if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && currentAnim.frameNum + minRemainingMovementReQueueFrames > currentAnim.anim->GetEffectiveFrameCount()) return false;
-     if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && (!allowMovementReQueue || reQueueDelayFrames > 0)) return false;
--    if (currentAnim.functionType == e_FunctionType_BallControl && command.desiredFunctionType == e_FunctionType_BallControl && (!allowBallControlReQueue || currentAnim.frameNum > maxBallControlReQueueFrame || reQueueDelayFrames > 0)) return false;
-+    if (currentAnim.functionType == e_FunctionType_BallControl && command.desiredFunctionType == e_FunctionType_BallControl && (!allowBallControlReQueue || currentAnim.frameNum > (CastPlayer()->ExternalControllerActive() ? 12 : maxBallControlReQueueFrame) || reQueueDelayFrames > 0)) return false;
-     if (currentAnim.functionType == e_FunctionType_BallControl && command.desiredFunctionType == e_FunctionType_Trap) return false;
-     if (currentAnim.functionType == e_FunctionType_Trap && command.desiredFunctionType == e_FunctionType_Trap && (!allowTrapReQueue || currentAnim.frameNum + minRemainingTrapReQueueFrames > currentAnim.touchFrame || reQueueDelayFrames > 0)) return false;
-     if (currentAnim.functionType == e_FunctionType_Trap && command.desiredFunctionType == e_FunctionType_BallControl && (!allowTrapReQueue || currentAnim.frameNum + minRemainingTrapReQueueFrames > currentAnim.touchFrame || reQueueDelayFrames > 0)) return false;
---- a/src/onthepitch/player/humanoid/humanoid_utils.cpp
-+++ b/src/onthepitch/player/humanoid/humanoid_utils.cpp
-@@ -467,9 +467,26 @@
-                          (0.6f + powerEasinessFactor * 0.4f);
-   float difficultyFactor = clamp(1.0f - easinessFactor, 0.0f, 1.0f);
- 
-+  // AFC: distance to goal. A shot from far out is harder to place: from 18 m on it scatters more, from ~43 m it
-+  // is mostly a hopeful one (gftest GF_SHOT_STYLE: 59 % of shots from 45 m+ were on target)
-+  const Vector3 oppGoal(-pitchHalfW * player->GetTeam()->GetDynamicSide(), 0, 0);
-+  const float shotDistance = (match->GetBall()->Predict(0).Get2D() - oppGoal).GetLength();
-+  const float longRange = clamp((shotDistance - 18.0f) / 25.0f, 0.0f, 1.0f);
-+  difficultyFactor = std::max(difficultyFactor, longRange * 0.9f);
-+
-   // best case result
- 
-+  // AFC, from League-Soccer (Apache-2.0): chip (scooped, soft, heavy backspin) and finesse (placed, curled) shots
-+  const bool chip = (currentAnim.originatingCommand.modifier & e_PlayerCommandModifier_Chip) != 0;
-+  const bool finesse = !chip && (currentAnim.originatingCommand.modifier & e_PlayerCommandModifier_Finesse) != 0;
-   float desiredHeight = 0.05f;
-+  if (chip) {
-+    desiredHeight = 0.42f;
-+    power = clamp(power * 0.62f, 10.0f, 26.0f);
-+  } else if (finesse) {
-+    desiredHeight = 0.08f;
-+    power = power * 0.88f;
-+  }
-   Vector3 desiredShot = (currentAnim.originatingCommand.touchInfo.desiredDirection.Get2D() + Vector3(0, 0, desiredHeight)).GetNormalized() * power;
- 
-   // worst case result
-@@ -488,6 +505,7 @@
-   worstCaseDirection.Normalize();
- 
-   float worstCaseHeight = curve(std::pow(difficultyFactor, 0.7f), 0.7f) * 0.7f;
-+  if (chip) worstCaseHeight = std::max(worstCaseHeight, 0.35f);
- 
-   float worstCasePower =
-       power * (1.0f - std::pow(difficultyFactor, 0.7f) * 0.5f);
-@@ -499,6 +517,8 @@
-   float worstCaseFactor = boostrandom(0.0f, 1.0f);
-   worstCaseFactor =
-       std::pow(worstCaseFactor, player->GetStat(technical_shot) * 0.7f);
-+  if (finesse) worstCaseFactor *= 0.5f;   // a placed shot: half the scatter
-+  worstCaseFactor = std::max(worstCaseFactor, longRange * boostrandom(0.35f, 1.0f));
- 
-   Vector3 shot = desiredShot * (1.0f - worstCaseFactor) +
-                  worstCaseShot * worstCaseFactor;
-@@ -509,12 +529,13 @@
-   float randomCurveFactor = 0.3f + worstCaseFactor * 0.7f;
-   float plannedCurveFactor = 0.7f;
- 
--  // forward/backward 'curve'
-+  // forward/backward 'curve' (a chip gets heavy backspin)
-+  const float backspin = chip ? 2.5f : 1.0f;
-   xRot = -currentAnim.originatingCommand.touchInfo.desiredDirection.coords[1] *
--             20.0f +
-+             20.0f * backspin +
-          (boostrandom(-20, 20) * randomCurveFactor);
-   yRot = -currentAnim.originatingCommand.touchInfo.desiredDirection.coords[0] *
--             20.0f +
-+             20.0f * backspin +
-          (boostrandom(-20, 20) * randomCurveFactor);
- 
-   // lateral curve
-@@ -523,8 +544,9 @@
-   bodyTouchAngle *= 2.0f;
-   //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
-   radian amount = bodyTouchAngle * 0.25f;
-+  if (finesse) amount = (fabs(amount) < 0.05f) ? 0.12f * (bodyTouchAngle < 0 ? -1.0f : 1.0f) : amount * 1.7f;
-   shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
--  zRot = amount * -420 + (boostrandom(-20, 20) * plannedCurveFactor);
-+  zRot = amount * -420 * (finesse ? 1.6f : 1.0f) + (boostrandom(-20, 20) * plannedCurveFactor);
- 
-   //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
- 
---- /dev/null
-+++ b/src/onthepitch/gameplaytuning.hpp
-@@ -0,0 +1,81 @@
-+// Copyright 2019 Google LLC & Bastiaan Konings
-+// Licensed under the Apache License, Version 2.0 (the "License");
-+
-+#ifndef _HPP_GAMEPLAY_TUNING
-+#define _HPP_GAMEPLAY_TUNING
-+
-+#include <algorithm>
-+#include <cmath>
-+
-+namespace GameplayTuning {
-+
-+enum class AdvantageDecision { Continue, RecallFoul, PlayedOut };
-+
-+inline AdvantageDecision EvaluateAdvantage(unsigned long now_ms, unsigned long foulAt_ms,
-+                                           bool possessionLost) {
-+  // Subtract timestamps first: subtracting the allowance from an early match
-+  // clock would underflow and prematurely discard the foul.
-+  const unsigned long elapsed_ms = now_ms - foulAt_ms;
-+  if (elapsed_ms > 3500)
-+    return AdvantageDecision::PlayedOut;
-+  if (elapsed_ms > 600 && possessionLost)
-+    return AdvantageDecision::RecallFoul;
-+  return AdvantageDecision::Continue;
-+}
-+inline float Clamp01(float value) {
-+  return std::max(0.0f, std::min(value, 1.0f));
-+}
-+
-+// Adds a small, explainable first-touch penalty under close pressure or when a
-+// fast incoming ball arrives from outside the player's field of view.
-+inline float GetFirstTouchContextPenalty(float opponentDistance, float calmness, float balance,
-+                                         float incomingBallSpeed, float incomingFacingAlignment,
-+                                         int playerCondition = 3) {
-+  const float pressure = Clamp01((1.6f - opponentDistance) / 1.2f);
-+  const float composure = Clamp01(calmness * 0.65f + balance * 0.35f);
-+  const float ballPace = Clamp01((incomingBallSpeed - 4.0f) / 10.0f);
-+  const float blindSide = Clamp01((0.25f - incomingFacingAlignment) / 1.25f);
-+
-+  // PES 5/6: pressure penalty is sharper (0.10 vs 0.08) — being closed down
-+  // under a hard incoming ball is genuinely dangerous.
-+  const float pressurePenalty = pressure * (1.0f - composure * 0.65f) * 0.10f;
-+  const float orientationPenalty = ballPace * blindSide * (1.0f - composure * 0.4f) * 0.10f;
-+
-+  // PES condition penalty (3 is neutral, 1 is terrible, 5 is excellent)
-+  // PES condition penalty: 3 is neutral, 1 is poor, 5 is excellent.
-+  // Weight 0.03 makes a 2-star condition gap produce ~0.06 extra error —
-+  // enough to be perceptible but not overwhelming.
-+  float conditionMod = (3 - playerCondition) * 0.03f;
-+
-+  return std::min(std::max(0.0f, pressurePenalty + orientationPenalty + conditionMod), 0.25f);
-+}
-+
-+// Distance remains the primary fatigue input. This workload factor makes
-+// jogging slightly cheaper and repeated sprinting slightly more expensive.
-+inline float GetFatigueWorkloadFactor(float movementSpeed, float maximumSpeed, bool carryingBall) {
-+  if (maximumSpeed <= 0.0f)
-+    return 1.0f;
-+
-+  const float speedRatio = Clamp01(movementSpeed / maximumSpeed);
-+  const float sprintLoad = Clamp01((speedRatio - 0.55f) / 0.45f);
-+  // PES 5/6: sprinting is notably more taxing than jogging (0.36 vs 0.28)
-+  // and carrying the ball while at full pace costs extra (0.06 vs 0.04).
-+  // Late in a match, fatigued players visibly slow down.
-+  float workload = 0.90f + sprintLoad * sprintLoad * 0.36f;
-+  if (carryingBall)
-+    workload += sprintLoad * 0.06f;
-+  return workload;
-+}
-+
-+inline bool IsGoalMouthThreat(float lateralPosition, float ballHeight, float goalHalfWidth,
-+                              float goalHeight, float anticipationFactor) {
-+  const float anticipation = std::max(anticipationFactor, 1.0f);
-+  const float anticipatedHalfWidth = goalHalfWidth * anticipation;
-+  const float anticipatedHeight = goalHeight + 0.11f + (anticipation - 1.0f) * 0.25f;
-+  return std::fabs(lateralPosition) <= anticipatedHalfWidth && ballHeight >= 0.0f &&
-+         ballHeight <= anticipatedHeight;
-+}
-+
-+}  // namespace GameplayTuning
-+
-+#endif  // _HPP_GAMEPLAY_TUNING
 --- /dev/null
 +++ b/src/onthepitch/aitactics.hpp
 @@ -0,0 +1,112 @@
@@ -667,3 +753,87 @@
 +}  // namespace AITactics
 +
 +#endif
+--- /dev/null
++++ b/src/onthepitch/gameplaytuning.hpp
+@@ -0,0 +1,81 @@
++// Copyright 2019 Google LLC & Bastiaan Konings
++// Licensed under the Apache License, Version 2.0 (the "License");
++
++#ifndef _HPP_GAMEPLAY_TUNING
++#define _HPP_GAMEPLAY_TUNING
++
++#include <algorithm>
++#include <cmath>
++
++namespace GameplayTuning {
++
++enum class AdvantageDecision { Continue, RecallFoul, PlayedOut };
++
++inline AdvantageDecision EvaluateAdvantage(unsigned long now_ms, unsigned long foulAt_ms,
++                                           bool possessionLost) {
++  // Subtract timestamps first: subtracting the allowance from an early match
++  // clock would underflow and prematurely discard the foul.
++  const unsigned long elapsed_ms = now_ms - foulAt_ms;
++  if (elapsed_ms > 3500)
++    return AdvantageDecision::PlayedOut;
++  if (elapsed_ms > 600 && possessionLost)
++    return AdvantageDecision::RecallFoul;
++  return AdvantageDecision::Continue;
++}
++inline float Clamp01(float value) {
++  return std::max(0.0f, std::min(value, 1.0f));
++}
++
++// Adds a small, explainable first-touch penalty under close pressure or when a
++// fast incoming ball arrives from outside the player's field of view.
++inline float GetFirstTouchContextPenalty(float opponentDistance, float calmness, float balance,
++                                         float incomingBallSpeed, float incomingFacingAlignment,
++                                         int playerCondition = 3) {
++  const float pressure = Clamp01((1.6f - opponentDistance) / 1.2f);
++  const float composure = Clamp01(calmness * 0.65f + balance * 0.35f);
++  const float ballPace = Clamp01((incomingBallSpeed - 4.0f) / 10.0f);
++  const float blindSide = Clamp01((0.25f - incomingFacingAlignment) / 1.25f);
++
++  // PES 5/6: pressure penalty is sharper (0.10 vs 0.08) — being closed down
++  // under a hard incoming ball is genuinely dangerous.
++  const float pressurePenalty = pressure * (1.0f - composure * 0.65f) * 0.10f;
++  const float orientationPenalty = ballPace * blindSide * (1.0f - composure * 0.4f) * 0.10f;
++
++  // PES condition penalty (3 is neutral, 1 is terrible, 5 is excellent)
++  // PES condition penalty: 3 is neutral, 1 is poor, 5 is excellent.
++  // Weight 0.03 makes a 2-star condition gap produce ~0.06 extra error —
++  // enough to be perceptible but not overwhelming.
++  float conditionMod = (3 - playerCondition) * 0.03f;
++
++  return std::min(std::max(0.0f, pressurePenalty + orientationPenalty + conditionMod), 0.25f);
++}
++
++// Distance remains the primary fatigue input. This workload factor makes
++// jogging slightly cheaper and repeated sprinting slightly more expensive.
++inline float GetFatigueWorkloadFactor(float movementSpeed, float maximumSpeed, bool carryingBall) {
++  if (maximumSpeed <= 0.0f)
++    return 1.0f;
++
++  const float speedRatio = Clamp01(movementSpeed / maximumSpeed);
++  const float sprintLoad = Clamp01((speedRatio - 0.55f) / 0.45f);
++  // PES 5/6: sprinting is notably more taxing than jogging (0.36 vs 0.28)
++  // and carrying the ball while at full pace costs extra (0.06 vs 0.04).
++  // Late in a match, fatigued players visibly slow down.
++  float workload = 0.90f + sprintLoad * sprintLoad * 0.36f;
++  if (carryingBall)
++    workload += sprintLoad * 0.06f;
++  return workload;
++}
++
++inline bool IsGoalMouthThreat(float lateralPosition, float ballHeight, float goalHalfWidth,
++                              float goalHeight, float anticipationFactor) {
++  const float anticipation = std::max(anticipationFactor, 1.0f);
++  const float anticipatedHalfWidth = goalHalfWidth * anticipation;
++  const float anticipatedHeight = goalHeight + 0.11f + (anticipation - 1.0f) * 0.25f;
++  return std::fabs(lateralPosition) <= anticipatedHalfWidth && ballHeight >= 0.0f &&
++         ballHeight <= anticipatedHeight;
++}
++
++}  // namespace GameplayTuning
++
++#endif  // _HPP_GAMEPLAY_TUNING

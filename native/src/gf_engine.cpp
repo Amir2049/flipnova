@@ -27,6 +27,7 @@ bool GFEngine::start(const String& data_dir, const Dictionary& o) {
   s.match_frames = int(float(o.get("match_seconds", 480.0)) * 100.0f);
   s.offsides = bool(o.get("offsides", true));
   s.dribble_lead = float(o.get("dribble_lead", 1.0));
+  s.wetness = float(o.get("wetness", 0.0));
   s.right_brain = int(o.get("brain", 0));
   s.brain_path = String(o.get("brain_path", "")).utf8().get_data();
   s.brain_temperature = float(o.get("brain_temperature", 0.0));

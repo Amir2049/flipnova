@@ -5,20 +5,20 @@ extends RefCounted
 ## "Derby night on TV": the menus speak the language of a match broadcast - slanted score-bug plates in stadium-night
 ## navy, chalk text, floodlight gold for whatever is selected, and derby red only for the one action that starts play.
 ## (The pitch's own green stays in the picture behind; green panels on a green pitch had no contrast.)
-const PITCH := Color("13204a")               # plate navy: panels and cards
-const TURF := Color("080f28")                # stadium night: wells, notches, text on light fills
+const PITCH := Color("1f4196")               # royal blue: panels and cards (2.43: brighter, the owner found the navy gloomy)
+const TURF := Color("0f2560")                # deep blue: wells, notches, text on light fills
 const CHALK := Color("f3f5f2")               # touchline chalk: text
 const TICKET := Color("e10a2e")              # derby red: the one action on a screen (Play, Start)
 const BRASS := Color("ffc72c")               # floodlight gold: what is selected or focused, stars, values
-const NILE := Color("19bfae")                # Nile teal: a second colour for the career / info
+const NILE := Color("22d8c4")                # Nile teal: a second colour for the career / info
 const SKEW := -0.16                          # the broadcast slant of plates and buttons
 const ACCENT := BRASS
 const CYAN := NILE
 const FLARE := Color("e8742c")               # warning / tired
 const INK := TURF
 const PANEL := Color(PITCH.r, PITCH.g, PITCH.b, 0.93)
-const PANEL_2 := Color("203470")
-const MUTED := Color("a3b3d6")
+const PANEL_2 := Color("3462c8")
+const MUTED := Color("c8d6f2")
 const GOOD := Color(0.35, 0.9, 0.5)
 const BAD := Color(1.0, 0.35, 0.35)
 

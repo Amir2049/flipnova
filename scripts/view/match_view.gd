@@ -196,13 +196,13 @@ func _environment() -> void:
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	e.ambient_light_sky_contribution = 0.5
 	e.ambient_light_color = Color(0.55, 0.6, 0.7)
-	e.ambient_light_energy = 0.42 if not night else 0.35
+	e.ambient_light_energy = 0.55 if not night else 0.5
 	# broadcast look: filmic curve, slightly lower saturation, a touch more contrast, haze over the far stands
 	e.tonemap_mode = Environment.TONE_MAPPER_ACES
-	e.tonemap_exposure = 0.92
+	e.tonemap_exposure = 1.08   # 2.43: 0.92 read dull and muddy on phones (owner)
 	e.tonemap_white = 6.0
 	e.adjustment_enabled = true
-	e.adjustment_saturation = 1.1    # 1.22 made the grass neon and the kits shout on phone screens (2.38)
+	e.adjustment_saturation = 1.15   # 1.22 made the grass neon and the kits shout on phone screens (2.38)
 	e.adjustment_contrast = 1.06
 	e.fog_enabled = not night
 	e.fog_mode = Environment.FOG_MODE_EXPONENTIAL
@@ -221,11 +221,11 @@ func _environment() -> void:
 	if night:
 		# the floodlights: steep, white, a little cool
 		sun.rotation_degrees = Vector3(-72, 20, 0)
-		sun.light_energy = 0.85    # 1.15 + bloom lit the grass neon under the lamps (2.39)
+		sun.light_energy = 1.0    # 1.15 + bloom lit the grass neon under the lamps (2.39)
 		sun.light_color = Color(0.95, 0.97, 1.0)
 		e.glow_intensity = 0.5
 		e.glow_bloom = 0.04
-		e.adjustment_saturation = 1.0
+		e.adjustment_saturation = 1.08
 	elif rain:
 		sun.light_energy = 0.8
 		e.ambient_light_energy = 0.9

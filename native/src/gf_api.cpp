@@ -2,7 +2,8 @@
 #include "gf_api.h"
 #include "crash_guard.h"
 
-int afc_shot_style = 0;   // read by the engine's HumanController when it builds a shot (patch)
+int afc_shot_style = 0;
+extern float afc_pitch_wetness;   // ball.cpp (patch)   // read by the engine's HumanController when it builds a shot (patch)
 
 #include <cmath>
 #include <cstdio>
@@ -78,6 +79,7 @@ bool gf_start(const GfSetup& s) {
     g_env->start_game();
   }
   crash_stage("setting up the match (teams, formations)");
+  afc_pitch_wetness = s.wetness;
   SetGame(g_env);
   auto cfg = ScenarioConfig::make();
   for (int i = 0; i < 11; i++) {

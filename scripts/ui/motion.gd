@@ -4,7 +4,7 @@ extends RefCounted
 ## buttons that give under the thumb. Everything moves through the Control offset transform (Godot 4.7), which
 ## containers leave alone, so the layout never jumps.
 
-const NAVY := Color("0b1638")
+const NAVY := Color("17337e")
 
 
 ## A button sinks under the thumb and springs back.

@@ -208,7 +208,9 @@ func start(config: Dictionary) -> void:
 	human_team = 0 if int(config.get("human_team", 0)) >= 0 else -1
 	var tod: String = opts.get("time_of_day", "auto")
 	night = tod == "night" or (tod == "auto" and randf() < 0.3)
-	rain = false
+	# rain on the engine's matches too (2.43): the pitch shines, it pours, and the engine's ball skids on (wetness)
+	var w: String = opts.get("weather", "auto")
+	rain = w == "rain" or (w == "auto" and randf() < 0.15)
 	_environment()
 	# the engine's pitch: 110 x 72 m
 	pitch.length = 110.0
@@ -217,6 +219,9 @@ func start(config: Dictionary) -> void:
 	pitch_view.quality = int(opts.get("quality", 1))
 	add_child(pitch_view)
 	pitch_view.build(pitch)
+	pitch_view.set_wet(1.0 if rain else 0.0)
+	if rain:
+		_rain()
 	var home: int = config.get("home", 0)
 	var away: int = config.get("away", 1)
 	var edits: Dictionary = config.get("edits", {})
@@ -272,7 +277,7 @@ func start(config: Dictionary) -> void:
 	# player's team-mates reacted slower: the human's side now plays at full level (a watched match: both alike).
 	var eo := {"human": 1 if human_team >= 0 else 0, "difficulty_home": 1.0 if human_team >= 0 else AWAY_DIFF[level],
 		"difficulty_away": AWAY_DIFF[level],
-		"seed": int(config.get("seed", randi() % 100000)), "match_seconds": match_seconds, "offsides": opts.get("offside", true),
+		"seed": int(config.get("seed", randi() % 100000)), "match_seconds": match_seconds, "offsides": opts.get("offside", true), "wetness": 1.0 if rain else 0.0,
 		"home_formation": formation_entries(team_defs[0]["formation"]),
 		"away_formation": formation_entries(team_defs[1]["formation"])}
 	if level >= 3:
