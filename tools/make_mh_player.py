@@ -93,8 +93,22 @@ def gf_bone(mh):
     return "neck"   # neck, head, jaw, eyes, face, tongue
 
 
+# A footballer's build on top of the young athletic macros (2.41): the V of the back and the chest that broadcast
+# players read with, strong thighs and calves, a sturdier neck. MakeHuman modifiers (CC0).
+ATHLETE = {
+    "torso/torso-vshape-incr": 0.6,
+    "torso/torso-muscle-pectoral-incr": 0.5,
+    "torso/torso-muscle-dorsi-incr": 0.45,
+    "armslegs/l-upperarm-shoulder-muscle-incr": 0.5, "armslegs/r-upperarm-shoulder-muscle-incr": 0.5,
+    "armslegs/l-upperarm-muscle-incr": 0.3, "armslegs/r-upperarm-muscle-incr": 0.3,
+    "armslegs/l-upperleg-muscle-incr": 0.6, "armslegs/r-upperleg-muscle-incr": 0.6,
+    "armslegs/l-lowerleg-muscle-incr": 0.65, "armslegs/r-lowerleg-muscle-incr": 0.65,
+    "neck/neck-scale-horiz-incr": 0.35,
+}
+
+
 def build(mh_data, anim_dir, out_glb, verbose=True):
-    body = load_body(mh_data, muscle=0.8, weight=0.35, height=0.5, proportions=0.6)
+    body = load_body(mh_data, muscle=0.8, weight=0.35, height=0.5, proportions=0.6, extra=ATHLETE)
     B = body["bones"]
     H = lambda b: np.array(B[b]["head"], float)  # noqa: E731
     pos0 = body["pos"].copy()
@@ -248,7 +262,9 @@ def build(mh_data, anim_dir, out_glb, verbose=True):
     freg[sole] = "sole"
     vreg, v_tarm, v_tthigh, v_tshin = region(P, W)
 
-    # boots: smooth away the toes (a boot has no toes), keep the sole flat
+    # boots: a boot has no toes. Smoothing cannot do it (it shrinks each toe onto itself and keeps the gaps), so the
+    # front of each foot is wrapped onto a boot: sliced along its length, every slice becomes a rounded box
+    # (superellipse) as wide and as tall as the foot is there, the toe end rounded off. The heel stays as modelled.
     shoe_v = np.unique(bfaces[np.isin(freg, ["shoe", "sole"])])
     nb = [[] for _ in range(nv)]
     for q in bfaces:
@@ -256,13 +272,73 @@ def build(mh_data, anim_dir, out_glb, verbose=True):
             nb[q[k]].append(q[(k + 1) % 4])
             nb[q[k]].append(q[(k + 3) % 4])
     Ps = P.copy()
-    toe_zone = [v for v in shoe_v if Ps[v, 2] > ankle[side_of(Ps[v:v + 1, 0])[0]][2] + 0.06]
-    for _ in range(12):
-        new = Ps.copy()
-        for v in toe_zone:
-            new[v] = Ps[nb[v]].mean(0)
-        Ps = new
+    sides = side_of(P[shoe_v, 0])
+    wrapped = []
+    hulls = {}
+    for sd in ("left_", "right_"):
+        fv = shoe_v[sides == sd]
+        if len(fv) == 0:
+            continue
+        az = ankle[sd][2]
+        zs = P[fv, 2]
+        tip = zs.max()
+        start = az + 0.02                       # where the wrap begins (fades in over 3 cm)
+        nbins = 28
+        edges = np.linspace(start, tip + 1e-6, nbins + 1)
+        prof = np.zeros((nbins, 4))             # xmin, xmax, ymin, ymax
+        for b_ in range(nbins):
+            sel = fv[(zs >= edges[b_]) & (zs < edges[b_ + 1])]
+            prof[b_] = [P[sel, 0].min(), P[sel, 0].max(), P[sel, 1].min(), P[sel, 1].max()] if len(sel) else np.nan
+        ok = ~np.isnan(prof[:, 0])
+        for c in range(4):
+            prof[:, c] = np.interp(np.arange(nbins), np.where(ok)[0], prof[ok, c])
+            prof[:, c] = np.convolve(np.pad(prof[:, c], 2, mode="edge"), np.ones(5) / 5, "valid")
+        hulls[sd] = (start, tip, nbins, prof)
+        wrapped += [v for v in fv if P[v, 2] >= start]
+
+    def hull(sd, p):
+        """the point of the boot surface in the direction of p from the slice's centre (same z)"""
+        start, tip, nbins, prof = hulls[sd]
+        z = float(np.clip(p[2], start, tip))
+        b_ = min(int((z - start) / (tip - start + 1e-6) * nbins), nbins - 1)
+        x0, x1, y0, y1 = prof[b_]
+        cx, cy = (x0 + x1) * 0.5, (y0 + y1) * 0.5
+        a, bb = (x1 - x0) * 0.5 + 0.002, (y1 - y0) * 0.5
+        u = float(np.clip((z - (tip - 0.04)) / 0.04, 0.0, 1.0))   # the rounded toe end, last 4 cm
+        a *= math.sqrt(max(1.0 - u * u, 0.0)) * 0.7 + 0.3 * (1.0 - u)
+        bb *= 1.0 - 0.35 * u
+        th = math.atan2(p[1] - cy, p[0] - cx)
+        ct, st_ = math.cos(th), math.sin(th)
+        ex, ey = abs(ct) ** (2 / 2.6), abs(st_) ** (2 / 2.6)
+        return np.array([cx + a * math.copysign(ex, ct), cy + bb * math.copysign(ey, st_), p[2]])
+
+    wside = {v: side_of(P[v:v + 1, 0])[0] for v in wrapped}
+    for v in wrapped:
+        Ps[v] = hull(wside[v], P[v])
+    # the wrap folds the surface where the gaps between the toes were: smooth along the boot, projecting back onto
+    # it after every pass (plain smoothing would pull every toe back onto its own axis)
+    for _ in range(30):
+        new_ = Ps.copy()
+        for v in wrapped:
+            new_[v] = hull(wside[v], Ps[v] * 0.4 + Ps[nb[v]].mean(0) * 0.6)
+        Ps = new_
+    for v in wrapped:
+        w_ = float(smoothstep(hulls[wside[v]][0], hulls[wside[v]][0] + 0.03, P[v, 2]))
+        Ps[v] = P[v] * (1 - w_) + Ps[v] * w_
     Ps[shoe_v, 1] = np.maximum(Ps[shoe_v, 1], np.where(P[shoe_v, 1] < 0.006, P[shoe_v, 1], Ps[shoe_v, 1]))
+    if verbose:
+        print("  boots: %d verts wrapped onto a boot shape" % len(shoe_v))
+
+    # the shirt is cloth over the chest, not paint on it: smooth the torso's muscle relief under the shirt (its
+    # borders with the sleeves, collar and hem stay put, so the seams still meet)
+    shirt_set = set(np.where(vreg == "shirt")[0].tolist())
+    inner = [v for v in shirt_set if nb[v] and all(u in shirt_set for u in nb[v])]
+    Pk = P.copy()
+    for _ in range(10):
+        new = Pk.copy()
+        for v in inner:
+            new[v] = Pk[v] * 0.5 + Pk[nb[v]].mean(0) * 0.5
+        Pk = new
 
     # the shirt hangs from the chest: below it, it does not follow the waist in
     armw_all = W[:, [NAMES.index(x) for x in ("left_shoulder", "left_elbow", "right_shoulder", "right_elbow")]].sum(1)
@@ -299,7 +375,7 @@ def build(mh_data, anim_dir, out_glb, verbose=True):
         if reg == "socks":
             return 0.004
         if reg == "shoe":
-            return 0.006
+            return 0.009   # a boot is a little fuller than the foot
         if reg == "sole":
             return 0.008
         return 0.0
@@ -404,7 +480,7 @@ def build(mh_data, anim_dir, out_glb, verbose=True):
     def dpos(v, reg):
         k = (v, reg)
         if k not in disp:
-            base = Ps[v] if reg in ("shoe", "sole") else P[v]
+            base = Ps[v] if reg in ("shoe", "sole") else (Pk[v] if reg == "shirt" else P[v])
             off = offset(reg, v)
             q = base + N0[v] * off
             if reg == "shirt" and v in shirt_torso:

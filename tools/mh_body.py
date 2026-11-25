@@ -53,7 +53,9 @@ def _pair(val, lo, mid, hi):
     return {mid: 2 * (1 - val), hi: 2 * (val - 0.5)}
 
 
-def load_body(data, muscle=0.8, weight=0.35, height=0.6, proportions=1.0, race=None):
+def load_body(data, muscle=0.8, weight=0.35, height=0.6, proportions=1.0, race=None, extra=None):
+    """extra: {target path under data/targets (no .target): weight} - MakeHuman's per-part modifiers (torso
+    v-shape, pectorals, calves...) on top of the macro sliders."""
     data = Path(data)
     v, vt, faces, groups = _load_obj(data / "3dobjs/base.obj")
     n = len(v)
@@ -76,6 +78,9 @@ def load_body(data, muscle=0.8, weight=0.35, height=0.6, proportions=1.0, race=N
                 off += a * b * 2 * (proportions - 0.5) * _load_target(T / f"proportions/male-young-{m}-{wt}-idealproportions.target", n)
             elif proportions < 0.5:
                 off += a * b * (1 - 2 * proportions) * _load_target(T / f"proportions/male-young-{m}-{wt}-uncommonproportions.target", n)
+    for t, w in (extra or {}).items():
+        if w:
+            off += w * _load_target(data / "targets" / (t + ".target"), n)
     pos = (v + off) * 0.1   # dm -> m
 
     skel = json.loads((data / "rigs/default.mhskel").read_text())
