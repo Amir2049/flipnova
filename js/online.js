@@ -215,7 +215,7 @@
   };
   // "a newer version is out" notice: the newest build number + its download link live in public.ff_meta
   // (see tools/supabase-update.sql). Keep BUILD equal to versionCode in android/app/build.gradle.
-  O.BUILD = 48;
+  O.BUILD = 66; // (b66: was still 48) a newer ff_meta.build than this shows the update notice
   O.checkUpdate = async function () {
     if (!O.enabled()) return null;
     const c = O.cfg();

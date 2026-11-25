@@ -182,6 +182,7 @@
   } catch (e) { /* old browser: the CSS screen still shows */ }
   document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+  { const sp = document.getElementById('bootSplash'); if (sp) sp.remove(); } // b66: the game is up — drop the loading splash
   // offline / installable (only over http(s))
   if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0 && navigator.userAgent.indexOf('FlipFrenzyApp') < 0) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

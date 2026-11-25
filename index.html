@@ -19,10 +19,13 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+<!-- b66: a splash that paints at once (inline, no files needed) while the 23 game scripts load; main.js removes it -->
+<style>#bootSplash{position:fixed;inset:0;z-index:9999;background:#070926;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;font:900 44px/1 system-ui,sans-serif;letter-spacing:.1em}#bootSplash b{color:#ffd23f}#bootSplash i{display:block;width:160px;height:6px;background:#1b1f4a;overflow:hidden}#bootSplash i:after{content:"";display:block;height:100%;width:40%;background:linear-gradient(90deg,#27d7ff,#b45cff);animation:bootbar .9s ease-in-out infinite alternate}@keyframes bootbar{to{transform:translateX(150%)}}</style>
 <link rel="stylesheet" href="fonts/cairo.css">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<div id="bootSplash" aria-label="loading">FLIP<b>PO</b><i></i></div>
 <div id="app">
   <div id="stage">
     <canvas id="screen" width="320" height="180" aria-label="FLIPPO"></canvas>

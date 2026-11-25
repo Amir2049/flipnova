@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/build/www"
 rm -rf "$OUT" && mkdir -p "$OUT/js" "$OUT/css"
-cp -r "$ROOT/fonts" "$ROOT/icons" "$ROOT/manifest.webmanifest" "$OUT/"
+cp -r "$ROOT/fonts" "$ROOT/icons" "$ROOT/manifest.webmanifest" "$ROOT/sw.js" "$ROOT/privacy.html" "$OUT/" # (b66: + sw.js, privacy.html: build/www is a complete site)
 TERSER="npx -y terser@5.31.6"
 for f in "$ROOT"/js/*.js; do
   $TERSER "$f" --compress --mangle --comments false -o "$OUT/js/$(basename "$f")" 2>/dev/null
