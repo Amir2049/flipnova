@@ -61,9 +61,10 @@ static func mark_running(on: bool) -> void:
 
 
 ## The native match engine (a GDExtension) is not in the build's auto-load list (tools/build_android.sh takes it out):
-## it is loaded here, behind a guard. Before loading, this version's state is written as "trying"; once the title has
-## run a few seconds main.gd marks it "ok". If the library takes the app down, the next start finds "trying", marks
-## the version "failed" and the game runs on its built-in engine instead: it always opens, at worst on the second try.
+## it is loaded here, behind a guard. Before loading, this version's state is written as "trying", and "ok" as soon as
+## the library is in. The first 15 s of a match on it are guarded the same way (native_match_guard). If the library
+## takes the app down, the next start finds "trying", marks the version "failed" and the game runs on its built-in
+## engine instead: it always opens, at worst on the second try. Settings > Engine info can try it again.
 static func _load_native() -> void:
 	if ClassDB.class_exists("GFEngine") or not FileAccess.file_exists(NATIVE):
 		return
@@ -71,6 +72,14 @@ static func _load_native() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(NATIVE_STATE)
 	var state := str(cfg.get_value("native", ver, ""))
+	# a match on the native engine that took the app down (see EngineMatchView.start)
+	if str(cfg.get_value("native_match", ver, "")) == "trying":
+		cfg.set_value("native_match", ver, "failed")
+		cfg.set_value("native", ver, "failed")
+		cfg.save(NATIVE_STATE)
+		native_note = "a match on it closed the game: playing on the built-in engine"
+		_save_crash_log()
+		return
 	if state == "trying":
 		cfg.set_value("native", ver, "failed")
 		cfg.save(NATIVE_STATE)
@@ -88,6 +97,20 @@ static func _load_native() -> void:
 		cfg.set_value("native", ver, "failed")
 		cfg.save(NATIVE_STATE)
 		native_note = "it could not be loaded (%d)" % st
+		return
+	# loaded and initialised: what follows (unpacking, menus) is not the library's doing. (2.27-2.29 waited for
+	# the menus + 4 s; a game closed or killed in that time - a long first start - was taken for a crash.)
+	cfg.set_value("native", ver, "ok")
+	cfg.save(NATIVE_STATE)
+
+
+## Around the start of a native-engine match: a crash in there switches the engine off for the next start.
+static func native_match_guard(on: bool) -> void:
+	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
+	var cfg := ConfigFile.new()
+	cfg.load(NATIVE_STATE)
+	cfg.set_value("native_match", ver, "trying" if on else "ok")
+	cfg.save(NATIVE_STATE)
 
 
 const NATIVE_CRASH := "user://native_crash.txt"
@@ -137,16 +160,14 @@ static func native_report() -> String:
 	return "\n".join(lines)
 
 
-## The game has been up a few seconds with the native engine loaded: this version is good on this phone.
-static func confirm_native() -> void:
-	if not ClassDB.class_exists("GFEngine"):
-		return
+## Settings > Engine info > Try again: forget this version's failure, the next start loads the engine again.
+static func retry_native() -> void:
 	var ver := str(ProjectSettings.get_setting("application/config/version", ""))
 	var cfg := ConfigFile.new()
 	cfg.load(NATIVE_STATE)
-	if str(cfg.get_value("native", ver, "")) == "trying":
-		cfg.set_value("native", ver, "ok")
-		cfg.save(NATIVE_STATE)
+	cfg.set_value("native", ver, "")
+	cfg.set_value("native_match", ver, "")
+	cfg.save(NATIVE_STATE)
 
 
 func _load_game() -> void:

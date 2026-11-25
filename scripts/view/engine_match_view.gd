@@ -21,6 +21,7 @@ const B_PRESS := 128
 const B_TEAM_PRESS := 256
 const B_SWITCH := 512
 const MODE_NAMES := ["", "KICK OFF", "GOAL KICK", "FREE KICK", "CORNER", "THROW-IN", "PENALTY"]
+var guarded := false
 var force_touch := false                 # tests: show and use the touch controls without a touchscreen
 const STICK_DEAD := 0.18                 # touch / pad stick deadzone (the engine's own is 0.75, see _input_to_engine)
 const ASSIST_RANGE := 12.0               # metres: loose-ball assist reach
@@ -268,6 +269,8 @@ func start(config: Dictionary) -> void:
 			eo["brain"] = 1
 			eo["brain_path"] = bp
 			eo["brain_temperature"] = BRAIN_TEMP[level]
+	# a crash in the engine's start or first seconds switches it off for the next launch (boot.gd)
+	_guard(true)
 	engine.start(dir, eo)
 	stride = engine.stride()
 	_pull()
@@ -279,7 +282,22 @@ func start(config: Dictionary) -> void:
 		ready.connect(_first_frame, CONNECT_ONE_SHOT)
 
 
+## The match is on: after 15 s of play the engine counts as good on this phone (a phone that swipes the app away
+## later is not a crash of ours). Leaving the match early also clears it.
+func _guard(on: bool) -> void:
+	if guarded == on:
+		return
+	guarded = on
+	load("res://scripts/boot.gd").native_match_guard(on)
+
+
+func _exit_tree() -> void:
+	_guard(false)
+	super._exit_tree()
+
+
 func _first_frame() -> void:
+	get_tree().create_timer(15.0).timeout.connect(func(): _guard(false))
 	_update_views(0.0)
 	cam.follow(ball_proxy, Vector2.ZERO, 1.0, true)
 	sfx.whistle(1)

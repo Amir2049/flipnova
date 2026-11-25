@@ -23,7 +23,6 @@ func _ready() -> void:
 	get_tree().create_timer(0.35).timeout.connect(func():
 		if match_view == null:
 			_start_demo())
-	get_tree().create_timer(4.0).timeout.connect(func(): load("res://scripts/boot.gd").confirm_native())
 
 
 # ------------------------------------------------------------------ navigation
@@ -831,6 +830,13 @@ func _engine_info() -> void:
 	var text: String = load("res://scripts/boot.gd").native_report()
 	var copy := UI.button("Copy", func(): DisplayServer.clipboard_set(text), Vector2(160, 54), "accent", 20)
 	var pg := _page("ENGINE INFO", copy)
+	if not ClassDB.class_exists("GFEngine"):
+		var again: Button
+		again = UI.button("Try the match engine again", func():
+			load("res://scripts/boot.gd").retry_native()
+			again.text = "Done: close and open the game"
+			again.disabled = true, Vector2(420, 54), "ghost", 20)
+		pg[1].add_child(again)
 	var box := TextEdit.new()
 	box.text = text
 	box.editable = false
