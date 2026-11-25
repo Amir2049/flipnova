@@ -51,6 +51,12 @@ func _ready() -> void:
 	body.add_child(UI.choice_row("Time of day", ["Random", "Day", "Night"], maxi(0, times.find(Profile.get_s("time_of_day"))), func(i: int): _apply("time_of_day", times[i])))
 	body.add_child(UI.caption("Display"))
 	body.add_child(UI.choice_row("Graphics", QUALITY, int(Profile.get_s("quality")), func(i: int): _apply("quality", i)))
+	var boot = load("res://scripts/boot.gd")
+	var rnote := UI.label("", 15, UI.MUTED)
+	body.add_child(UI.choice_row("Graphics engine", ["Vulkan (best look)", "OpenGL (older phones)"], 0 if boot.vulkan_wanted() else 1, func(i: int):
+		boot.set_vulkan(i == 0)
+		rnote.text = "Restart the game to switch." if (i == 0) != boot.vulkan_on() else ""))
+	body.add_child(rnote)
 	body.add_child(UI.toggle_row("Radar", Profile.get_s("radar"), func(v: bool): _apply("radar", v)))
 	body.add_child(UI.toggle_row("Player names", Profile.get_s("names"), func(v: bool): _apply("names", v)))
 	body.add_child(UI.caption("Sound"))

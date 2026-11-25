@@ -6,6 +6,9 @@ var out := OS.get_environment("OUT") if OS.get_environment("OUT") != "" else "/t
 
 func _initialize():
 	DirAccess.make_dir_recursive_absolute(out)
+	var pr = get_root().get_node_or_null("Profile")
+	if pr and not pr.data.has("settings"):
+		pr.data["settings"] = {}
 	mv = load("res://scripts/view/engine_match_view.gd").new()
 	get_root().add_child(mv)
 	mv.start({"home": 0, "away": 3, "human_team": 0, "half_minutes": 4.0, "difficulty": 0.5, "camera": "broadcast",

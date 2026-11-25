@@ -38,6 +38,8 @@ var intro := false
 var intro_t := 0.0
 
 
+const MOBILE_EXPOSURE := 2.7
+
 func _exit_tree() -> void:
 	if sim:
 		sim.dispose()
@@ -211,6 +213,15 @@ func _environment() -> void:
 	e.fog_sky_affect = 0.0
 	e.glow_enabled = true
 	e.glow_intensity = 0.2
+	# the Mobile renderer (Vulkan, 2.46) lights in linear HDR: the same scene reads about half as bright as on the
+	# Compatibility renderer it was tuned on (pitch luminance 64 v 134), so it gets its own exposure and fill
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		var k := float(OS.get_environment("AFC_EXPO")) if OS.get_environment("AFC_EXPO") != "" else MOBILE_EXPOSURE
+		e.tonemap_exposure *= k
+		e.ambient_light_energy *= 1.25
+		e.glow_hdr_threshold = 1.2
+		e.fog_density *= 0.3            # the same fog in linear light washed the far pitch grey
+		e.adjustment_saturation += 0.08
 	env.environment = e
 	add_child(env)
 	sun = DirectionalLight3D.new()
@@ -280,6 +291,9 @@ func _quality(q: int) -> void:
 		vp.scaling_3d_scale = 0.75 if q == 0 else 1.0
 		# MSAA only on High (some mobile GPUs struggle with multisampled targets)
 		vp.msaa_3d = Viewport.MSAA_2X if q == 2 else Viewport.MSAA_DISABLED
+		# on Vulkan (2.46) High gets 4x: tile-based mobile GPUs resolve MSAA on chip, nearly free there
+		if q == 2 and RenderingServer.get_current_rendering_method() != "gl_compatibility":
+			vp.msaa_3d = Viewport.MSAA_4X
 
 
 func apply_options(o: Dictionary) -> void:

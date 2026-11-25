@@ -22,6 +22,7 @@ var t0 := 0
 func _ready() -> void:
 	t0 = Time.get_ticks_msec()
 	_check_last_start()
+	_check_renderer()
 	step("starting")
 	if not safe_mode:
 		_load_native()
@@ -136,8 +137,49 @@ const NATIVE_TRACE := "user://native_trace.txt"     # crash reports written by t
 const NATIVE_TRACE_SEEN := "user://native_trace_seen.txt"
 
 
+## The renderer (2.46): Vulkan ("mobile", the better look) unless the phone cannot - Godot falls back to OpenGL by
+## itself when Vulkan is missing; a start on Vulkan that never reaches the title switches the next start to OpenGL
+## (user://override.cfg, read by the engine before it opens the screen); Settings can switch it either way.
+const RENDER_OVERRIDE := "user://override.cfg"
+const VK_PENDING := "user://vk_pending"
+
+
+static func vulkan_on() -> bool:
+	return RenderingServer.get_current_rendering_method() != "gl_compatibility"
+
+
+static func vulkan_wanted() -> bool:
+	return not FileAccess.file_exists(RENDER_OVERRIDE)
+
+
+static func set_vulkan(on: bool) -> void:
+	if on:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(RENDER_OVERRIDE))
+		return
+	var f := FileAccess.open(RENDER_OVERRIDE, FileAccess.WRITE)
+	if f:
+		f.store_string('[rendering]\nrenderer/rendering_method="gl_compatibility"\nrenderer/rendering_method.mobile="gl_compatibility"\n')
+		f.flush()
+
+
+static func _check_renderer() -> void:
+	if not vulkan_on():
+		return
+	if FileAccess.file_exists(VK_PENDING):
+		# the last start on Vulkan never got to the title: the next one runs on OpenGL
+		set_vulkan(false)
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(VK_PENDING))
+		return
+	var f := FileAccess.open(VK_PENDING, FileAccess.WRITE)
+	if f:
+		f.store_string(Time.get_datetime_string_from_system())
+		f.flush()
+
+
 ## Note what is about to happen (flushed to disk: it must survive a crash or a hang right after).
 static func step(what: String) -> void:
+	if what == "title shown" and FileAccess.file_exists(VK_PENDING):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(VK_PENDING))
 	var f := FileAccess.open(NATIVE_STEP, FileAccess.WRITE)
 	if f:
 		f.store_string("%s  (%s)" % [what, Time.get_datetime_string_from_system()])

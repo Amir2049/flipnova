@@ -104,6 +104,10 @@ func _stage(px: Vector2i, cam_pos: Vector3, look: Vector3, fov: float) -> void:
 	e.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	e.tonemap_mode = Environment.TONE_MAPPER_ACES
 	e.tonemap_exposure = 1.05
+	# Vulkan (2.46) lights in linear HDR: about half as bright as the OpenGL path this was tuned on
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		e.tonemap_exposure *= 2.4
+		e.ambient_light_energy *= 1.25
 	e.adjustment_enabled = true
 	e.adjustment_contrast = 1.1
 	e.adjustment_saturation = 1.1

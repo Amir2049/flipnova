@@ -63,7 +63,7 @@ void fragment() {
 	// worn turf: goal mouths and the centre spot
 	vec2 qq = vec2(abs(p.x), p.y);
 	float wear = exp(-pow(length((qq - vec2(hl - 3.0, 0.0)) / vec2(3.5, 4.5)), 2.0)) + 0.5 * exp(-pow(length(p / 3.0), 2.0));
-	col = mix(col, vec3(0.33, 0.33, 0.2), clamp(wear, 0.0, 1.0) * 0.35);
+	col = mix(col, vec3(0.2, 0.19, 0.1), clamp(wear, 0.0, 1.0) * 0.3);   // earth, not khaki (khaki read as a light spot, 2.46)
 	float inside = step(abs(p.x), hl + 0.1) * step(abs(p.y), hw + 0.1);
 	col *= mix(0.62, 1.0, inside);
 	float lw = 0.12;
@@ -91,7 +91,7 @@ void fragment() {
 	}
 	ALBEDO = col * (1.0 - 0.18 * wet);
 	ROUGHNESS = 0.92 - 0.45 * wet;
-	SPECULAR = 0.2;
+	SPECULAR = 0.02 + 0.3 * wet;   // dry grass does not shine (0.2 threw a hot spot under the Vulkan renderer); wet does
 }
 """
 
