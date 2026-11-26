@@ -247,7 +247,9 @@ func _skills(p: PlayerSim) -> void:
 			match g["kind"]:
 				"swipe":
 					_skill_dir(p, wd, false)
-				"double":
+				"skill_swipe":
+					_skill_dir(p, wd, touch.held("sprint"))   # the SKILL button; with SPRINT the showier set
+				"double", "skill_tap":
 					m.human_skill(slot, "stepover", 1.0 if _side_of(p, world) >= 0.0 else -1.0)
 				"zigzag":
 					m.human_skill(slot, "elastico", 1.0 if _side_of(p, wd) >= 0.0 else -1.0)

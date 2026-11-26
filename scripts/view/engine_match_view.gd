@@ -442,6 +442,7 @@ func _input_to_engine() -> void:
 		if on.call("through", "through"): b |= B_HIGH if _flick("through") else B_LONG
 		if on.call("lob", "lob"): b |= B_HIGH
 		if reader._pad("close"): b |= B_DRIBBLE
+		if touch != null and touch.active and touch.skill_hold(): b |= B_DRIBBLE   # SKILL held: close control
 		if Input.is_physical_key_pressed(KEY_K): b |= B_SHORT
 		if Input.is_physical_key_pressed(KEY_L): b |= B_SHOT
 		if Input.is_physical_key_pressed(KEY_I): b |= B_LONG
@@ -571,10 +572,16 @@ static func facing_of(p: PackedFloat32Array, o: int) -> Vector2:
 
 
 ## Start a skill move by name (+1 / -1: to his right / left). Tests and the input below call it.
+const SKILL_NAMES := {"burst": "KNOCK ON", "feint": "BODY FEINT", "roll": "BALL ROLL", "dragback": "DRAG BACK",
+	"roulette": "ROULETTE", "stepover": "STEP OVER", "elastico": "ELASTICO", "cruyff": "CRUYFF TURN", "rainbow": "RAINBOW"}
+
 func request_skill(move: String, side: float) -> bool:
 	if not _on_ball():
 		return false
-	return skills.start(move, side, _facing())
+	var ok := skills.start(move, side, _facing())
+	if ok and touch:
+		touch.flash(SKILL_NAMES.get(move, move.to_upper()))
+	return ok
 
 
 func _skill_tick() -> Array:
@@ -623,6 +630,16 @@ func _skill_inputs(stick: Vector2) -> void:
 					var wd := cam.screen_to_world(d.normalized())
 					var pick := Skills.from_direction(Vector2(wd.dot(f), wd.dot(right)), false)
 					request_skill(pick[0], pick[1])
+			"skill_tap":
+				request_skill("stepover", stick_side)
+			"skill_swipe":
+				# the SKILL button (FC Mobile): the swipe's direction against his run picks the move; with SPRINT
+				# held, the showier set (rainbow ahead, elastico across, cruyff back)
+				if d.length() > 0.0:
+					var swd := cam.screen_to_world(d.normalized())
+					var adv: bool = touch != null and touch.held("sprint")
+					var pk := Skills.from_direction(Vector2(swd.dot(f), swd.dot(right)), adv)
+					request_skill(pk[0], pk[1])
 			"double":
 				request_skill("stepover", stick_side)
 			"zigzag":

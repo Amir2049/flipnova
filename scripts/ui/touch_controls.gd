@@ -19,6 +19,8 @@ const MIN_HOLD := 0.1              # seconds a tapped button stays down
 const COMMIT := 0.08               # seconds a swipeable button waits to tell a tap from a flick
 const FLICK := 34.0                # canvas units up that make a flick
 const POWER_FULL := 0.5            # the engine shoots at the latest after half a second held
+const POWER_AT := 0.42             # SHOOT held this long is a power shot (EngineMatchView reads held_for)
+const SKILL_HOLD := 0.22           # SKILL held this long without a swipe: close control
 const STICK_ZONE := 0.45           # the stick lives on this share of the screen width
 const TOP_SAFE := 90.0             # the score bar and pause button
 const SWIPEABLE := ["pass", "through"]
@@ -32,8 +34,8 @@ var stick_pos := Vector2.ZERO
 var stick_home := Vector2.ZERO
 var buttons := {}                  # name -> {pos, r, held, touch, t_down, start, variant, commit}
 var defending := false
-var labels_attack := {"pass": "PASS", "shoot": "SHOOT", "through": "THROUGH", "lob": "LOB", "sprint": "SPRINT"}
-var labels_defend := {"pass": "PRESS", "shoot": "SLIDE", "through": "SWITCH", "lob": "TACKLE", "sprint": "SPRINT"}
+var labels_attack := {"pass": "PASS", "shoot": "SHOOT", "through": "THROUGH", "lob": "LOB", "sprint": "SPRINT", "skill": "SKILL"}
+var labels_defend := {"pass": "PRESS", "shoot": "SLIDE", "through": "SWITCH", "lob": "TACKLE", "sprint": "SPRINT", "skill": "SKILL"}
 var font: Font
 var size_k := 1.0
 var opacity := 0.75
@@ -47,6 +49,9 @@ var gestures: Array = []           # [{kind, dir}] waiting for the input reader
 var last_tap := {"t": -10.0, "pos": Vector2.ZERO}
 var hint := ""
 var hint_t := 0.0
+var flash_txt := ""                # a skill move's name over the SKILL button, for a moment
+var flash_t := -10.0
+var power_buzzed := false
 var any_touch := false             # the screen was touched (input source goes back to touch)
 var last_touch_t := -100.0
 var active := true                 # set by the HUD: off under menus, pauses and replays (visible is only the look)
@@ -85,8 +90,10 @@ func _process(_dt: float) -> void:
 		if not b["held"] and b["t_down"] > 0.0 and now - b["t_down"] >= MIN_HOLD + COMMIT:
 			b["t_down"] = 0.0
 			redraw = true
-		if b["held"] and name == "shoot":
-			redraw = true   # the power ring
+		if b["held"] and (name == "shoot" or name == "skill"):
+			redraw = true   # the power ring, the swipe arrow
+	if now - flash_t < 1.2:
+		redraw = true
 	if redraw:
 		queue_redraw()
 
@@ -111,6 +118,7 @@ func _layout() -> void:
 	_btn("through", _side(a + Vector2(-152, -150) * u), 52.0 * u)
 	_btn("lob", _side(a + Vector2(0, -190) * u), 48.0 * u)
 	_btn("sprint", _side(a + Vector2(-315, 58) * u), 54.0 * u)
+	_btn("skill", _side(a + Vector2(-305, -105) * u), 48.0 * u)
 	stick_home = _side(Vector2(200.0 * u, s.y - 180.0 * u))
 	if stick_touch < 0:
 		stick_origin = stick_home
@@ -181,6 +189,19 @@ func _on_button(pos: Vector2) -> String:
 	return best
 
 
+## SKILL held down with no swipe: close control (the ball at his feet), like FC Mobile's held skill button.
+func skill_hold() -> bool:
+	var b: Dictionary = buttons.get("skill", {})
+	return not b.is_empty() and b["held"] and b["variant"] == "" and _now() - float(b["t_down"]) >= SKILL_HOLD
+
+
+## The move just played, shown over the SKILL button.
+func flash(txt: String) -> void:
+	flash_txt = txt
+	flash_t = _now()
+	queue_redraw()
+
+
 ## How long a button has been held (0 when it is up).
 func held_for(name: String) -> float:
 	if not buttons.has(name) or not buttons[name]["held"]:
@@ -240,6 +261,12 @@ func _input(event: InputEvent) -> void:
 				if b["touch"] == e.index:
 					b["touch"] = -1
 					b["held"] = false
+					if name == "skill" and not defending:
+						if b["variant"] == "swipe":
+							_gesture("skill_swipe", b["dir"], e.position)
+						elif _now() - float(b["t_down"]) < SKILL_HOLD:
+							_gesture("skill_tap", Vector2.ZERO, e.position)
+						b["variant"] = ""
 					if not b["commit"]:
 						# released before it knew: a tap (stays down MIN_HOLD from now)
 						b["commit"] = true
@@ -278,6 +305,19 @@ func _input(event: InputEvent) -> void:
 					if vibrate and OS.has_feature("mobile"):
 						Input.vibrate_handheld(8)
 					queue_redraw()
+				get_viewport().set_input_as_handled()
+				return
+			# SKILL (FC Mobile's skill button): a swipe on it is a move in that direction, read on release
+			if name == "skill" and not defending and b["touch"] == d.index and b["held"]:
+				var sd: Vector2 = d.position - b["start"]
+				if sd.length() > FLICK * u * 0.8 and b["variant"] == "":
+					b["variant"] = "swipe"
+					b["dir"] = sd
+					if vibrate and OS.has_feature("mobile"):
+						Input.vibrate_handheld(8)
+					queue_redraw()
+				elif b["variant"] == "swipe":
+					b["dir"] = sd
 				get_viewport().set_input_as_handled()
 				return
 			if flick_loft and b["touch"] == d.index and b["held"] and name in SWIPEABLE and b["variant"] == "":
@@ -407,7 +447,7 @@ func _draw() -> void:
 			draw_arc(pos, rr + 7 * u, -PI * 0.5 + TAU * 0.5, -PI * 0.5 + TAU * 0.8, 24, Color(1, 1, 1, 0.18 * a), 3.0 * u, true)
 			var pw := shot_power()
 			if pw > 0.0:
-				var pc := Color(0.78, 1.0, 0.24) if pw < 0.8 else Color(1.0, 0.55, 0.2)
+				var pc := Color(0.78, 1.0, 0.24) if pw < POWER_AT / POWER_FULL else Color(1.0, 0.55, 0.2)
 				draw_arc(pos, rr + 7 * u, -PI * 0.5, -PI * 0.5 + TAU * pw, 48, pc, 6.0 * u, true)
 		# PASS / THROUGH: a small chevron says "flick up"
 		if flick_loft and name in SWIPEABLE and not defending:
@@ -417,9 +457,35 @@ func _draw() -> void:
 				cc = Color(0.04, 0.04, 0.04)
 			draw_polyline(PackedVector2Array([pos + Vector2(-9, 5) * u - Vector2(0, pos.y - cy), pos + Vector2(0, -3) * u - Vector2(0, pos.y - cy),
 				pos + Vector2(9, 5) * u - Vector2(0, pos.y - cy)]), cc, 2.5 * u, true)
+		if name == "skill" and not defending:
+			# four small ticks: swipe on it
+			for k in 4:
+				var dv := Vector2.from_angle(k * PI / 2.0 - PI / 2.0)
+				draw_line(pos + dv * rr * 0.72, pos + dv * rr * 0.9, Color(1, 1, 1, 0.5 * a) if not down else Color(0.04, 0.04, 0.04), 2.5 * u, true)
+			if b["variant"] == "swipe" and b.has("dir"):
+				var dd: Vector2 = (b["dir"] as Vector2).normalized()
+				draw_line(pos, pos + dd * rr * 1.5, Color(0.78, 1.0, 0.24, 0.9), 6.0 * u, true)
+			if _now() - flash_t < 1.1 and flash_txt != "":
+				var ff := int(20 * u)
+				var fw := font.get_string_size(flash_txt, HORIZONTAL_ALIGNMENT_CENTER, -1, ff).x
+				var fa := clampf(1.1 - (_now() - flash_t), 0.0, 1.0)
+				draw_string_outline(font, pos + Vector2(-fw * 0.5, -rr - 14 * u), flash_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, ff, int(6 * u), Color(0, 0, 0, fa))
+				draw_string(font, pos + Vector2(-fw * 0.5, -rr - 14 * u), flash_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, ff, Color(0.78, 1.0, 0.24, fa))
 		var txt: String = labels.get(name, name.to_upper())
 		if b["variant"] == "up" and down:
 			txt = "LOB PASS" if name == "pass" else "LOB THRU"
+		if name == "shoot" and not defending and b["held"] and b["variant"] == "":
+			if held_for("shoot") >= POWER_AT:
+				txt = "POWER"
+				if not power_buzzed and vibrate and OS.has_feature("mobile"):
+					Input.vibrate_handheld(35)
+				power_buzzed = true
+		elif name == "shoot":
+			power_buzzed = false
+		if name == "shoot" and b["held"] and b["variant"] != "":
+			txt = {"up": "CHIP", "side": "FINESSE", "down": "LOW"}.get(b["variant"], txt)
+		if name == "skill" and b["held"] and skill_hold():
+			txt = "CLOSE"
 		var fs := int(clampf(rr * 0.3, 14.0, 26.0 * u))
 		var w := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, fs).x
 		draw_string(font, pos + Vector2(-w * 0.5, fs * 0.38), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
