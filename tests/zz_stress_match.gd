@@ -27,6 +27,9 @@ func _process(_dt) -> bool:
 	f += 1
 	if mv.st.is_empty():
 		return false
+	if mv.paused and not mv.full_time and mv.half_done and mv.pause_root != null:
+		mv.paused = false            # half time: SECOND HALF
+		mv._close_overlay()
 	var t = mv.touch
 	if t and f % 7 == 0:
 		t.stick = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1))

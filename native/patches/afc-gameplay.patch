@@ -216,17 +216,18 @@
        huntDistanceThreshold *= 0.5f * CastPlayer()->GetFatigueFactorInv() +
                                 0.5f * (1.0f - NormalizedClamp(CastPlayer()->GetAverageVelocity(10), idleVelocity, sprintVelocity));
        huntDistanceThreshold *=
-@@ -813,6 +837,9 @@
+@@ -813,6 +837,10 @@
    state->process(lastDesiredVelocity);
  }
  
 +// real squads, 8 matches: weight 0 / 0.15 / 0.3 -> possession lost 959 / 925 / 913, shots 175 / 184 / 192
 +static const float afc_chance_w = 0.3f;
++static const float afc_chain_w = 0.6f;   // HELIOS-style two-step chain: 0 → 915 lost, 0.3 → 884, 0.6 → 853 (8 real-squad matches)
 +
  void ElizaController::GetOnTheBallCommands(
      std::vector<PlayerCommand> &commandQueue, Vector3 &rawInputDirection,
      float &rawInputVelocityFloat) {
-@@ -869,6 +896,7 @@
+@@ -869,6 +897,7 @@
      float tacticalDiffRating = 0.0f;
      float passRating = 0.0f;
      float proximityRating = 0.0f;
@@ -234,7 +235,7 @@
      e_FunctionType passType;
    };
  
-@@ -897,15 +925,31 @@
+@@ -897,15 +926,31 @@
        mateRating.player = mates[i];
        mateRating.tacticalRating = mateTacticalRating;
  
@@ -268,7 +269,7 @@
          if (passingOddsShort >= passingOddsLong &&
              passingOddsShort >= passingOddsHigh) {
            DO_VALIDATION;
-@@ -921,8 +965,31 @@
+@@ -921,8 +966,71 @@
          }
  
          float totalRating = mateRating.tacticalDiffRating * tacticalDiffWeight +
@@ -276,6 +277,46 @@
 +                            mateRating.passRating * passWeight + mateRating.supportRating -
                              oneTouchIsHard;
 +        if (isActiveRunner) totalRating += 0.3f;
++        // AFC, after HELIOS base's action chain (MIT, helios-base/src/player/planner, sample_field_evaluator.cpp):
++        // look two steps ahead. A state is worth how far up the pitch the ball is plus how close to goal (HELIOS:
++        // x + max(0, 40 - goal distance)), with a big bonus when the man on it can shoot; a pass is worth the better
++        // of where it puts the ball and where that man can play it next (his own safest onward pass), each step
++        // weighted by its odds. The rating gains the chain's improvement over keeping the ball here.
++        {
++          const float attack = -team->GetDynamicSide();
++          auto stateValue = [&](const Vector3 &pos) -> float {
++            const Vector3 toGoal = Vector3(pitchHalfW * attack, 0, 0) - pos.Get2D();
++            const float d = toGoal.GetLength();
++            float v = pos.coords[0] * attack + std::max(0.0f, 40.0f - d);
++            if (d < 22.0f && fabs(pos.coords[1]) < 16.0f) v += 20.0f * (1.0f - d / 22.0f);   // a shooting position
++            return v;
++          };
++          auto laneOdds = [&](const Vector3 &from, const Vector3 &to) -> float {
++            const Vector3 lane = (to - from).Get2D();
++            const float len = lane.GetLength();
++            if (len < 0.5f) return 1.0f;
++            const Vector3 dir = lane / len;
++            float danger = 0.0f;
++            for (unsigned int o = 0; o < opponentPlayerImages.size(); o++) {
++              const Vector3 rel = (opponentPlayerImages.at(o).position - from).Get2D();
++              const float along = clamp(rel.GetDotProduct(dir), 0.0f, len);
++              const float off = (rel - dir * along).GetLength();
++              const float ballT = 0.4f + along * 0.05f, oppT = (off + 0.8f) / sprintVelocity;
++              danger += clamp(ballT - oppT + 0.4f, 0.0f, 1.0f);
++            }
++            return 1.0f - clamp(danger, 0.0f, 1.0f);
++          };
++          const Vector3 matePos = mates[i]->GetPosition();
++          float best = stateValue(matePos);
++          for (unsigned int k = 0; k < mates.size(); k++) {
++            if (mates[k] == mates[i] || mates[k] == CastPlayer() || mates[k]->GetFormationEntry().role == e_PlayerRole_GK) continue;
++            const float o2 = laneOdds(matePos, mates[k]->GetPosition());
++            if (o2 < 0.4f) continue;
++            best = std::max(best, 0.9f * o2 * stateValue(mates[k]->GetPosition()) + (1.0f - 0.9f * o2) * stateValue(matePos));
++          }
++          const float here = stateValue(CastPlayer()->GetPosition());
++          totalRating += afc_chain_w * clamp((best - here) / 40.0f, -0.5f, 1.0f) * mateRating.passRating;
++        }
 +        // zocram4cc 9441a4d: price every pass by the chance it makes - the receiver's xG where he stands (distance,
 +        // angle, bodies in his lane to goal) times what he is as a finisher. The pass went to the most advanced man,
 +        // not the best placed one, and nothing preferred the man in the box.
@@ -301,7 +342,7 @@
  
          totalRating /= totalWeight2;
  
-@@ -957,12 +1024,12 @@
+@@ -957,12 +1065,12 @@
             bestMateRating.passRating < panicProneness * goalCloseness) &&
            possessionAmount < 0.9f + panicProneness * goalCloseness * 0.8f) {
          DO_VALIDATION;
@@ -316,7 +357,7 @@
        }
      }
    }
-@@ -978,12 +1045,26 @@
+@@ -978,12 +1086,26 @@
                         player->GetPosition())
                            .GetLength(),
                        0.0f, 32.0f);
@@ -344,7 +385,7 @@
    idealShotPosFactor = curve(idealShotPosFactor, 1.0f);
    if (idealShotPosFactor > 0.1f) {
      DO_VALIDATION;
-@@ -1010,7 +1091,29 @@
+@@ -1010,7 +1132,29 @@
  
      odds = std::pow(odds, 0.5f);
  
@@ -375,7 +416,7 @@
        DO_VALIDATION;
        PlayerCommand command;
        command.desiredFunctionType = e_FunctionType_Shot;
-@@ -1019,8 +1122,8 @@
+@@ -1019,8 +1163,8 @@
        command.desiredVelocityFloat = rawInputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
        command.touchInfo.desiredDirection =
            (Vector3((pitchHalfW + 1.0f) * -team->GetDynamicSide(),
@@ -386,7 +427,7 @@
                     0) -
             (CastPlayer()->GetPosition() + CastPlayer()->GetMovement() * 0.2f))
                .GetNormalized(Vector3(-team->GetDynamicSide(), 0, 0));
-@@ -1055,7 +1158,7 @@
+@@ -1055,7 +1199,7 @@
    commandQueue.push_back(command);
  }
  
@@ -395,7 +436,7 @@
    DO_VALIDATION;
  
    int yside = signSide(player->GetDirectionVec().coords[1]); // > 0 ? 1 : -1;
-@@ -1065,6 +1168,20 @@
+@@ -1065,6 +1209,20 @@
            .GetNormalized(0) +
        Vector3(0, 0, 0.3f);
    sensibleAwayDir.Normalize(player->GetDirectionVec());
@@ -416,7 +457,7 @@
  
    PlayerCommand command;
    command.useDesiredMovement = false;
-@@ -1142,7 +1259,9 @@
+@@ -1142,7 +1300,9 @@
  
          Vector3 originToBallPos = (intersect - origin);
          float penaltyTime = (passType == e_FunctionType_HighPass && u > 0.5f) ? 2.5f : 0.0f; // trapping high balls takes time
@@ -440,7 +481,7 @@
      void _AddCelebration(std::vector<PlayerCommand> &commandQueue);
 --- a/src/onthepitch/player/controller/humancontroller.cpp
 +++ b/src/onthepitch/player/controller/humancontroller.cpp
-@@ -23,6 +23,42 @@
+@@ -23,6 +23,43 @@
  
  #include "../../../main.hpp"
  
@@ -454,6 +495,7 @@
 +// on his back cost time before the ball leaves - a pass straight ahead in space goes at once (FC: the pass "takes
 +// longer if the player has to turn or is under pressure"). Set when the pass is pressed, counted down per frame.
 +static int afc_pass_hold_ms = 0;
++static bool afc_throw_long = false;   // CROSS / SHOOT pressed at our throw-in: thrown as a long pass
 +static const bool afc_header_assist = true;
 +int afc_header_count = 0;
 +static unsigned long afc_shot_press_ms = 0;   // when SHOOT was last pressed (match time)   // headers the assist played (gftest prints it)
@@ -483,7 +525,7 @@
  HumanController::HumanController(Match *match, AIControlledKeyboard *hid)
      : PlayerController(match), hid(hid) {
    DO_VALIDATION;
-@@ -124,10 +160,17 @@
+@@ -124,10 +161,17 @@
    if (actionMode == 2) {
      DO_VALIDATION;
  
@@ -503,7 +545,15 @@
                        // button is released), it will usually touch ball after
                        // the remaining time anyway, so we still have time to add
                        // more power, yet still respond as fast as possible
-@@ -162,6 +205,47 @@
+@@ -141,6 +185,7 @@
+ 
+       // action button released!
+ 
++      if (afc_throw_long) { actionButton = e_ButtonFunction_LongPass; afc_throw_long = false; }
+       // force set piece methods
+       if (match->IsInSetPiece() &&
+           team->GetController()->GetPieceTaker() == player &&
+@@ -162,6 +207,47 @@
  
          commandQueue.push_back(command);
  
@@ -551,7 +601,7 @@
        } else if (actionButton == e_ButtonFunction_ShortPass) {
          DO_VALIDATION;
  
-@@ -169,12 +253,17 @@
+@@ -169,12 +255,17 @@
          command.desiredFunctionType = e_FunctionType_ShortPass;
          command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
@@ -572,7 +622,7 @@
          AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
  
          commandQueue.push_back(command);
-@@ -188,7 +277,7 @@
+@@ -188,7 +279,7 @@
          command.useDesiredLookAt = false;
  
          float inputPower = clamp(std::pow(gaugeFactor, 0.65f), 0.01f, 1.0f);
@@ -581,7 +631,7 @@
          command.touchInfo.inputPower = inputPower;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_throughpass_autodirection", _default_ThroughPass_AutoDirection);
          command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_throughpass_autopower", _default_ThroughPass_AutoPower);
-@@ -205,7 +294,7 @@
+@@ -205,7 +296,7 @@
          command.useDesiredLookAt = false;
  
          float inputPower = clamp(std::pow(gaugeFactor, 0.55f), 0.01f, 1.0f);
@@ -590,7 +640,7 @@
          command.touchInfo.inputPower = inputPower;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_highpass_autodirection", _default_HighPass_AutoDirection);
          command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_highpass_autopower", _default_HighPass_AutoPower);
-@@ -221,6 +310,11 @@
+@@ -221,6 +312,11 @@
          command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
          command.desiredVelocityFloat = inputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
@@ -602,7 +652,7 @@
          command.touchInfo.inputDirection = inputDirection;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection);
          command.touchInfo.autoDirectionBias = 1.0f;
-@@ -322,10 +416,56 @@
+@@ -322,10 +418,56 @@
      // ball control?
      bool keepCurrentBodyDirection = false;
      // sidestep dribble disabled for now, too quirky: if (hid->GetButton(e_ButtonFunction_Dribble)) keepCurrentBodyDirection = true;
@@ -663,7 +713,24 @@
  
      // reload original input
      if (actionMode == 2) {
-@@ -514,6 +654,7 @@
+@@ -506,6 +648,16 @@
+         DO_VALIDATION;
+         allowHighPass = false;
+         allowShot = false;
++        // AFC: at a throw-in CROSS / SHOOT (or a long press on the pitch) used to do nothing, and the game looked
++        // frozen until PASS was found - they now take a long throw
++        const bool longThrow = (hid->GetButton(e_ButtonFunction_HighPass) && !hid->GetPreviousButtonState(e_ButtonFunction_HighPass)) ||
++                               (hid->GetButton(e_ButtonFunction_Shot) && !hid->GetPreviousButtonState(e_ButtonFunction_Shot));
++        if (longThrow) {
++          actionMode = 2;
++          actionButton = hid->GetButton(e_ButtonFunction_HighPass) ? e_ButtonFunction_HighPass : e_ButtonFunction_Shot;
++          afc_pass_hold_ms = 0;
++          afc_throw_long = true;
++        }
+       }
+ 
+       if (hid->GetButton(e_ButtonFunction_ShortPass) &&
+@@ -514,6 +666,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_ShortPass;
@@ -671,7 +738,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_LongPass) &&
-@@ -522,6 +663,7 @@
+@@ -522,6 +675,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_LongPass;
@@ -679,7 +746,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_HighPass) &&
-@@ -530,6 +672,7 @@
+@@ -530,6 +684,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_HighPass;
@@ -687,7 +754,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_Shot) &&
-@@ -537,6 +680,7 @@
+@@ -537,6 +692,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_Shot;

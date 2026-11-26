@@ -79,6 +79,7 @@ var cele_focus := -1              # the scorer (camera target)
 var cele_angle := 0.0
 var cele_fov := 22.0
 var last_mode := -1
+var setpiece_since := -1   # ms when our taker stood over a set piece; after 15 s it is taken with PASS
 var full_time := false
 var half_done := false
 var wind := Vector2.ZERO          # m/s^2 on a ball in the air, engine axes (x along the pitch)
@@ -488,6 +489,14 @@ func _input_to_engine() -> void:
 	if not sk.is_empty():
 		w = sk[0]
 		b = sk[1]
+	# a set piece of ours never stands still: after 15 s with nothing pressed it is taken with a short pass
+	if hint_lbl and hint_lbl.visible and not paused:
+		if setpiece_since < 0:
+			setpiece_since = Time.get_ticks_msec()
+		elif Time.get_ticks_msec() - setpiece_since > 15000 and (Time.get_ticks_msec() / 100) % 2 == 0:
+			b |= B_SHORT   # pressed and released every 0.1 s until it goes
+	else:
+		setpiece_since = -1
 	# pitch axes: Godot (x, z) -> engine (x, -z)
 	last_buttons = _carry_buttons(b)
 	engine.set_input(w.x, -w.y, last_buttons)

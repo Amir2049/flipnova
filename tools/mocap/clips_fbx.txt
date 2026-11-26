@@ -1,0 +1,9 @@
+# name             file          start_s end_s  [loop|once] [source]
+# CMU soccer kicks (CMU FBX: huggingface.co/datasets/gbionics/cmu-fbx, animations/<file>; CMU terms: free to copy,
+# modify and redistribute). Windows are 1.3 s before the strike (peak toe speed) to 0.9 s after.
+kick_cmu_a         10_01.fbx     3.67    5.87   once  CMU
+kick_cmu_b         10_02.fbx     1.60    3.80   once  CMU
+kick_cmu_c         10_03.fbx     0.10    2.00   once  CMU
+kick_cmu_d         10_05.fbx     1.17    3.37   once  CMU
+kick_cmu_e         10_06.fbx     2.10    4.30   once  CMU
+kick_cmu_f         11_01.fbx     2.07    4.27   once  CMU
