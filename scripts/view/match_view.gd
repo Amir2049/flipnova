@@ -10,6 +10,7 @@ var sim: MatchSim
 var pitch_view: PitchView
 var ball_view: BallView
 var cam: CameraRig
+var world_env: WorldEnvironment   # the match's environment (EngineMatchView's picture check can strip it down)
 var views: Array[PlayerView] = []
 var hud: Hud
 var touch: TouchControls
@@ -236,6 +237,7 @@ func _environment() -> void:
 			e.ssr_max_steps = 48
 	env.environment = e
 	add_child(env)
+	world_env = env
 	sun = DirectionalLight3D.new()
 	# late afternoon: lower, warmer sun, longer shadows
 	sun.rotation_degrees = Vector3(-38, -32, 0)

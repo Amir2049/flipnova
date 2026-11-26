@@ -23,9 +23,11 @@ func _initialize():
 	mv.start({"home": 0, "away": 3, "human_team": 0, "half_minutes": 4.0, "difficulty": 0.5, "camera": "broadcast",
 		"opts": {"weather": "clear", "time_of_day": "day", "quality": 1}})
 	print("marker while loading: ", FileAccess.file_exists(boot.MATCH_PENDING))
-	if OS.get_environment("BLACK") == "1":
+	if OS.get_environment("BLACK") == "1" or OS.get_environment("PINK") == "1":
 		var c := ColorRect.new()
-		c.color = Color.BLACK
+		# BLACK: nothing drawn; PINK: the owner's phone - the background colour where the solid world should be,
+		# with rain streaks on it (the old black / flat test let that through)
+		c.color = Color(0.78, 0.33, 0.42) if OS.get_environment("PINK") == "1" else Color.BLACK
 		c.set_anchors_preset(Control.PRESET_FULL_RECT)
 		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		mv.add_child(c)
@@ -33,9 +35,10 @@ func _initialize():
 
 func _process(_dt) -> bool:
 	f += 1
-	if f == 200:
-		var black := OS.get_environment("BLACK") == "1"
+	if f == 320:
+		var black := OS.get_environment("BLACK") == "1" or OS.get_environment("PINK") == "1"
 		var stepped: bool = int(pr.get_s("quality")) == 0
+		print("green %.2f  safe tried %s  " % [mv.picture_green, mv.picture_safe_tried])
 		print("picture %s  marker gone %s  quality low %s  renderer file %s  banner '%s'" % [mv.picture_stats,
 			not FileAccess.file_exists(boot.MATCH_PENDING), stepped, FileAccess.file_exists(boot.RENDER_OVERRIDE),
 			mv.warn_lbl.text.replace("\n", " ") if mv.warn_lbl else ""])

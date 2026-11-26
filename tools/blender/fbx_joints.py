@@ -3,6 +3,7 @@
   blender -b --factory-startup -P tools/blender/fbx_joints.py -- in.fbx out.json
 
 Works on any humanoid rig whose bones it can name: CMU FBX (hip / lThigh / lShin ...), Mixamo (mixamorig:LeftUpLeg ...),
+Rokoko (LeftThigh / LeftShin, Spine1-4: Anderson Rohr's packs),
 Unreal / Rokoko style (thigh_l / calf_l ...) and plain "LeftUpLeg" BVH-style names. Missing toes fall back to the
 tip of the foot bone. Output is Y-up metres, `{"fps", "frames", "source_bones", "joints": {name: [[x, y, z], ...]}}`,
 with the names cmu_retarget.py expects (Hips, Spine1, Neck, Head, Left/Right Arm, ForeArm, Hand, UpLeg, Leg, Foot,
@@ -16,7 +17,7 @@ import bpy
 # canonical joint -> bone names to try (lower case, rig prefix like "mixamorig:" stripped), best first
 ALIASES = {
     "Hips": ["hips", "hip", "pelvis", "root_hips"],
-    "Spine1": ["chest", "spine2", "spine_03", "spine1", "spine_02", "upperchest", "spine"],
+    "Spine1": ["chest", "spine4", "spine3", "spine2", "spine_03", "spine1", "spine_02", "upperchest", "spine"],   # the upper back (Rokoko: Spine4, Mixamo: Spine2)
     "Neck": ["neck", "neck1", "neck_01"],
     "Head": ["head"],
 }
@@ -24,8 +25,8 @@ SIDES = {
     "Arm": (["{L}shldr", "{Side}arm", "upperarm_{l}", "{side}upperarm", "{side}_upperarm", "upper_arm.{l}"]),
     "ForeArm": (["{L}forearm", "{Side}forearm", "lowerarm_{l}", "{side}lowerarm", "{side}_lowerarm", "forearm.{l}"]),
     "Hand": (["{L}hand", "{Side}hand", "hand_{l}", "{side}_hand", "hand.{l}"]),
-    "UpLeg": (["{L}thigh", "{Side}upleg", "thigh_{l}", "{side}upperleg", "{side}_upperleg", "thigh.{l}"]),
-    "Leg": (["{L}shin", "{Side}leg", "calf_{l}", "{side}lowerleg", "{side}_lowerleg", "shin.{l}"]),
+    "UpLeg": (["{L}thigh", "{Side}upleg", "{Side}thigh", "thigh_{l}", "{side}upperleg", "{side}_upperleg", "thigh.{l}"]),
+    "Leg": (["{L}shin", "{Side}leg", "{Side}shin", "calf_{l}", "{side}lowerleg", "{side}_lowerleg", "shin.{l}"]),
     "Foot": (["{L}foot", "{Side}foot", "foot_{l}", "{side}_foot", "foot.{l}"]),
     "ToeBase": (["{L}toe", "{Side}toebase", "{Side}toe", "ball_{l}", "{side}toes", "{side}_toes", "toe.{l}"]),
 }

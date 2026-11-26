@@ -12,7 +12,7 @@ func _initialize():
 	mv = load("res://scripts/view/engine_match_view.gd").new()
 	get_root().add_child(mv)
 	mv.start({"home": 0, "away": 3, "human_team": 0, "half_minutes": 4.0, "difficulty": 0.5, "camera": OS.get_environment("CAM") if OS.get_environment("CAM") != "" else "pro",
-		"opts": {"weather": "clear", "time_of_day": "day", "quality": 1}})
+		"opts": {"weather": OS.get_environment("WEATHER") if OS.get_environment("WEATHER") != "" else "clear", "time_of_day": OS.get_environment("TOD") if OS.get_environment("TOD") != "" else "day", "quality": int(OS.get_environment("QUALITY")) if OS.get_environment("QUALITY") != "" else 1}})
 
 func _process(_dt) -> bool:
 	frames += 1

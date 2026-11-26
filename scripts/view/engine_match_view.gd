@@ -80,7 +80,12 @@ var cele_angle := 0.0
 var cele_fov := 22.0
 var last_mode := -1
 var warn_lbl: Label   # "no picture" (the picture check)
+var picture_green := -1.0   # share of green (grass) in the middle of the screen at the picture check
+var picture_safe_tried := false
 var picture_stats := Vector2(-1, -1)   # (mean, spread) of the screen's middle at the picture check
+var start_hold := true      # the engine waits for a steady picture before the kick-off
+var hold_t := 0.0
+var smooth_t := 0.0
 var draw_n := 0            # frames drawn (animation LOD takes turns on it)
 var ball_owner_idx := -1   # 0..21, the man on the ball (always fully animated)
 var setpiece_since := -1   # ms when our taker stood over a set piece; after 15 s it is taken with PASS
@@ -308,6 +313,9 @@ func start(config: Dictionary) -> void:
 	sfx.set_volumes(opts.get("volume", 0.8), opts.get("crowd", 0.7), opts.get("effects", 0.9))
 	sfx.crowd(crowd_v)
 	_quality(int(opts.get("quality", 1)))
+	if bool(Profile.get_s("vk_safe")) and RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		picture_safe()   # this phone needed the stripped-down Vulkan picture once (picture check)
+		picture_safe_tried = true
 	reader = InputReader.new()
 	reader.pad = config.get("pad", {}) if not config.get("pad", {}).is_empty() else Profile.PAD_PRESETS["PES"].duplicate()
 	# the engine
@@ -839,7 +847,16 @@ func _process(dt: float) -> void:
 		return
 	# the match stands still while the scorer celebrates (it ran on behind the close-up, and after the replay the
 	# game had already restarted - owner, 2.55)
-	if not paused and not full_time and cele_t <= 0.0:
+	# kick-off waits for a steady picture (owner: "the match starts before I am in"): on a phone the first frames take
+	# seconds while the GPU compiles its shaders, and the match ran on behind the loading. It starts once frames have
+	# come smoothly for 0.6 s (6 s at the most), with a KICK OFF banner.
+	if start_hold:
+		hold_t += dt
+		smooth_t = smooth_t + dt if dt < 0.05 else 0.0
+		if smooth_t > 0.6 or hold_t > 6.0:
+			start_hold = false
+			_banner("KICK OFF", 1.2)
+	if not paused and not full_time and cele_t <= 0.0 and not start_hold:
 		_step(dt)
 	_update_views(dt)
 	if not paused and not full_time:
@@ -972,27 +989,71 @@ func _picture_check() -> void:
 	var n := 0
 	var sum := 0.0
 	var sq := 0.0
+	var green := 0
 	for y in range(11, 31):   # the middle of the screen: the pitch, under the stands and above the radar
 		for x in range(4, 60):
-			var l := img.get_pixel(x, y).get_luminance()
+			var c := img.get_pixel(x, y)
+			var l := c.get_luminance()
 			sum += l
 			sq += l * l
+			if c.g > c.r * 1.12 and c.g > c.b * 1.12:
+				green += 1
 			n += 1
 	var mean := sum / n
 	var sd := sqrt(maxf(0.0, sq / n - mean * mean))
 	picture_stats = Vector2(mean, sd)
-	if mean < 0.035 or sd < 0.012:
-		var what: String = boot.graphics_step_down()
-		# its own label (a foul or a goal banner must not replace it), on screen until the player leaves
-		warn_lbl = UI.label("No picture on this phone - %s.\nClose the game and open it again." % (what if what != "" else "send the report from Settings"), 26, Color(1, 0.85, 0.3))
-		warn_lbl.set_anchors_preset(Control.PRESET_CENTER)
-		warn_lbl.position = Vector2(-450, -60)
-		warn_lbl.size = Vector2(900, 120)
-		warn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		warn_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		warn_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0))
-		warn_lbl.add_theme_constant_override("outline_size", 8)
-		banner_lbl.get_parent().add_child(warn_lbl)
+	picture_green = float(green) / n
+	# at kick-off the middle of the screen is grass: 87-100 % green on every renderer, day, night, rain and close-ups;
+	# the owner's phone drew the background colour where every solid thing should be (pink, 0 % green, only the rain,
+	# the shadows and the labels on it) - the old check (black / flat) let it through because of the rain
+	var bad := mean < 0.035 or sd < 0.012 or picture_green < 0.4
+	if not bad:
+		if picture_safe_tried:
+			# the stripped-down picture works on this phone: every match starts that way from now on
+			Profile.set_s("vk_safe", true)
+			Profile.save()
+		return
+	if not picture_safe_tried and RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		# first, in place: what phone GPUs most often fail at (multisampling, upscaling, glow, fog, shadows), then
+		# look again
+		picture_safe_tried = true
+		picture_safe()
+		draw_n = 30   # the check runs again 60 frames on
+		return
+	var what: String = boot.graphics_step_down()
+	# its own label (a foul or a goal banner must not replace it), on screen until the player leaves
+	warn_lbl = UI.label("No picture on this phone - %s.\nClose the game and open it again." % (what if what != "" else "send the report from Settings"), 26, Color(1, 0.85, 0.3))
+	warn_lbl.set_anchors_preset(Control.PRESET_CENTER)
+	warn_lbl.position = Vector2(-450, -60)
+	warn_lbl.size = Vector2(900, 120)
+	warn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	warn_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warn_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	warn_lbl.add_theme_constant_override("outline_size", 8)
+	banner_lbl.get_parent().add_child(warn_lbl)
+
+
+## The Vulkan picture without what phone GPUs most often get wrong: no multisampling, full resolution with a plain
+## scale, no glow, fog or screen-space effects, no sun shadows (the blob shadows stay). Used by the picture check,
+## and from the start of every match once it has rescued one on this phone (setting "vk_safe").
+func picture_safe() -> void:
+	if governor:
+		governor.queue_free()
+		governor = null
+	var vp := get_viewport()
+	if vp:
+		vp.msaa_3d = Viewport.MSAA_DISABLED
+		vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		vp.scaling_3d_scale = 1.0
+	if world_env and world_env.environment:
+		var e := world_env.environment
+		e.glow_enabled = false
+		e.fog_enabled = false
+		e.ssao_enabled = false
+		e.ssr_enabled = false
+		e.volumetric_fog_enabled = false
+	set_sun_shadows(false)
 
 
 func _draw_frame(p: PackedFloat32Array, b: Vector3, bv: Vector3, dt: float) -> void:

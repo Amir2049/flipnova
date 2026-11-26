@@ -1,0 +1,12 @@
+# name                file (tools/mocap/packs/rohr_soccer/, Rokoko_Default rig) start_s end_s [loop|once] [source]
+# Anderson Rohr's free soccer mocap pack (andersonrohr.gumroad.com: free for commercial projects, no attribution
+# required). The raw FBX stay out of git (packs/ is ignored); only the motion retargeted onto AFC's player ships.
+# Every clip opens on a calibration pose for a frame: start at 0.1 s.
+cele_rohr_slide       12_Goal_Celebration_01.fbx   0.1  0  once  Rohr
+cele_rohr_arms        13_Goal_Celebration_02.fbx   0.1  0  once  Rohr
+cele_rohr_fist        14_Goal_Celebration_03.fbx   0.1  0  once  Rohr
+kick_rohr_side        08_Side_Foot_Kick.fbx        0.1  0  once  Rohr
+kick_rohr_power       09_Power_Kick.fbx            0.1  0  once  Rohr
+gk_rohr_save_1        15_Goalkeeper_Save_01.fbx    0.1  0  once  Rohr
+gk_rohr_save_2        16_Goalkeeper_Save_02.fbx    0.1  0  once  Rohr
+gk_rohr_save_3        17_Goalkeeper_Save_03.fbx    0.1  0  once  Rohr

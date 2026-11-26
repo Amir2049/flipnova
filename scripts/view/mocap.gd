@@ -5,8 +5,9 @@ extends RefCounted
 ## disappointment, kicks, walks and jogs. Each frame: root offset (x, y, z) and a local rotation per bone.
 
 const PATH := "res://assets/mocap.json"
-const CELEBRATIONS := ["cele_backflip", "cele_cartwheel", "cele_jump", "cele_very_happy", "cele_jacks"]
-const JOIN_IN := ["cele_happy", "cele_very_happy", "cele_jump", "cele_jacks"]
+# 2.62: three by a footballer (Anderson Rohr's soccer pack): the knee slide, arms out, the fist
+const CELEBRATIONS := ["cele_backflip", "cele_cartwheel", "cele_jump", "cele_very_happy", "cele_jacks", "cele_rohr_slide", "cele_rohr_arms", "cele_rohr_fist"]
+const JOIN_IN := ["cele_happy", "cele_very_happy", "cele_jump", "cele_jacks", "cele_rohr_arms", "cele_rohr_fist"]
 const DOWN := ["sad", "frustrated"]
 
 static var _clips: Dictionary = {}
