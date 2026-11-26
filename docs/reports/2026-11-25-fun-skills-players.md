@@ -108,6 +108,15 @@ Measured each, 8 matches CPU v CPU (possession lost / goals; 2.44: 884 / 31):
   target kept out.
 - Not for our engine: zocram4cc's keeper save model (f14c99d) replaces a coin flip our engine never had.
 
+## 2.48-2.49: Ultra graphics, the referee, wind
+
+- Ultra (Forward+, Settings > Graphics engine): SSAO, subsurface skin, SSR on a wet pitch; a failed start steps down.
+- zocram4cc: a flagged attacker stays offside after a deflection or a save (only a deliberate play resets it);
+  a standing tackle from behind is a booking (it was always a plain foul); wind on a ball in the air (half the
+  matches, harder in the rain), shown by the clock.
+- How much of zocram4cc: of its 393 engine commits ~290 cannot serve us (~140 presentation drawn by Godot in AFC,
+  ~70 PES import, ~80 measurement and its own build); of the ~45 gameplay changes, ~27 are taken or tried.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

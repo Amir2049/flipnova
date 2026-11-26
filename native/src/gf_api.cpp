@@ -4,7 +4,8 @@
 
 int afc_shot_style = 0;
 extern float afc_pitch_wetness;   // ball.cpp (patch)   // read by the engine's HumanController when it builds a shot (patch)
-extern float afc_tactics[2][3];      // teamAIcontroller.cpp (patch): team instructions
+extern float afc_tactics[2][3];
+extern float afc_wind[2];            // ball.cpp (patch)      // teamAIcontroller.cpp (patch): team instructions
 
 #include <cmath>
 #include <cstdio>
@@ -81,6 +82,8 @@ bool gf_start(const GfSetup& s) {
   }
   crash_stage("setting up the match (teams, formations)");
   afc_pitch_wetness = s.wetness;
+  afc_wind[0] = s.wind_x;
+  afc_wind[1] = s.wind_y;
   for (int t = 0; t < 2; t++)
     for (int k = 0; k < 3; k++) afc_tactics[t][k] = 0.f;   // every match starts on the engine's own tactics
   SetGame(g_env);

@@ -51,17 +51,30 @@
    return (manualDirection * (1.0f - autoDirectionBias) + autoDirection * autoDirectionBias).GetNormalized(inputDirection);
 --- a/src/onthepitch/ball.cpp
 +++ b/src/onthepitch/ball.cpp
-@@ -30,7 +30,8 @@
+@@ -30,7 +30,9 @@
  constexpr float linearBounce = 0.06f;  // bigger = more brake force
  constexpr float drag = 0.015f;  // bigger = more
  constexpr float friction = 0.04f;  // bigger = more
 -constexpr float linearFriction = 1.6f;  // bigger = more, arbitrary scale;
 +constexpr float linearFriction = 1.38f;  // AFC, from League-Soccer: 1.6 -> 1.38, the ground roll of PES 5/6
++float afc_wind[2] = {0.0f, 0.0f};  // AFC: wind on the ball in the air, m/s^2 (zocram4cc 000429d), set by gf_start
 +float afc_pitch_wetness = 0.0f;  // AFC: 0 dry .. 1 soaked (rain), set by gf_start; from League-Soccer's weather
  constexpr float gravity = -9.81f;
  constexpr float grassHeight = 0.025f;
  
-@@ -218,7 +219,9 @@
+@@ -196,7 +198,10 @@
+     float grassInfluenceBias = clamp(1.0f - (ballBottom / grassHeight), 0.0f, 1.0f); // 0 == no friction, 1 == all friction
+ 
+     grassInfluenceBias = std::pow(
+-        grassInfluenceBias, 0.7f);  // at half grass height, there's already a
++        grassInfluenceBias, 0.7f);
++    // the wind pushes a ball in the air (none on the grass)
++    momentumPredict.coords[0] += afc_wind[0] * (1.0f - grassInfluenceBias) * timeStep;
++    momentumPredict.coords[1] += afc_wind[1] * (1.0f - grassInfluenceBias) * timeStep;  // at half grass height, there's already a
+                                     // bigger amount of friction than 50%
+     // printf("%f\n", bias);
+ 
+@@ -218,7 +223,9 @@
  
      if (nextPos.coords[2] < 0.11f + grassHeight && groundFriction_enabled) {
        DO_VALIDATION;
@@ -72,7 +85,7 @@
  
        // v(t) = v(0) * (k ^ t)
  
-@@ -228,7 +231,7 @@
+@@ -228,7 +235,7 @@
        float newVelo = velo - adaptedFriction * std::pow(velo, 2.0f) * timeStep;
  
        // linear friction
@@ -797,7 +810,19 @@
  float PlayerBase::GetVelocityMultiplier() const {
 --- a/src/onthepitch/referee.cpp
 +++ b/src/onthepitch/referee.cpp
-@@ -352,7 +352,9 @@
+@@ -347,12 +347,21 @@
+     }
+   }
+ 
++  // zocram4cc 82482d2, Law 11: a deflection or a save by a defender does not put a flagged attacker back onside;
++  // only a deliberate play does. Any touch by the attacking side starts a fresh phase.
++  if (!offsidePlayers.empty() && offsidePlayers[0]->GetTeam()->GetID() != lastTouchTeamID) {
++    Player *toucher = match->GetTeam(lastTouchTeamID)->GetLastTouchPlayer();
++    if (toucher && toucher->GetLastTouchType() != e_TouchType_Intentional_Kicked) return;
++  }
++
+   offsidePlayers.clear();
+ 
    if (match->IsInPlay() &&
        (buffer.active == false ||
         (buffer.active == true && buffer.desiredSetPiece != e_GameMode_ThrowIn &&
@@ -808,7 +833,25 @@
      DO_VALIDATION;
      // check for offside players at moment of touch
      MentalImage mentalImage(match);
-@@ -438,6 +440,21 @@
+@@ -396,6 +405,17 @@
+       foul.foulTime = match->GetActualTime_ms();
+       foul.foulPosition = tripee->GetPitchPosition();
+       foul.hasBeenProcessed = false;
++      // zocram4cc 8462a61: a standing tackle that floors a man goes up the same card ladder as a slide - from behind
++      // and far from the ball it is a booking (it was always a plain foul). A booking stops play: no advantage.
++      {
++        const float fromBehind = (tripee->GetPosition() - tripper->GetPosition()).GetNormalized(0).GetDotProduct(tripee->GetDirectionVec()) * 0.5f + 0.5f;
++        const float ballDist = clamp((match->GetBall()->Predict(0) - tripper->GetPosition()).Get2D().GetLength() / 2.0f, 0.0f, 1.0f);
++        const float severity = 1.05f + fromBehind * 0.5f + ballDist * 0.25f;
++        if (severity > 1.4f) {
++          foul.foulType = 2;
++          foul.advantage = false;
++        }
++      }
+     }
+ 
+   } else if (tackleType == 3 &&
+@@ -438,6 +458,21 @@
            DO_VALIDATION;
            foul.foulType = 3;
          }

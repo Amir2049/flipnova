@@ -39,6 +39,7 @@ struct GfSetup {
   int match_frames = 270000;     // whole match length in 10 ms frames (both halves)
   bool offsides = true;
   float dribble_lead = 1.0f;
+  float wind_x = 0.0f, wind_y = 0.0f;   // wind on a ball in the air, m/s^2, engine axes
   float wetness = 0.0f;          // 0 dry .. 1 soaked: the ball skids on a wet pitch     // how far ahead running touches send the ball (engine default 1, lower = closer)
   int right_brain = 0;           // who plays the right team: 0 the engine's built-in AI, 1 TiZero (tizero.h)
   std::string brain_path;        // TiZero weights (assets/tizero.bin)

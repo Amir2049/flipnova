@@ -79,6 +79,8 @@ var cele_fov := 22.0
 var last_mode := -1
 var full_time := false
 var half_done := false
+var wind := Vector2.ZERO          # m/s^2 on a ball in the air, engine axes (x along the pitch)
+var wind_lbl: Label
 var added := -1                   # stoppage minutes for the second half, announced at 89' (League-Soccer's rule)
 var goals_at_half := 0
 var reader: InputReader
@@ -244,6 +246,10 @@ func start(config: Dictionary) -> void:
 	# rain on the engine's matches too (2.43): the pitch shines, it pours, and the engine's ball skids on (wetness)
 	var w: String = opts.get("weather", "auto")
 	rain = w == "rain" or (w == "auto" and randf() < 0.15)
+	# wind (zocram4cc's weather): half the matches are calm, the rest blow from anywhere, harder in the rain; it bends
+	# a ball in the air - long balls and crosses - not one on the grass
+	if randf() < (0.8 if rain else 0.45):
+		wind = Vector2.from_angle(randf() * TAU) * randf_range(0.4, 1.4 if rain else 1.0)
 	_environment()
 	# the engine's pitch: 110 x 72 m
 	pitch.length = 110.0
@@ -310,7 +316,7 @@ func start(config: Dictionary) -> void:
 	# player's team-mates reacted slower: the human's side now plays at full level (a watched match: both alike).
 	var eo := {"human": 1 if human_team >= 0 else 0, "difficulty_home": 1.0 if human_team >= 0 else AWAY_DIFF[level],
 		"difficulty_away": AWAY_DIFF[level],
-		"seed": int(config.get("seed", randi() % 100000)), "match_seconds": match_seconds, "offsides": opts.get("offside", true), "wetness": 1.0 if rain else 0.0,
+		"seed": int(config.get("seed", randi() % 100000)), "match_seconds": match_seconds, "offsides": opts.get("offside", true), "wetness": 1.0 if rain else 0.0, "wind_x": wind.x, "wind_y": wind.y,
 		"home_formation": formation_entries(team_defs[0]["formation"]),
 		"away_formation": formation_entries(team_defs[1]["formation"]),
 		"home_stats": team_stats(roster[0]), "away_stats": team_stats(roster[1])}
@@ -996,6 +1002,12 @@ func _ui() -> void:
 	clock_lbl.add_theme_font_size_override("font_size", 26)
 	clock_lbl.add_theme_color_override("font_color", UI.ACCENT)
 	row.add_child(clock_lbl)
+	# the wind: an arrow the way it blows (from the broadcast camera, the pitch's length runs left-right) and its speed
+	if wind.length() > 0.05:
+		var arrows := ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"]
+		var oct := int(roundf(fposmod(Vector2(wind.x, wind.y).angle(), TAU) / (TAU / 8.0))) % 8
+		wind_lbl = UI.label("  %s %d km/h" % [arrows[oct], int(roundf(wind.length() * 18.0))], 18, Color(0.8, 0.9, 1.0, 0.85))
+		row.add_child(wind_lbl)
 	level_lbl = UI.label("", 14, Color(1, 1, 1, 0.6))
 	level_lbl.position = Vector2(20, 60)
 	root.add_child(level_lbl)

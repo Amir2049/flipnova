@@ -158,6 +158,7 @@ int main(int argc, char** argv) {
       fclose(fp);
     }
   }
+  if (getenv("GF_WIND")) { setup.wind_x = (float)atof(getenv("GF_WIND")); }
   if (!afc::gf_start(setup)) {
     fprintf(stderr, "start failed\n");
     return 2;
