@@ -5,6 +5,7 @@
 int afc_shot_style = 0;
 extern float afc_pitch_wetness;   // ball.cpp (patch)   // read by the engine's HumanController when it builds a shot (patch)
 extern float afc_tactics[2][3];
+extern int afc_style[2];             // teamAIcontroller.cpp (patch): playing style
 extern float afc_wind[2];
 extern float afc_tap_x, afc_tap_y;   // humancontroller.cpp (patch): tap passing
 extern int afc_tap_kind;            // ball.cpp (patch)      // teamAIcontroller.cpp (patch): team instructions
@@ -88,6 +89,7 @@ bool gf_start(const GfSetup& s) {
   afc_wind[1] = s.wind_y;
   for (int t = 0; t < 2; t++)
     for (int k = 0; k < 3; k++) afc_tactics[t][k] = 0.f;   // every match starts on the engine's own tactics
+  afc_style[0] = afc_style[1] = 0;
   SetGame(g_env);
   auto cfg = ScenarioConfig::make();
   for (int i = 0; i < 11; i++) {
@@ -166,6 +168,10 @@ bool gf_brain_on() { return g_tz_on; }
 int gf_brain_last(int i) { return i >= 0 && i < 11 ? g_tz_last[i] : -1; }
 
 bool gf_running() { return g_env != nullptr; }
+
+void gf_set_style(int team, int style) {
+  if (team >= 0 && team <= 1) afc_style[team] = style < 0 || style > 3 ? 0 : style;
+}
 
 void gf_pass_to(float x, float y, int kind) {
   afc_tap_x = x;

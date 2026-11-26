@@ -337,6 +337,7 @@ func start(config: Dictionary) -> void:
 	# the other manager has his own way: a mild style per club (the same club, the same style)
 	var opp := int(config.get("away", 1)) if human_team != 1 else int(config.get("home", 0))
 	cpu_tactic = Vector3([-0.5, 0.0, 0.5][opp % 3], [0.0, 0.6, -0.4][(opp / 3) % 3], [0.0, 0.5, -0.5][(opp / 2) % 3])
+	cpu_style = [0, 1, 2, 0, 1, 3, 2, 0][opp % 8]
 	_apply_tactics()
 	brain = bool(st.get("brain", false))
 	level_lbl.text = LEVELS[level] + ("  ·  TiZero AI" if brain else "")
@@ -1320,6 +1321,11 @@ const TAC_WIDTH := ["Narrow", "Normal", "Wide"]
 const TAC_WIDTH_V := [-0.8, 0.0, 0.8]
 const TAC_PRESS := ["Low block", "Normal", "High press"]
 const TAC_PRESS_V := [-1.0, 0.0, 1.0]
+## Playing style (zocram4cc's team philosophies, engine patch): gegenpressing (three men swarm the ball for 6 s after
+## it is lost, presses harder, tires more), tiki-taka (short passing, wide), park the bus (deep, narrow, the line
+## never leaves the box edge, no counter-press)
+const TAC_STYLE := ["Balanced", "Gegenpress", "Tiki-taka", "Park the bus"]
+var cpu_style := 0
 var cpu_tactic := Vector3.ZERO
 var tac_tick := -1
 
@@ -1329,9 +1335,35 @@ func _human_tactic() -> Vector3:
 		TAC_WIDTH_V[clampi(int(Profile.get_s("tac_width")), 0, 2)], TAC_PRESS_V[clampi(int(Profile.get_s("tac_press")), 0, 2)])
 
 
+## What the board draws: the dials with the style's own shift (the engine does the same, teamAIcontroller.cpp).
+func _board_tactic() -> Vector3:
+	var v := _human_tactic()
+	match clampi(int(Profile.get_s("tac_style")), 0, 3):
+		1: v += Vector3(0.3, 0.0, 0.6)
+		2: v += Vector3(0.0, 0.2, 0.0)
+		3: v += Vector3(-1.0, -0.6, -0.5)
+	return v
+
+
 func _apply_tactics() -> void:
 	if engine == null or not engine.has_method("set_tactics"):
 		return
+	if engine.has_method("set_style"):
+		for t in 2:
+			var stl := cpu_style
+			if t == human_team:
+				stl = clampi(int(Profile.get_s("tac_style")), 0, 3)
+			elif t == 0 and human_team < 0:
+				stl = 0
+			if t != human_team and st.has("goals"):
+				var gg: Vector2i = st["goals"]
+				var df := (gg.x - gg.y) * (1 if t == 0 else -1)
+				var mn: float = st.get("minute", 0.0)
+				if mn >= 70.0 and df < 0:
+					stl = 1     # chasing the game: gegenpress
+				elif mn >= 80.0 and df > 0:
+					stl = 3     # holding a lead: park the bus
+			engine.set_style(t, stl)
 	for t in 2:
 		var v := cpu_tactic
 		if t == human_team:
@@ -1351,7 +1383,7 @@ func _apply_tactics() -> void:
 
 
 func _tactics_page(back: Callable) -> void:
-	var vb := _overlay("TACTICS", 980, 560)
+	var vb := _overlay("TACTICS", 980, 600)
 	vb.add_child(UI.label("Team instructions for %s - they work at once." % str(team_defs[human_team]["name"]), 17, UI.MUTED))
 	var row := UI.hbox(20)
 	vb.add_child(row)
@@ -1364,15 +1396,16 @@ func _tactics_page(back: Callable) -> void:
 	var kd = team_defs[human_team].get("kit", {})
 	if kd is Dictionary and kd.has("shirt"):
 		kit = KitPainter.hex(kd["shirt"])
-	board.setup(GameData.FORMATIONS.get(form, GameData.FORMATIONS["4-3-3"]), kit, _human_tactic())
+	board.setup(GameData.FORMATIONS.get(form, GameData.FORMATIONS["4-3-3"]), kit, _board_tactic())
 	row.add_child(board)
 	var changed := func(key: String, i: int) -> void:
 		Profile.set_s(key, i)
 		_apply_tactics()
-		board.set_tactic(_human_tactic())
+		board.set_tactic(_board_tactic())
 	col.add_child(UI.choice_row("Mentality", TAC_MENTALITY, clampi(int(Profile.get_s("tac_mentality")), 0, 4), func(i: int): changed.call("tac_mentality", i)))
 	col.add_child(UI.choice_row("Width", TAC_WIDTH, clampi(int(Profile.get_s("tac_width")), 0, 2), func(i: int): changed.call("tac_width", i)))
 	col.add_child(UI.choice_row("Pressing", TAC_PRESS, clampi(int(Profile.get_s("tac_press")), 0, 2), func(i: int): changed.call("tac_press", i)))
+	col.add_child(UI.choice_row("Style", TAC_STYLE, clampi(int(Profile.get_s("tac_style")), 0, 3), func(i: int): changed.call("tac_style", i)))
 	vb.add_child(UI.label("The other manager changes his too: chasing the game late on he attacks and presses,\nholding a lead he sits deep.", 16, UI.MUTED))
 	vb.add_child(UI.spacer(0, 0, true))
 	vb.add_child(UI.button("BACK", back, Vector2(220, 56)))

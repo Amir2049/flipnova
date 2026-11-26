@@ -17,6 +17,7 @@ void GFEngine::_bind_methods() {
   ClassDB::bind_method(D_METHOD("substitute", "team", "player"), &GFEngine::substitute);
   ClassDB::bind_method(D_METHOD("set_tactics", "team", "mentality", "width", "pressing"), &GFEngine::set_tactics);
   ClassDB::bind_method(D_METHOD("pass_to", "x", "y", "kind"), &GFEngine::pass_to);
+  ClassDB::bind_method(D_METHOD("set_style", "team", "style"), &GFEngine::set_style);
   ClassDB::bind_method(D_METHOD("set_player_stats", "team", "player", "stats"), &GFEngine::set_player_stats);
 }
 
@@ -60,6 +61,8 @@ void GFEngine::frames(int n) {
 }
 
 void GFEngine::pass_to(float x, float y, int kind) { afc::gf_pass_to(x, y, kind); }
+
+void GFEngine::set_style(int team, int style) { afc::gf_set_style(team, style); }
 
 void GFEngine::set_player_stats(int team, int player, const PackedFloat32Array& stats) {
   if (stats.size() >= 22) afc::gf_set_player_stats(team, player, stats.ptr());

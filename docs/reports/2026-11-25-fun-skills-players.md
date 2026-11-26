@@ -133,6 +133,22 @@ ground pass never waits to see if a second tap comes; a double tap on your own p
 - Shot types: flick SHOOT down = low drive (4.8 deg v 8.3, it goes wide rather than over when it goes wrong); hold
   SHOOT till the ring is full = power shot (34.7 m/s v 29.5, more scatter); with the chip (up) and finesse (side).
 
+## 2.52: playing styles, the power shot, a drag crisis that was not taken
+
+- Playing styles (zocram4cc's team philosophies, d3e0993), a fourth row on the tactics page; the CPU has one per
+  club, gegenpresses when losing after 70', parks the bus when winning after 80'. gftest GF_STYLE_L, real squads:
+  gegenpress wins the ball back within 5 s of losing it 103 -> 122 times (three men swarm it for 6 s, it tires
+  20 % more); park the bus holds the block 5 m deeper (47.2 -> 42.1 m from its keeper), the line never leaves the
+  box edge, no counter-press; tiki-taka plays wider and leaves the long and lofted ball as a last resort.
+- Power shot from 25-30 m (gftest GF_SHOT_X=25, 8 x 40000): over the bar 18 -> 5 of 42 (less rise when it goes
+  wrong, x1.15 pace).
+- Ball physics from Goff & Carre (drag crisis: less drag above 20 m/s): shots from 25-30 m went over more and none
+  dipped - a dip needs topspin; not taken. gftest now counts where shots really cross the goal line (GOALLINE).
+- Licensing (asked): open player databases exist (Reep, CC0 from Wikidata; openfootball, public domain), but a CC0
+  database does not give the right to use a real player's name or likeness in a game (FIFPro licenses those; Brazil's
+  courts made EA pay players). AFC keeps invented names; next is an editor with import/export so players can make
+  their own patches.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

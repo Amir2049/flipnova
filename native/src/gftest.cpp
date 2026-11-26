@@ -169,10 +169,12 @@ int main(int argc, char** argv) {
     const char* e = getenv(t == 0 ? "GF_TAC_L" : "GF_TAC_R");
     float m = 0.f, w = 0.f, pr = 0.f;
     if (e && sscanf(e, "%f,%f,%f", &m, &w, &pr) >= 1) afc::gf_set_tactics(t, m, w, pr);
+    const char* st = getenv(t == 0 ? "GF_STYLE_L" : "GF_STYLE_R");
+    if (st) afc::gf_set_style(t, atoi(st));
   }
   double tac_depth = 0.0, tac_width = 0.0;
   long tac_n = 0;
-  int regains_left = 0;
+  int regains_left = 0, quick_regains = 0, lost_at = -1;
   auto t1 = std::chrono::steady_clock::now();
   printf("started in %.0f ms\n", std::chrono::duration<double, std::milli>(t1 - t0).count());
   afc::GfState st;
@@ -207,6 +209,8 @@ int main(int argc, char** argv) {
   int launches = 0;
   float tap_tx = 0.f, tap_ty = 0.f, tap_best = 0.f, tap_sum = 0.f;
   int tap_watch = -1, tap_n = 0, tap_hit = 0;
+  float gl_prev = 0.f;
+  int gl_in = 0, gl_over = 0, gl_wide = 0;
   int cross_t = -1, cross_n = 0, cross_shots = 0, cross_air = 0;
   bool cross_shoot = false, cross_done = false, cross_pressed = false;
   int cross_press = 0, cross_bi = -1;
@@ -311,9 +315,15 @@ int main(int argc, char** argv) {
       }
       hold = mine ? hold + 1 : 0;
       // GF_SHOT_NEAR: dribble at the goal and only shoot inside ~20 m (the stick straight at goal: the aim is the engine's)
-      if (getenv("GF_SHOT_NEAR") && mine && ps.ball[0] < 34.f && hold >= 40) hold = 39;
+      static const float near_x = getenv("GF_SHOT_X") ? (float)atof(getenv("GF_SHOT_X")) : 34.f;
+      if (getenv("GF_SHOT_NEAR") && mine && ps.ball[0] < near_x && hold >= 40) hold = 39;
       // GF_TAP_TEST=1/2/3: tap passing - 1 a ground ball to open grass 18 m ahead, 2 a lofted ball 32 m ahead and 8 m
       // wide, 3 to the nearest team-mate's feet; TAP prints how close the ball came to the spot
+      // where shots really cross the goal line the human attacks (+x): in, over the bar, wide
+      if (gl_prev < 52.5f && ps.ball[0] >= 52.5f && ps.ball_vel[0] > 8.f) {
+        if (std::fabs(ps.ball[1]) < 3.66f) { if (ps.ball[2] < 2.44f) gl_in++; else gl_over++; } else gl_wide++;
+      }
+      gl_prev = ps.ball[0];
       static const int tap_test = getenv("GF_TAP_TEST") ? atoi(getenv("GF_TAP_TEST")) : 0;
       // GF_CROSS_TEST: a lofted ball to the most advanced team-mate, then SHOOT held while it is in the air; counts
       // the first-time finishes (the next touch is a shot) and how many were struck off the ground (volley / header)
@@ -404,7 +414,11 @@ int main(int argc, char** argv) {
       afc::gf_state(&ms);
       if (ms.ball_owner_team >= 0 && ms.ball_owner_team != last_owner) {
         if (last_owner >= 0) poss_changes++;
-        if (last_owner >= 0 && ms.ball_owner_team == 0) regains_left++;
+        if (last_owner >= 0 && ms.ball_owner_team == 0) {
+          regains_left++;
+          if (lost_at >= 0 && f - lost_at < 500) quick_regains++;   // won back within 5 s of losing it
+        }
+        if (last_owner == 0 && ms.ball_owner_team == 1) lost_at = f;
         last_owner = ms.ball_owner_team;
       }
       if (ms.game_mode != prev_mode && ms.game_mode > 0 && ms.game_mode < 7) restarts[ms.game_mode]++;
@@ -461,9 +475,10 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 22; i++) { reds += fs.players[i].active == 0; yellows += fs.players[i].card == 1; }
     printf("CARDS red %d yellow %d\n", reds, yellows);
   }
+  if (gl_in + gl_over + gl_wide) printf("GOALLINE in %d over %d wide %d\n", gl_in, gl_over, gl_wide);
   if (cross_n) printf("CROSS crosses %d  first-time shots %d  off the ground %d\n", cross_n, cross_shots, cross_air);
   if (tap_n) printf("TAP passes %d  within 3 m of the spot %d  mean closest %.1f m\n", tap_n, tap_hit, tap_sum / tap_n);
-  if (tac_n) printf("TAC left depth %.2f m  width %.2f m  regains %d\n", tac_depth / tac_n, tac_width / tac_n, regains_left);
+  if (tac_n) printf("TAC left depth %.2f m  width %.2f m  regains %d  within 5 s %d\n", tac_depth / tac_n, tac_width / tac_n, regains_left, quick_regains);
   printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
   if (feel_test)
