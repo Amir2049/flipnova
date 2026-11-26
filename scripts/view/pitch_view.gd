@@ -63,7 +63,7 @@ void fragment() {
 	// worn turf: goal mouths and the centre spot
 	vec2 qq = vec2(abs(p.x), p.y);
 	float wear = exp(-pow(length((qq - vec2(hl - 3.0, 0.0)) / vec2(3.5, 4.5)), 2.0)) + 0.5 * exp(-pow(length(p / 3.0), 2.0));
-	col = mix(col, vec3(0.2, 0.19, 0.1), clamp(wear, 0.0, 1.0) * 0.3);   // earth, not khaki (khaki read as a light spot, 2.46)
+	col = mix(col, col * vec3(1.05, 0.82, 0.5), clamp(wear, 0.0, 1.0) * 0.6);   // tired grass yellows, never lighter (a pale patch read as a light spot, 2.46-2.49)
 	float inside = step(abs(p.x), hl + 0.1) * step(abs(p.y), hw + 0.1);
 	col *= mix(0.62, 1.0, inside);
 	float lw = 0.12;

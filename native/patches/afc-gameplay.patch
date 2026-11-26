@@ -155,7 +155,17 @@
        huntDistanceThreshold *= 0.5f * CastPlayer()->GetFatigueFactorInv() +
                                 0.5f * (1.0f - NormalizedClamp(CastPlayer()->GetAverageVelocity(10), idleVelocity, sprintVelocity));
        huntDistanceThreshold *=
-@@ -869,6 +891,7 @@
+@@ -813,6 +835,9 @@
+   state->process(lastDesiredVelocity);
+ }
+ 
++// real squads, 8 matches: weight 0 / 0.15 / 0.3 -> possession lost 959 / 925 / 913, shots 175 / 184 / 192
++static const float afc_chance_w = 0.3f;
++
+ void ElizaController::GetOnTheBallCommands(
+     std::vector<PlayerCommand> &commandQueue, Vector3 &rawInputDirection,
+     float &rawInputVelocityFloat) {
+@@ -869,6 +894,7 @@
      float tacticalDiffRating = 0.0f;
      float passRating = 0.0f;
      float proximityRating = 0.0f;
@@ -163,7 +173,7 @@
      e_FunctionType passType;
    };
  
-@@ -897,12 +920,23 @@
+@@ -897,12 +923,23 @@
        mateRating.player = mates[i];
        mateRating.tacticalRating = mateTacticalRating;
  
@@ -189,7 +199,7 @@
          float passingOddsShort = _GetPassingOdds(mates[i], e_FunctionType_ShortPass, opponentPlayerImages);
          float passingOddsLong  = _GetPassingOdds(mates[i], e_FunctionType_LongPass,  opponentPlayerImages);
          float passingOddsHigh  = _GetPassingOdds(mates[i], e_FunctionType_HighPass,  opponentPlayerImages);
-@@ -921,8 +955,9 @@
+@@ -921,8 +958,31 @@
          }
  
          float totalRating = mateRating.tacticalDiffRating * tacticalDiffWeight +
@@ -197,10 +207,32 @@
 +                            mateRating.passRating * passWeight + mateRating.supportRating -
                              oneTouchIsHard;
 +        if (isActiveRunner) totalRating += 0.3f;
++        // zocram4cc 9441a4d: price every pass by the chance it makes - the receiver's xG where he stands (distance,
++        // angle, bodies in his lane to goal) times what he is as a finisher. The pass went to the most advanced man,
++        // not the best placed one, and nothing preferred the man in the box.
++        {
++          const Vector3 matePos = mates[i]->GetPosition().Get2D();
++          const Vector3 lane = Vector3((pitchHalfW + 1.0f) * -team->GetDynamicSide(), matePos.coords[1], 0) - matePos;
++          const float laneLen = lane.GetLength();
++          int bodies = 0;
++          if (laneLen >= 0.1f) {
++            const Vector3 dir = lane / laneLen;
++            for (unsigned int o = 0; o < opponentPlayerImages.size(); o++) {
++              const Vector3 toOpp = opponentPlayerImages.at(o).position.Get2D() - matePos;
++              const float along = toOpp.GetDotProduct(dir);
++              if (along > 0.0f && along <= laneLen && (toOpp - dir * along).GetLength() < 2.0f) bodies++;
++            }
++          }
++          const Vector3 toGoal = Vector3(pitchHalfW * -team->GetDynamicSide(), 0, 0) - matePos;
++          const float d = toGoal.GetLength();
++          const float angle = 0.25f + 0.75f * (d > 0.0f ? clamp(fabs(toGoal.coords[0]) / d, 0.0f, 1.0f) : 1.0f);
++          const float xg = 0.97f * std::exp(-d / 9.0f) * angle / (1.0f + 0.35f * bodies);
++          totalRating += afc_chance_w * clamp(xg / 0.1f, 0.0f, 3.0f) * (0.5f + mates[i]->GetStat(technical_shot));
++        }
  
          totalRating /= totalWeight2;
  
-@@ -957,12 +992,12 @@
+@@ -957,12 +1017,12 @@
             bestMateRating.passRating < panicProneness * goalCloseness) &&
            possessionAmount < 0.9f + panicProneness * goalCloseness * 0.8f) {
          DO_VALIDATION;
@@ -215,7 +247,7 @@
        }
      }
    }
-@@ -978,12 +1013,26 @@
+@@ -978,12 +1038,26 @@
                         player->GetPosition())
                            .GetLength(),
                        0.0f, 32.0f);
@@ -243,7 +275,7 @@
    idealShotPosFactor = curve(idealShotPosFactor, 1.0f);
    if (idealShotPosFactor > 0.1f) {
      DO_VALIDATION;
-@@ -1010,7 +1059,29 @@
+@@ -1010,7 +1084,29 @@
  
      odds = std::pow(odds, 0.5f);
  
@@ -274,7 +306,7 @@
        DO_VALIDATION;
        PlayerCommand command;
        command.desiredFunctionType = e_FunctionType_Shot;
-@@ -1019,8 +1090,8 @@
+@@ -1019,8 +1115,8 @@
        command.desiredVelocityFloat = rawInputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
        command.touchInfo.desiredDirection =
            (Vector3((pitchHalfW + 1.0f) * -team->GetDynamicSide(),
@@ -285,7 +317,7 @@
                     0) -
             (CastPlayer()->GetPosition() + CastPlayer()->GetMovement() * 0.2f))
                .GetNormalized(Vector3(-team->GetDynamicSide(), 0, 0));
-@@ -1055,7 +1126,7 @@
+@@ -1055,7 +1151,7 @@
    commandQueue.push_back(command);
  }
  
@@ -294,7 +326,7 @@
    DO_VALIDATION;
  
    int yside = signSide(player->GetDirectionVec().coords[1]); // > 0 ? 1 : -1;
-@@ -1065,6 +1136,20 @@
+@@ -1065,6 +1161,20 @@
            .GetNormalized(0) +
        Vector3(0, 0, 0.3f);
    sensibleAwayDir.Normalize(player->GetDirectionVec());
@@ -315,7 +347,7 @@
  
    PlayerCommand command;
    command.useDesiredMovement = false;
-@@ -1142,7 +1227,9 @@
+@@ -1142,7 +1252,9 @@
  
          Vector3 originToBallPos = (intersect - origin);
          float penaltyTime = (passType == e_FunctionType_HighPass && u > 0.5f) ? 2.5f : 0.0f; // trapping high balls takes time
@@ -601,6 +633,15 @@
  
          radian xRot = 0;
          radian yRot = 0;
+@@ -573,7 +592,7 @@
+           DO_VALIDATION;
+           reactionDifficulty =
+               std::pow(lastTouchPlayer->GetLastTouchBias(
+-                           1200 - player->GetStat(physical_reaction) * 400),
++                           (1200 - player->GetStat(physical_reaction) * 400) * 0.75f),   // zocram4cc 583f347: a keeper reacts in the human range (150-260 ms), 25 % quicker
+                        0.6f);
+         }
+         if ((1.0f - veloDifficulty) * (1.0f - reactionDifficulty) < 0.3f) canRetain = false; // too hard!
 @@ -592,6 +611,8 @@
                (currentBallMovement.GetLength() * 0.3f +
                 playerMovement.GetLength() * 2.5f);
