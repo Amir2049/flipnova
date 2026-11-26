@@ -205,6 +205,13 @@ int main(int argc, char** argv) {
   const int shot_style = getenv("GF_SHOT_STYLE") ? atoi(getenv("GF_SHOT_STYLE")) : -1;
   double elev_sum = 0.0, speed_sum = 0.0;
   int launches = 0;
+  float tap_tx = 0.f, tap_ty = 0.f, tap_best = 0.f, tap_sum = 0.f;
+  int tap_watch = -1, tap_n = 0, tap_hit = 0;
+  int cross_t = -1, cross_n = 0, cross_shots = 0, cross_air = 0;
+  bool cross_shoot = false, cross_done = false, cross_pressed = false;
+  int cross_press = 0, cross_bi = -1;
+  float cross_pv[3] = {0.f, 0.f, 0.f};
+  bool tap_air = false, tap_watch_air_done = false;
   int by_dist_n[4] = {0, 0, 0, 0}, by_dist_on[4] = {0, 0, 0, 0};   // shots from <20, 20-30, 30-45, 45+ m: on target
   int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
   for (int f = 0; f < stop; f++) {
@@ -305,6 +312,77 @@ int main(int argc, char** argv) {
       hold = mine ? hold + 1 : 0;
       // GF_SHOT_NEAR: dribble at the goal and only shoot inside ~20 m (the stick straight at goal: the aim is the engine's)
       if (getenv("GF_SHOT_NEAR") && mine && ps.ball[0] < 34.f && hold >= 40) hold = 39;
+      // GF_TAP_TEST=1/2/3: tap passing - 1 a ground ball to open grass 18 m ahead, 2 a lofted ball 32 m ahead and 8 m
+      // wide, 3 to the nearest team-mate's feet; TAP prints how close the ball came to the spot
+      static const int tap_test = getenv("GF_TAP_TEST") ? atoi(getenv("GF_TAP_TEST")) : 0;
+      // GF_CROSS_TEST: a lofted ball to the most advanced team-mate, then SHOOT held while it is in the air; counts
+      // the first-time finishes (the next touch is a shot) and how many were struck off the ground (volley / header)
+      static const bool cross_test = getenv("GF_CROSS_TEST") != nullptr;
+      if (cross_test && hold == 40 && cross_t < 0 && ps.game_mode == 0) {
+        int bi = -1; float bx = -1e9f;
+        for (int i = 1; i < 11; i++) if (i != ps.controlled && ps.players[i].pos[0] > bx) { bx = ps.players[i].pos[0]; bi = i; }
+        if (bi >= 0) {
+          static const float lead = getenv("GF_CROSS_LEAD") ? (float)atof(getenv("GF_CROSS_LEAD")) : 0.f;
+          float dx = ps.players[bi].pos[0] - ps.players[ps.controlled].pos[0], dy = ps.players[bi].pos[1] - ps.players[ps.controlled].pos[1];
+          float dl = std::max(0.1f, std::hypot(dx, dy));
+          afc::gf_pass_to(ps.players[bi].pos[0] + dx / dl * lead, ps.players[bi].pos[1] + dy / dl * lead, 2);
+          cross_t = 0; cross_n++; cross_bi = bi;
+        }
+      }
+      if (cross_t >= 0) {
+        cross_t++;
+        // SHOOT tapped like a person: when the ball in the air is ~10 m from the man it is coming to
+        if (cross_press > 0) { cross_shoot = true; cross_press--; } else cross_shoot = false;
+        if (!cross_pressed && cross_t > 6 && ps.ball[2] > 0.5f && ps.controlled >= 0) {
+          const afc::GfPlayer& c = ps.players[ps.controlled];
+          if (std::hypot(ps.ball[0] - c.pos[0], ps.ball[1] - c.pos[1]) < 10.f) {
+            cross_press = 8; cross_pressed = true;
+            if (getenv("GF_CROSS_DEBUG")) printf("press: ctl %d target %d ball z %.1f t %d\n", ps.controlled, cross_bi, ps.ball[2], cross_t);
+          }
+        }
+        float bs = std::sqrt(ps.ball_vel[0] * ps.ball_vel[0] + ps.ball_vel[1] * ps.ball_vel[1]);
+        const float dvx = ps.ball_vel[0] - cross_pv[0], dvy = ps.ball_vel[1] - cross_pv[1], dvz = ps.ball_vel[2] - cross_pv[2];
+        const bool kicked = std::sqrt(dvx * dvx + dvy * dvy + dvz * dvz) > 6.f;
+        cross_pv[0] = ps.ball_vel[0]; cross_pv[1] = ps.ball_vel[1]; cross_pv[2] = ps.ball_vel[2];
+        if (cross_pressed && kicked && !cross_done && cross_t > 8) {
+          cross_done = true;   // the first touch after SHOOT: was it a shot (fast, goalwards), and off the ground?
+          if (bs > 12.f && ps.ball_vel[0] > 5.f) { cross_shots++; if (ps.ball[2] > 0.45f) cross_air++; }
+          if (getenv("GF_CROSS_DEBUG")) printf("touch: speed %.1f vx %.1f z %.2f t %d\n", bs, ps.ball_vel[0], ps.ball[2], cross_t);
+        }
+        if (false) {
+          cross_shots++; if (ps.ball[2] > 0.45f) cross_air++; cross_done = true;
+          if (getenv("GF_CROSS_DEBUG")) printf("shot: by team %d player %d (ctl %d) z %.2f t %d\n", ps.ball_owner_team, ps.ball_owner_player, ps.controlled, ps.ball[2], cross_t);
+        }
+        if (cross_t >= 220) { cross_t = -1; cross_shoot = false; cross_done = false; cross_pressed = false; }
+      }
+      if (tap_test && hold == 40 && tap_at < 0 && ps.game_mode == 0) {
+        const afc::GfPlayer& me = ps.players[ps.controlled];
+        if (tap_test == 3) {
+          int bi = -1; float bd = 1e9f;
+          for (int i = 1; i < 11; i++) if (i != ps.controlled) {
+            float d = std::hypot(ps.players[i].pos[0] - me.pos[0], ps.players[i].pos[1] - me.pos[1]);
+            if (d < bd && d > 6.f) { bd = d; bi = i; }
+          }
+          if (bi >= 0) { tap_tx = ps.players[bi].pos[0]; tap_ty = ps.players[bi].pos[1]; }
+        } else {
+          tap_tx = std::min(me.pos[0] + (tap_test == 1 ? 18.f : 32.f), 48.f);
+          tap_ty = std::max(-30.f, std::min(30.f, me.pos[1] + (tap_test == 1 ? 0.f : 8.f)));
+        }
+        afc::gf_pass_to(tap_tx, tap_ty, tap_test == 2 ? 2 : 1);
+        tap_watch = 0; tap_best = 1e9f; tap_air = false; tap_watch_air_done = false;
+      }
+      if (tap_watch >= 0) {
+        tap_watch++;
+        float d = std::hypot(ps.ball[0] - tap_tx, ps.ball[1] - tap_ty);
+        if (tap_watch > 20 && ps.ball[2] < 0.6f) tap_best = std::min(tap_best, d);
+        if (ps.ball[2] > 1.5f) tap_air = true;
+        if (tap_air && !tap_watch_air_done && ps.ball[2] < 0.4f) {   // first landing of a lofted ball: along (+ long) and across
+          float sx = ps.ball[0] - tap_tx, sy = ps.ball[1] - tap_ty;
+          printf("LAND %.1f %.1f\n", sx, sy);
+          tap_air = false; tap_watch_air_done = true;
+        }
+        if (tap_watch == 300) { tap_n++; tap_sum += tap_best; if (tap_best < 3.f) tap_hit++; tap_watch = -1; }
+      }
       if (hold == 40 && tap_at < 0) {
         tap_at = f;
         tap_left = tap_frames;
@@ -313,8 +391,10 @@ int main(int argc, char** argv) {
       if (ps.game_mode != 0 && f % 120 == 0 && tap_left == 0) tap_left = tap_frames;   // take set pieces (not timed)
       unsigned tap_bits = afc::GF_SHORT_PASS;
       if (shot_style >= 0 && ps.game_mode == 0)
-        tap_bits = afc::GF_SHOT | (shot_style == 1 ? afc::GF_CHIP : 0u) | (shot_style == 2 ? afc::GF_FINESSE : 0u);
-      afc::gf_input(1.f, 0.f, tap_left > 0 ? tap_bits : 0u);
+        tap_bits = afc::GF_SHOT | (shot_style == 1 ? afc::GF_CHIP : 0u) | (shot_style == 2 ? afc::GF_FINESSE : 0u) |
+                   (shot_style == 3 ? afc::GF_LOW : 0u) | (shot_style == 4 ? afc::GF_POWER : 0u);
+      if (getenv("GF_CROSS_TEST")) tap_bits = afc::GF_HIGH_PASS;
+      afc::gf_input(1.f, 0.f, (tap_left > 0 ? tap_bits : 0u) | (cross_shoot ? afc::GF_SHOT : 0u));
       if (tap_left > 0) tap_left--;
     }
     afc::gf_frame();
@@ -381,6 +461,8 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 22; i++) { reds += fs.players[i].active == 0; yellows += fs.players[i].card == 1; }
     printf("CARDS red %d yellow %d\n", reds, yellows);
   }
+  if (cross_n) printf("CROSS crosses %d  first-time shots %d  off the ground %d\n", cross_n, cross_shots, cross_air);
+  if (tap_n) printf("TAP passes %d  within 3 m of the spot %d  mean closest %.1f m\n", tap_n, tap_hit, tap_sum / tap_n);
   if (tac_n) printf("TAC left depth %.2f m  width %.2f m  regains %d\n", tac_depth / tac_n, tac_width / tac_n, regains_left);
   printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);

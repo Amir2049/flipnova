@@ -22,6 +22,8 @@ enum GfButton : unsigned {
   GF_KEEPER_RUSH = 1u << 10,
   GF_CHIP = 1u << 11,      // with SHOT: a chip (scooped over the keeper)
   GF_FINESSE = 1u << 12,   // with SHOT: a placed, curled shot
+  GF_LOW = 1u << 13,       // with SHOT: a low drive
+  GF_POWER = 1u << 14,     // with SHOT: a power shot
 };
 
 // Skeleton joints, in the order of AFC's player model (tools/make_player_glb.py SKELETON).
@@ -93,6 +95,7 @@ void gf_input(float dx, float dy, unsigned buttons);  // the human's stick (engi
 void gf_stop();
 void gf_substitute(int team, int player);
 void gf_set_player_stats(int team, int player, const float* stats22);   // a substitute's ratings
+void gf_pass_to(float x, float y, int kind);   // the next pass goes to this spot (engine metres); 1 ground, 2 lofted
 void gf_set_tactics(int team, float mentality, float width, float pressing);  // team instructions, each -1..1 (0 = engine's own)           // a fresh player comes on: tiredness back to none
 bool gf_running();
 

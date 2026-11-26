@@ -5,7 +5,9 @@
 int afc_shot_style = 0;
 extern float afc_pitch_wetness;   // ball.cpp (patch)   // read by the engine's HumanController when it builds a shot (patch)
 extern float afc_tactics[2][3];
-extern float afc_wind[2];            // ball.cpp (patch)      // teamAIcontroller.cpp (patch): team instructions
+extern float afc_wind[2];
+extern float afc_tap_x, afc_tap_y;   // humancontroller.cpp (patch): tap passing
+extern int afc_tap_kind;            // ball.cpp (patch)      // teamAIcontroller.cpp (patch): team instructions
 
 #include <cmath>
 #include <cstdio>
@@ -165,6 +167,12 @@ int gf_brain_last(int i) { return i >= 0 && i < 11 ? g_tz_last[i] : -1; }
 
 bool gf_running() { return g_env != nullptr; }
 
+void gf_pass_to(float x, float y, int kind) {
+  afc_tap_x = x;
+  afc_tap_y = y;
+  afc_tap_kind = kind;
+}
+
 void gf_set_tactics(int team, float mentality, float width, float pressing) {
   if (team < 0 || team > 1) return;
   auto c = [](float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); };
@@ -216,7 +224,8 @@ void gf_input(float dx, float dy, unsigned buttons) {
   g_dy = dy;
   g_buttons = buttons;
   // the engine builds a shot when SHOOT is let go: the style chosen while it was held stays until the next press
-  if (buttons & GF_SHOT) afc_shot_style = (buttons & GF_CHIP) ? 1 : ((buttons & GF_FINESSE) ? 2 : 0);
+  if (buttons & GF_SHOT)
+    afc_shot_style = (buttons & GF_CHIP) ? 1 : (buttons & GF_FINESSE) ? 2 : (buttons & GF_LOW) ? 3 : (buttons & GF_POWER) ? 4 : 0;
 }
 
 // ---------------------------------------------------------------------------------------------------- TiZero

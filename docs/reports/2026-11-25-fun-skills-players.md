@@ -117,6 +117,22 @@ Measured each, 8 matches CPU v CPU (possession lost / goals; 2.44: 884 / 31):
 - How much of zocram4cc: of its 393 engine commits ~290 cannot serve us (~140 presentation drawn by Godot in AFC,
   ~70 PES import, ~80 measurement and its own build); of the ~45 gameplay changes, ~27 are taken or tried.
 
+## 2.51: tap passing, first-time finishes, shot types (FC Mobile's controls)
+
+FC Mobile (EA gesture guide): a tap on or behind a team-mate passes to his feet, ahead of him into space, a double
+tap lofts it. AFC: a quick tap anywhere passes (to feet when it is on/behind a team-mate, else to that exact spot),
+a long press lofts it there (a lob, a lofted through ball, a cross) - a long press instead of a double tap so a
+ground pass never waits to see if a second tap comes; a double tap on your own player stays the step-over.
+- Engine: gf_pass_to + the AfcPoint modifier (aimed passes are not re-targeted at the kick); a lofted ball to a spot
+  aims 22 % short (the engine's lob is tuned to drop at a runner's stride). gftest GF_TAP_TEST: ground to open grass
+  ~70 % within 3 m; lofted lands within 1-2 m. tests/tap_pass_test.gd drives it through the real touch path.
+- First-time finishes: SHOOT pressed while a cross is in the air was always chested down (gftest GF_CROSS_TEST:
+  0 strikes in the air in 45 crosses) - the trap was offered alongside the shot, and the shot clips for a high ball
+  (header, diving header, bicycle, volley) almost never matched. Now a waiting shot takes the trap off the table
+  and gets the keeper's height slack: 5 struck in the air in 35 crosses.
+- Shot types: flick SHOOT down = low drive (4.8 deg v 8.3, it goes wide rather than over when it goes wrong); hold
+  SHOOT till the ring is full = power shot (34.7 m/s v 29.5, more scatter); with the chip (up) and finesse (side).
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

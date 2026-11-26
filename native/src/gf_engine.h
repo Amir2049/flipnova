@@ -27,6 +27,7 @@ class GFEngine : public RefCounted {
   void set_input(float dx, float dy, int buttons);
   void substitute(int team, int player);
   void set_tactics(int team, float mentality, float width, float pressing);
+  void pass_to(float x, float y, int kind);
   void set_player_stats(int team, int player, const PackedFloat32Array& stats);
   // ball, score, mode, clock, owner, the human's player
   Dictionary state();

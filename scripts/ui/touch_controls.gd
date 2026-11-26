@@ -25,6 +25,8 @@ const SWIPEABLE := ["pass", "through"]
 
 var stick := Vector2.ZERO          # x right, y up, length 0..1
 var stick_touch := -1
+var stick_t0 := 0.0
+var stick_start := Vector2.ZERO
 var stick_origin := Vector2.ZERO
 var stick_pos := Vector2.ZERO
 var stick_home := Vector2.ZERO
@@ -179,6 +181,13 @@ func _on_button(pos: Vector2) -> String:
 	return best
 
 
+## How long a button has been held (0 when it is up).
+func held_for(name: String) -> float:
+	if not buttons.has(name) or not buttons[name]["held"]:
+		return 0.0
+	return _now() - float(buttons[name]["t_down"])
+
+
 func _in_stick_zone(p: Vector2) -> bool:
 	var w := get_viewport_rect().size.x
 	var x := w - p.x if left_handed else p.x
@@ -214,6 +223,8 @@ func _input(event: InputEvent) -> void:
 				return
 			if _in_stick_zone(e.position) and stick_touch == -1:
 				stick_touch = e.index
+				stick_t0 = _now()
+				stick_start = e.position
 				stick_origin = stick_home if fixed_stick else e.position
 				stick_pos = e.position if not fixed_stick else stick_home
 				stick = Vector2.ZERO
@@ -235,6 +246,8 @@ func _input(event: InputEvent) -> void:
 						b["t_down"] = _now() - COMMIT
 					queue_redraw()
 			if e.index == stick_touch:
+				if _now() - stick_t0 < 0.22 and e.position.distance_to(stick_start) < 14.0 * u:
+					_gesture("tap", Vector2.ZERO, e.position)
 				stick_touch = -1
 				stick = Vector2.ZERO
 				stick_origin = stick_home
@@ -257,6 +270,8 @@ func _input(event: InputEvent) -> void:
 				var sm: Vector2 = d.position - b["start"]
 				if -sm.y > FLICK * u and absf(sm.x) < -sm.y * 1.2:
 					b["variant"] = "up"
+				elif sm.y > FLICK * u and absf(sm.x) < sm.y * 1.2:
+					b["variant"] = "down"     # a low drive (2.51)
 				elif absf(sm.x) > FLICK * u and absf(sm.y) < absf(sm.x):
 					b["variant"] = "side"
 				if b["variant"] != "":
@@ -304,12 +319,17 @@ func _finish_swipe(sw: Dictionary, end: Vector2) -> void:
 	for i in range(1, path.size()):
 		travelled += (path[i] - path[i - 1]).length()
 	if travelled < 22.0 and dur < 0.3:
-		# a tap: two quick taps make a double tap
+		# a tap: two quick taps make a double tap; every single tap is also a tap pass to that spot (2.51, FC Mobile)
 		if now - last_tap["t"] < 0.33 and end.distance_to(last_tap["pos"]) < 90.0:
-			_gesture("double", Vector2.ZERO)
+			_gesture("double", Vector2.ZERO, end)
 			last_tap["t"] = -10.0
 		else:
 			last_tap = {"t": now, "pos": end}
+			_gesture("tap", Vector2.ZERO, end)
+		return
+	if travelled < 22.0 and dur >= 0.3 and dur < 1.5:
+		# a long press without moving: a lofted ball to that spot (a lob, a lofted through ball, a cross)
+		_gesture("hold", Vector2.ZERO, end)
 		return
 	if dur > 0.9 or travelled < 50.0:
 		return
@@ -347,8 +367,8 @@ func _finish_swipe(sw: Dictionary, end: Vector2) -> void:
 	_gesture("swipe", Vector2(total.x, -total.y))
 
 
-func _gesture(kind: String, dir: Vector2) -> void:
-	gestures.append({"kind": kind, "dir": dir})
+func _gesture(kind: String, dir: Vector2, pos: Vector2 = Vector2.ZERO) -> void:
+	gestures.append({"kind": kind, "dir": dir, "pos": pos})
 	if vibrate and OS.has_feature("mobile"):
 		Input.vibrate_handheld(18)
 

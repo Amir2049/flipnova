@@ -22,6 +22,8 @@ const B_TEAM_PRESS := 256
 const B_SWITCH := 512
 const B_CHIP := 2048                     # with B_SHOT (native/src/gf_api.h GF_CHIP)
 const B_FINESSE := 4096
+const B_LOW := 8192        # with SHOT: a low drive (GF_LOW)
+const B_POWER := 16384     # with SHOT: a power shot (GF_POWER)
 const MODE_NAMES := ["", "KICK OFF", "GOAL KICK", "FREE KICK", "CORNER", "THROW-IN", "PENALTY"]
 var guarded := false
 var force_touch := false                 # tests: show and use the touch controls without a touchscreen
@@ -426,6 +428,10 @@ func _input_to_engine() -> void:
 				b |= B_CHIP
 			elif sv == "side" or reader._pad("close"):
 				b |= B_FINESSE
+			elif sv == "down":
+				b |= B_LOW
+			elif touch != null and touch.active and touch.held_for("shoot") > 0.42:
+				b |= B_POWER     # held until the power ring is full: a power shot (2.51)
 		if on.call("through", "through"): b |= B_HIGH if _flick("through") else B_LONG
 		if on.call("lob", "lob"): b |= B_HIGH
 		if reader._pad("close"): b |= B_DRIBBLE
@@ -450,6 +456,9 @@ func _input_to_engine() -> void:
 		b |= B_SPRINT
 	elif stick.length() > STICK_DEAD and stick.length() < 0.6:
 		b |= B_DRIBBLE   # the stick pushed part way: a controlled jog (3.5 m/s) instead of the 5 m/s run
+	if tap_frames > 0 and atk:
+		b |= tap_bits
+		tap_frames -= 1
 	if atk:
 		_skill_inputs(stick)
 	elif touch:
@@ -464,6 +473,47 @@ func _input_to_engine() -> void:
 
 
 ## The human's dribbler: has he got the ball (a skill move needs it)?
+var tap_bits := 0
+var tap_frames := 0
+var tap_ring: MeshInstance3D
+
+
+## A point on the screen -> the spot on the grass it shows, in engine metres (x, y); null off the pitch.
+func _pitch_point(p: Vector2):
+	var o := cam.project_ray_origin(p)
+	var d := cam.project_ray_normal(p)
+	if d.y > -0.01:
+		return null
+	var hit := o + d * (-o.y / d.y)
+	if absf(hit.x) > 56.0 or absf(hit.z) > 37.0:
+		return null
+	return Vector2(hit.x, -hit.z)
+
+
+## Where the tap pass is going: a ring on the grass that fades.
+func _tap_mark(spot: Vector2) -> void:
+	if tap_ring == null:
+		tap_ring = MeshInstance3D.new()
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.55
+		tm.outer_radius = 0.75
+		tap_ring.mesh = tm
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Color(1.0, 0.85, 0.2, 0.9)
+		tap_ring.material_override = m
+		add_child(tap_ring)
+	tap_ring.position = Vector3(spot.x, 0.03, -spot.y)
+	tap_ring.scale = Vector3.ONE * 1.6
+	tap_ring.visible = true
+	var mat: StandardMaterial3D = tap_ring.material_override
+	mat.albedo_color.a = 0.9
+	var tw := create_tween()
+	tw.tween_property(tap_ring, "scale", Vector3.ONE * 0.8, 0.5).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(mat, "albedo_color:a", 0.0, 0.7)
+
+
 func _on_ball() -> bool:
 	return not st.is_empty() and int(st["mode"]) == 0 and int(st["owner_team"]) == 0 \
 		and int(st["owner_player"]) == int(st["controlled"]) and int(st["controlled"]) >= 0
@@ -501,6 +551,29 @@ func _skill_inputs(stick: Vector2) -> void:
 	var gs: Array = touch.take_gestures() if touch else []
 	if not _on_ball():
 		return
+	# tap passing (FC Mobile): a tap on a team-mate or open grass passes there, a long press lofts it there; taps on
+	# the human's own player are left to the skill moves (double tap: step-over)
+	var own_near := func(p: Vector2) -> bool:
+		var o := int(st["controlled"]) * stride
+		var me := Vector3(poses[o], 1.0, -poses[o + 1])
+		return not cam.is_position_behind(me) and cam.unproject_position(me).distance_to(p) < 70.0
+	var rest: Array = []
+	for g in gs:
+		var kind: String = g["kind"]
+		var p: Vector2 = g.get("pos", Vector2.ZERO)
+		if (kind == "tap" or kind == "hold") and not own_near.call(p):
+			var spot = _pitch_point(p)
+			if spot != null:
+				engine.pass_to(spot.x, spot.y, 2 if kind == "hold" else 1)
+				tap_bits = B_HIGH if kind == "hold" else B_SHORT
+				tap_frames = 6
+				_tap_mark(spot)
+			continue
+		if kind == "double" and not own_near.call(p):
+			continue   # the first tap of it already passed
+		if kind != "tap" and kind != "hold":
+			rest.append(g)
+	gs = rest
 	var f := _facing()
 	var right := Vector2(-f.y, f.x)
 	var sw := cam.screen_to_world(stick.normalized()) if stick.length() > STICK_DEAD else Vector2.ZERO
