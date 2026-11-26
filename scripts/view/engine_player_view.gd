@@ -78,7 +78,9 @@ func busy() -> bool:
 
 ## One player's pose from GFEngine.poses(): engine axes (x along the pitch, y across, z up) become Godot axes
 ## (x, z up, -y) - the same conversion the model's clips were built with. A playing mocap clip is blended over it.
-func apply(p: PackedFloat32Array, o: int, dt: float = 0.0) -> void:
+## `pose_now` false (animation LOD: far from the camera or off screen) moves him but keeps last frame's skeleton,
+## so Godot skips that skeleton's update and skinning this frame.
+func apply(p: PackedFloat32Array, o: int, dt: float = 0.0, pose_now: bool = true) -> void:
 	var epos := Vector3(p[o], 0.0, -p[o + 1])
 	visible = p[o + 9] > 0.5
 	var eroot := Vector3(0.0, p[o + 2], 0.0)
@@ -91,7 +93,9 @@ func apply(p: PackedFloat32Array, o: int, dt: float = 0.0) -> void:
 		elif clip_t > 0.0:
 			w = clampf(minf(clip_t / 0.25, (clip_len - clip_t) / 0.35), 0.0, 1.0)
 			pose = Mocap.sample(clip, clip_t)
-	if w <= 0.0:
+	if w <= 0.0 and not pose_now:
+		position = epos
+	elif w <= 0.0:
 		position = epos
 		skel.set_bone_pose_position(bones[0], eroot)
 		for j in JOINTS.size():

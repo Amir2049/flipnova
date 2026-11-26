@@ -79,6 +79,8 @@ var cele_focus := -1              # the scorer (camera target)
 var cele_angle := 0.0
 var cele_fov := 22.0
 var last_mode := -1
+var draw_n := 0            # frames drawn (animation LOD takes turns on it)
+var ball_owner_idx := -1   # 0..21, the man on the ball (always fully animated)
 var setpiece_since := -1   # ms when our taker stood over a set piece; after 15 s it is taken with PASS
 var full_time := false
 var half_done := false
@@ -929,8 +931,22 @@ func _update_views(dt: float) -> void:
 
 
 func _draw_frame(p: PackedFloat32Array, b: Vector3, bv: Vector3, dt: float) -> void:
+	# animation LOD (as console football games do): a player more than 38 m from the camera gets a new skeleton pose
+	# every other frame, one off screen every fourth - his position still moves every frame. Replays and the man on
+	# the ball always get every frame.
+	draw_n += 1
+	ball_owner_idx = -1 if st.is_empty() or int(st["owner_team"]) < 0 else int(st["owner_team"]) * 11 + int(st["owner_player"])
+	var cam_pos: Vector3 = cam.global_position if cam else Vector3.ZERO
+	var near_cam := replay_t >= 0.0 or cam == null
 	for i in 22:
-		pviews[i].apply(p, i * stride, dt)
+		var pose_now := true
+		if not near_cam and i != ball_owner_idx:
+			var pv: Node3D = pviews[i]
+			if not cam.is_position_in_frustum(pv.position + Vector3(0, 1, 0)):
+				pose_now = (draw_n + i) % 4 == 0
+			elif pv.position.distance_squared_to(cam_pos) > 38.0 * 38.0:
+				pose_now = (draw_n + i) % 2 == 0
+		pviews[i].apply(p, i * stride, dt, pose_now)
 	ball_proxy.pos = Vector3(b.x, b.z, -b.y)
 	ball_proxy.vel = Vector3(bv.x, bv.z, -bv.y)
 	ball_view.update_view(ball_proxy, dt)

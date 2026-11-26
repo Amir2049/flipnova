@@ -57,7 +57,20 @@ func _apply() -> void:
 	var vp := view.get_viewport()
 	if vp:
 		vp.scaling_3d_scale = SCALES[mini(level, SCALES.size() - 1)]
+		FrameGovernor.upscaler(vp)
 	view.set_sun_shadows(level < 4)
 	Engine.max_fps = 30 if level >= 5 else 0
 	target_fps = 30.0 if level >= 5 else 60.0
 	changed.emit(level)
+
+
+## Below full resolution on Vulkan, AMD FSR 1.0 brings the picture back up (edge-aware upscale + sharpening, one
+## cheap pass) instead of a plain bilinear stretch: 72-85 % then looks close to native on a phone screen. The
+## Compatibility (OpenGL) renderer has only bilinear.
+static func upscaler(vp: Viewport) -> void:
+	var vulkan := RenderingServer.get_current_rendering_method() != "gl_compatibility"
+	if vulkan and vp.scaling_3d_scale < 0.99:
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+		vp.fsr_sharpness = 0.35   # 0 = sharpest; a little softer so grass does not shimmer
+	else:
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR

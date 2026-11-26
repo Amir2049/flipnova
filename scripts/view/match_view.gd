@@ -301,6 +301,7 @@ func _quality(q: int) -> void:
 	sun.directional_shadow_max_distance = 80.0 if q == 1 else 120.0
 	if vp:
 		vp.scaling_3d_scale = 0.75 if q == 0 else 1.0
+		FrameGovernor.upscaler(vp)
 		# MSAA only on High (some mobile GPUs struggle with multisampled targets)
 		vp.msaa_3d = Viewport.MSAA_2X if q == 2 else Viewport.MSAA_DISABLED
 		# on Vulkan (2.46) High gets 4x: tile-based mobile GPUs resolve MSAA on chip, nearly free there
