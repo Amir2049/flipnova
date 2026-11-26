@@ -99,6 +99,121 @@
    Vector3 autoDirection = (goalPos - (player->GetPosition() + player->GetMovement() * 0.12f)).GetNormalized(0);
  
    return (manualDirection * (1.0f - autoDirectionBias) + autoDirection * autoDirectionBias).GetNormalized(inputDirection);
+--- /dev/null
++++ b/src/onthepitch/aitactics.hpp
+@@ -0,0 +1,112 @@
++// Copyright 2019 Google LLC & Bastiaan Konings
++// Licensed under the Apache License, Version 2.0 (the "License");
++
++#ifndef _HPP_AI_TACTICS
++#define _HPP_AI_TACTICS
++
++#include <algorithm>
++
++namespace AITactics {
++
++// Coordinates use teamSide for the own goal, so forward is its negative.
++inline float GetAttackingProbeX(float playerX, int teamSide, float lead) {
++  return playerX - static_cast<float>(teamSide) * std::max(0.0f, lead);
++}
++
++inline bool IsAutomaticRunnerEligible(bool active, bool humanControlled, bool goalkeeper,
++                                      bool ballCarrier) {
++  return active && !humanControlled && !goalkeeper && !ballCarrier;
++}
++
++// Keep a closing defender committed unless a replacement is clearly better.
++// Ratings are distance in metres plus a positional-role penalty.
++inline bool ShouldKeepPressurePlayer(float currentRating, float bestRating) {
++  return currentRating <= bestRating + 1.5f;
++}
++inline float ClampSetting(float value) {
++  return std::max(0.0f, std::min(value, 1.0f));
++}
++
++// PES 5/6: CPU is more selective about runs (0.62 vs 0.60 base).
++// Players pick their moment rather than running automatically.
++inline float GetAttackingRunThreshold(float counterAttack) {
++  return 0.62f - ClampSetting(counterAttack) * 0.24f;
++}
++
++inline unsigned int GetAttackingRunDuration_ms(float counterAttack) {
++  return 2800U + static_cast<unsigned int>(ClampSetting(counterAttack) * 2200.0f);
++}
++
++// Territory is -1 at the team's own goal and +1 at the opponent's goal.
++inline float GetAttackingTerritory(float ballX, int teamSide, float pitchHalfLength) {
++  if (pitchHalfLength <= 0.0f)
++    return 0.0f;
++  return std::max(-1.0f, std::min(ballX * static_cast<float>(-teamSide) / pitchHalfLength, 1.0f));
++}
++
++// PES 5/6: CPU sits in a mid-block and only presses when the opponent
++// is in a dangerous zone — not from deep in their own half.
++// territoryThreshold of 0.55 means CPU needs opponent past the halfway
++// line before pressing at medium settings.
++inline bool ShouldStartZonePressure(float pressure, float attackingTerritory,
++                                    float primaryDefenderDistance) {
++  const float setting = ClampSetting(pressure);
++  if (setting < 0.05f)
++    return false;
++
++  const float territoryThreshold = 0.55f - setting * 0.90f;
++  const float distanceThreshold = 5.0f + setting * 8.0f;  // tighter range (was 6+10)
++  return attackingTerritory >= territoryThreshold && primaryDefenderDistance <= distanceThreshold;
++}
++
++inline unsigned int GetZonePressureDuration_ms(float pressure) {
++  return 700U + static_cast<unsigned int>(ClampSetting(pressure) * 1600.0f);
++}
++
++// PES 5/6: dribblers favour combination play over soloing (0.55 base vs 0.58).
++// This keeps wingers looking for a one-two rather than always charging.
++inline float GetDribbleForwardDrive(float dribbleOffensiveness, float roleMindset) {
++  return 0.55f + ClampSetting(dribbleOffensiveness) * 0.28f + ClampSetting(roleMindset) * 0.12f;
++}
++
++// PES 5/6: slightly wider support triangle (0.68 base vs 0.65)
++// for cleaner give-and-go combinations in central areas.
++inline float GetSupportWebScale(float supportDistance) {
++  return 0.68f + ClampSetting(supportDistance) * 0.20f;
++}
++
++// Defenders still join possession play, but centre-backs retain more of their
++// base shape than full-backs.
++inline float GetDefenderSupportScale(float roleMindset) {
++  return std::min(0.72f + ClampSetting(roleMindset) * 0.52f, 1.0f);
++}
++
++// Prefer a nearby midfielder or forward as the second presser when the distance
++// difference is small, preserving the back line without making pressure slow.
++inline float GetSecondaryPressureRolePenalty(float roleMindset) {
++  return (1.0f - ClampSetting(roleMindset)) * 1.0f;
++}
++
++// Under pressure, permit a safe lateral or slightly backward pass when it
++// creates clear breathing room. This complements, rather than replaces, the
++// existing preference for progressive passes.
++inline bool ShouldConsiderSupportPass(float currentTacticalRating, float currentSpaceRating,
++                                      float teammateTacticalRating, float teammateSpaceRating,
++                                      float longPossessionFactor) {
++  const float retentionNeed =
++      std::max(1.0f - ClampSetting(currentSpaceRating), ClampSetting(longPossessionFactor));
++  return retentionNeed >= 0.55f && teammateSpaceRating >= currentSpaceRating + 0.12f &&
++         teammateTacticalRating >= currentTacticalRating - 0.15f;
++}
++
++inline float GetSupportPassBonus(float currentSpaceRating, float teammateSpaceRating,
++                                 float longPossessionFactor) {
++  const float spaceGain = ClampSetting((teammateSpaceRating - currentSpaceRating) / 0.4f);
++  const float retentionNeed =
++      std::max(1.0f - ClampSetting(currentSpaceRating), ClampSetting(longPossessionFactor));
++  return spaceGain * retentionNeed * 0.35f;
++}
++
++}  // namespace AITactics
++
++#endif
 --- a/src/onthepitch/ball.cpp
 +++ b/src/onthepitch/ball.cpp
 @@ -30,7 +30,9 @@
@@ -153,6 +268,90 @@
  
        xy.Normalize(Vector3(0));
        xy *= newVelo;
+--- /dev/null
++++ b/src/onthepitch/gameplaytuning.hpp
+@@ -0,0 +1,81 @@
++// Copyright 2019 Google LLC & Bastiaan Konings
++// Licensed under the Apache License, Version 2.0 (the "License");
++
++#ifndef _HPP_GAMEPLAY_TUNING
++#define _HPP_GAMEPLAY_TUNING
++
++#include <algorithm>
++#include <cmath>
++
++namespace GameplayTuning {
++
++enum class AdvantageDecision { Continue, RecallFoul, PlayedOut };
++
++inline AdvantageDecision EvaluateAdvantage(unsigned long now_ms, unsigned long foulAt_ms,
++                                           bool possessionLost) {
++  // Subtract timestamps first: subtracting the allowance from an early match
++  // clock would underflow and prematurely discard the foul.
++  const unsigned long elapsed_ms = now_ms - foulAt_ms;
++  if (elapsed_ms > 3500)
++    return AdvantageDecision::PlayedOut;
++  if (elapsed_ms > 600 && possessionLost)
++    return AdvantageDecision::RecallFoul;
++  return AdvantageDecision::Continue;
++}
++inline float Clamp01(float value) {
++  return std::max(0.0f, std::min(value, 1.0f));
++}
++
++// Adds a small, explainable first-touch penalty under close pressure or when a
++// fast incoming ball arrives from outside the player's field of view.
++inline float GetFirstTouchContextPenalty(float opponentDistance, float calmness, float balance,
++                                         float incomingBallSpeed, float incomingFacingAlignment,
++                                         int playerCondition = 3) {
++  const float pressure = Clamp01((1.6f - opponentDistance) / 1.2f);
++  const float composure = Clamp01(calmness * 0.65f + balance * 0.35f);
++  const float ballPace = Clamp01((incomingBallSpeed - 4.0f) / 10.0f);
++  const float blindSide = Clamp01((0.25f - incomingFacingAlignment) / 1.25f);
++
++  // PES 5/6: pressure penalty is sharper (0.10 vs 0.08) — being closed down
++  // under a hard incoming ball is genuinely dangerous.
++  const float pressurePenalty = pressure * (1.0f - composure * 0.65f) * 0.10f;
++  const float orientationPenalty = ballPace * blindSide * (1.0f - composure * 0.4f) * 0.10f;
++
++  // PES condition penalty (3 is neutral, 1 is terrible, 5 is excellent)
++  // PES condition penalty: 3 is neutral, 1 is poor, 5 is excellent.
++  // Weight 0.03 makes a 2-star condition gap produce ~0.06 extra error —
++  // enough to be perceptible but not overwhelming.
++  float conditionMod = (3 - playerCondition) * 0.03f;
++
++  return std::min(std::max(0.0f, pressurePenalty + orientationPenalty + conditionMod), 0.25f);
++}
++
++// Distance remains the primary fatigue input. This workload factor makes
++// jogging slightly cheaper and repeated sprinting slightly more expensive.
++inline float GetFatigueWorkloadFactor(float movementSpeed, float maximumSpeed, bool carryingBall) {
++  if (maximumSpeed <= 0.0f)
++    return 1.0f;
++
++  const float speedRatio = Clamp01(movementSpeed / maximumSpeed);
++  const float sprintLoad = Clamp01((speedRatio - 0.55f) / 0.45f);
++  // PES 5/6: sprinting is notably more taxing than jogging (0.36 vs 0.28)
++  // and carrying the ball while at full pace costs extra (0.06 vs 0.04).
++  // Late in a match, fatigued players visibly slow down.
++  float workload = 0.90f + sprintLoad * sprintLoad * 0.36f;
++  if (carryingBall)
++    workload += sprintLoad * 0.06f;
++  return workload;
++}
++
++inline bool IsGoalMouthThreat(float lateralPosition, float ballHeight, float goalHalfWidth,
++                              float goalHeight, float anticipationFactor) {
++  const float anticipation = std::max(anticipationFactor, 1.0f);
++  const float anticipatedHalfWidth = goalHalfWidth * anticipation;
++  const float anticipatedHeight = goalHeight + 0.11f + (anticipation - 1.0f) * 0.25f;
++  return std::fabs(lateralPosition) <= anticipatedHalfWidth && ballHeight >= 0.0f &&
++         ballHeight <= anticipatedHeight;
++}
++
++}  // namespace GameplayTuning
++
++#endif  // _HPP_GAMEPLAY_TUNING
 --- a/src/onthepitch/player/controller/elizacontroller.cpp
 +++ b/src/onthepitch/player/controller/elizacontroller.cpp
 @@ -15,6 +15,7 @@
@@ -481,7 +680,7 @@
      void _AddCelebration(std::vector<PlayerCommand> &commandQueue);
 --- a/src/onthepitch/player/controller/humancontroller.cpp
 +++ b/src/onthepitch/player/controller/humancontroller.cpp
-@@ -23,6 +23,43 @@
+@@ -23,6 +23,44 @@
  
  #include "../../../main.hpp"
  
@@ -501,7 +700,8 @@
 +static unsigned long afc_shot_press_ms = 0;   // when SHOOT was last pressed (match time)   // headers the assist played (gftest prints it)
 +static Vector3 afc_pass_dir;   // the stick when the pass was pressed: it goes there even if the thumb moves while he turns
 +static const float afc_pass_hold_k = 1.0f;   // gftest GF_AIM_TEST: tap to ball 348 -> 469 ms on mixed angles, aim kept
-+static const float afc_lob_k = 0.78f;   // gftest GF_TAP_TEST=2: lands within 1-2 m of the spot
++static const float afc_lob_k = 0.78f;
++static const float afc_shot_aim_k = getenv("GF_SHOT_AIM_K") ? (float)atof(getenv("GF_SHOT_AIM_K")) : 2.0f;   // stick -> shot placement   // gftest GF_TAP_TEST=2: lands within 1-2 m of the spot
 +
 +int HumanController::AfcPassHold_ms() {
 +  // the turn: where the stick sends it against where his body faces
@@ -525,7 +725,7 @@
  HumanController::HumanController(Match *match, AIControlledKeyboard *hid)
      : PlayerController(match), hid(hid) {
    DO_VALIDATION;
-@@ -124,10 +161,17 @@
+@@ -124,10 +162,17 @@
    if (actionMode == 2) {
      DO_VALIDATION;
  
@@ -545,7 +745,7 @@
                        // button is released), it will usually touch ball after
                        // the remaining time anyway, so we still have time to add
                        // more power, yet still respond as fast as possible
-@@ -141,6 +185,7 @@
+@@ -141,6 +186,7 @@
  
        // action button released!
  
@@ -553,7 +753,7 @@
        // force set piece methods
        if (match->IsInSetPiece() &&
            team->GetController()->GetPieceTaker() == player &&
-@@ -162,6 +207,47 @@
+@@ -162,6 +208,47 @@
  
          commandQueue.push_back(command);
  
@@ -601,7 +801,7 @@
        } else if (actionButton == e_ButtonFunction_ShortPass) {
          DO_VALIDATION;
  
-@@ -169,12 +255,17 @@
+@@ -169,12 +256,17 @@
          command.desiredFunctionType = e_FunctionType_ShortPass;
          command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
@@ -622,7 +822,7 @@
          AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
  
          commandQueue.push_back(command);
-@@ -188,7 +279,7 @@
+@@ -188,7 +280,7 @@
          command.useDesiredLookAt = false;
  
          float inputPower = clamp(std::pow(gaugeFactor, 0.65f), 0.01f, 1.0f);
@@ -631,7 +831,7 @@
          command.touchInfo.inputPower = inputPower;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_throughpass_autodirection", _default_ThroughPass_AutoDirection);
          command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_throughpass_autopower", _default_ThroughPass_AutoPower);
-@@ -205,7 +296,7 @@
+@@ -205,7 +297,7 @@
          command.useDesiredLookAt = false;
  
          float inputPower = clamp(std::pow(gaugeFactor, 0.55f), 0.01f, 1.0f);
@@ -640,7 +840,7 @@
          command.touchInfo.inputPower = inputPower;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_highpass_autodirection", _default_HighPass_AutoDirection);
          command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_highpass_autopower", _default_HighPass_AutoPower);
-@@ -221,6 +312,11 @@
+@@ -221,9 +313,23 @@
          command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
          command.desiredVelocityFloat = inputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
@@ -652,7 +852,19 @@
          command.touchInfo.inputDirection = inputDirection;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection);
          command.touchInfo.autoDirectionBias = 1.0f;
-@@ -322,10 +418,56 @@
++        {
++          // AFC: the stick places the shot twice as readily ("no control over the shot"): the engine reached the post
++          // only with the stick 90 deg off the goal, a phone thumb tilts 20-40; now 45 deg is the post
++          const Vector3 goal(team->GetDynamicSide() * -pitchHalfW, 0, 0);
++          const Vector3 toGoal = (goal - CastPlayer()->GetPosition()).GetNormalized(Vector3(1, 0, 0));
++          const radian off = toGoal.GetAngle2D(command.touchInfo.inputDirection);
++          if (command.touchInfo.inputDirection.GetLength() > 0.1f && fabs(off) < 0.5f * pi)
++            command.touchInfo.inputDirection = toGoal.GetRotated2D(-clamp(off * afc_shot_aim_k, -0.5f * pi, 0.5f * pi));
++        }
+         command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
+         command.touchInfo.desiredPower =
+             clamp(std::pow(gaugeFactor, 0.6f), 0.01f, 1.0f);
+@@ -322,10 +428,56 @@
      // ball control?
      bool keepCurrentBodyDirection = false;
      // sidestep dribble disabled for now, too quirky: if (hid->GetButton(e_ButtonFunction_Dribble)) keepCurrentBodyDirection = true;
@@ -713,7 +925,7 @@
  
      // reload original input
      if (actionMode == 2) {
-@@ -506,6 +648,16 @@
+@@ -506,6 +658,16 @@
          DO_VALIDATION;
          allowHighPass = false;
          allowShot = false;
@@ -730,7 +942,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_ShortPass) &&
-@@ -514,6 +666,7 @@
+@@ -514,6 +676,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_ShortPass;
@@ -738,7 +950,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_LongPass) &&
-@@ -522,6 +675,7 @@
+@@ -522,6 +685,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_LongPass;
@@ -746,7 +958,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_HighPass) &&
-@@ -530,6 +684,7 @@
+@@ -530,6 +694,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_HighPass;
@@ -754,7 +966,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_Shot) &&
-@@ -537,6 +692,7 @@
+@@ -537,6 +702,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_Shot;
@@ -771,6 +983,19 @@
 +    int AfcPassHold_ms();   // AFC: how long a pass waits for the turn and the press
      HumanController(Match *match = nullptr, AIControlledKeyboard *hid = nullptr);
      virtual ~HumanController();
+ 
+--- a/src/onthepitch/player/controller/playercontroller.cpp
++++ b/src/onthepitch/player/controller/playercontroller.cpp
+@@ -61,7 +61,9 @@
+ int PlayerController::GetReactionTime_ms() {
+   DO_VALIDATION;
+   int reactionTime_ms = IController::GetReactionTime_ms();
+-  reactionTime_ms += (1.0f - GetTeam()->GetAiDifficulty()) * 100;
++  float diff = GetTeam()->GetAiDifficulty();
++  if (CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK) diff = std::max(diff, 0.85f);   // AFC: see Player::GetStat
++  reactionTime_ms += (1.0f - diff) * 100;
+   return reactionTime_ms;
+ }
  
 --- a/src/onthepitch/player/controller/strategies/offtheball/default_mid.cpp
 +++ b/src/onthepitch/player/controller/strategies/offtheball/default_mid.cpp
@@ -1263,9 +1488,70 @@
  
    //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
  
+--- a/src/onthepitch/player/humanoid/humanoidbase.cpp
++++ b/src/onthepitch/player/humanoid/humanoidbase.cpp
+@@ -1,3 +1,4 @@
++#include <cstdlib>
+ // Copyright 2019 Google LLC & Bastiaan Konings
+ // Licensed under the Apache License, Version 2.0 (the "License");
+ // you may not use this file except in compliance with the License.
+@@ -1667,6 +1668,9 @@
+          fabs(atof(anims->GetAnim(animIndex2)->GetVariable("priority").c_str()));
+ }
+ 
++static const float afc_human_agility = getenv("GF_HUMAN_AGIL") ? (float)atof(getenv("GF_HUMAN_AGIL")) : 1.0f;   // turn: moving back 611 -> 530 ms (gftest GF_FEEL_TEST)
++static const float afc_human_accel = getenv("GF_HUMAN_ACCEL") ? (float)atof(getenv("GF_HUMAN_ACCEL")) : 0.8f;
++
+ Vector3 HumanoidBase::CalculatePhysicsVector(Animation *anim, bool useDesiredMovement, const Vector3 &desiredMovement, bool useDesiredBodyDirection, const Vector3 &desiredBodyDirectionRel, std::vector<Vector3> &positions_ret, radian &rotationOffset_ret) const {
+ 
+   positions_ret.clear();
+@@ -1676,6 +1680,11 @@
+ 
+   float stat_agility = player->GetStat(physical_agility);
+   float stat_acceleration = player->GetStat(physical_acceleration);
++  // AFC: the human's own player answers the stick faster than the engine's realistic default (FC-style arcade feel:
++  // "the player turns slowly"); the CPU's players keep the engine's values, so its balance does not move
++  const bool afc_human = player->ExternalControllerActive();
++  const float agilityFactor = afc_human ? afc_human_agility : _default_AgilityFactor;
++  const float accelerationFactor = afc_human ? afc_human_accel : _default_AccelerationFactor;
+   float stat_velocity = player->GetStat(physical_velocity);
+   float stat_dribble = player->GetStat(technical_dribble);
+ 
+@@ -1817,7 +1826,7 @@
+   bool mod_AirResistance = true;
+   bool mod_CheatBodyDirection = false;
+ 
+-  float accelerationMultiplier = 0.5f + _default_AccelerationFactor;
++  float accelerationMultiplier = 0.5f + accelerationFactor;
+ 
+   // rotate anim towards desired angle
+ 
+@@ -1892,7 +1901,7 @@
+         (animType == e_DefString_BallControl ||
+          animType == e_DefString_Movement)) {
+       DO_VALIDATION;
+-      lagExp = 1.4f - _default_AgilityFactor * 0.8f;
++      lagExp = 1.4f - agilityFactor * 0.8f;
+       lagExp *= 1.2f - stat_agility * 0.4f;
+       if (touch) {
+         DO_VALIDATION;
+@@ -2078,7 +2087,7 @@
+ 
+       maxChange *= 1.2f - veloFactor * 0.4f;
+ 
+-      maxChange *= 0.75f + _default_AgilityFactor * 0.5f;
++      maxChange *= 0.75f + agilityFactor * 0.5f;
+ 
+       // lose power 'around' touch
+ 
 --- a/src/onthepitch/player/player.cpp
 +++ b/src/onthepitch/player/player.cpp
-@@ -15,6 +15,7 @@
+@@ -1,3 +1,4 @@
++#include <cstdlib>
+ // Copyright 2019 Google LLC & Bastiaan Konings
+ // Licensed under the Apache License, Version 2.0 (the "License");
+ // you may not use this file except in compliance with the License.
+@@ -15,6 +16,7 @@
  // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
  // i do not offer support, so don't ask. to be used for inspiration :)
  
@@ -1273,7 +1559,7 @@
  #include "player.hpp"
  
  #include <cmath>
-@@ -326,7 +327,11 @@
+@@ -326,7 +328,11 @@
      if (match->IsInPlay()) {
        Vector3 posAfter = CastHumanoid()->GetPosition();
        float distance = (posAfter - posBefore).GetLength();
@@ -1286,6 +1572,22 @@
        fatigueFactorInv = clamp(fatigueFactorInv, 0.01f, 1.0f);
      }
      // Don't send off the last player on the team.
+@@ -449,8 +455,14 @@
+   return playerData->GetStat(physical_stamina);
+ }
+ 
++static const float afc_keeper_min_diff = getenv("GF_KEEPER_MIN") ? (float)atof(getenv("GF_KEEPER_MIN")) : 0.85f;
++
+ float Player::GetStat(PlayerStat name) const {
+-  float multiplier = 0.3f + 0.7f * team->GetAiDifficulty();
++  // AFC: an easy level weakens the CPU's outfield, not its keeper - at Amateur (0.3) every keeper stat was x0.51 and
++  // anything on target went in (gftest GF_RIGHT_DIFF=0.3: 44 % of close shots scored v 27 % at World Class)
++  float diff = team->GetAiDifficulty();
++  if (const_cast<Player*>(this)->GetFormationEntry().role == e_PlayerRole_GK) diff = std::max(diff, afc_keeper_min_diff);
++  float multiplier = 0.3f + 0.7f * diff;
+   multiplier *= 0.7f + 0.3f * GetFatigueFactorInv();
+ 
+   return playerData->GetStat(name) * multiplier;
 --- a/src/onthepitch/player/playerbase.cpp
 +++ b/src/onthepitch/player/playerbase.cpp
 @@ -127,7 +127,8 @@
@@ -1579,202 +1881,3 @@
      void ApplyOffsideTrap(Vector3 &position) const;
      float GetOffsideTrapX() const { return offsideTrapX; }
      void PrepareSetPiece(e_GameMode setPiece, Team* other_team,
---- /dev/null
-+++ b/src/onthepitch/aitactics.hpp
-@@ -0,0 +1,112 @@
-+// Copyright 2019 Google LLC & Bastiaan Konings
-+// Licensed under the Apache License, Version 2.0 (the "License");
-+
-+#ifndef _HPP_AI_TACTICS
-+#define _HPP_AI_TACTICS
-+
-+#include <algorithm>
-+
-+namespace AITactics {
-+
-+// Coordinates use teamSide for the own goal, so forward is its negative.
-+inline float GetAttackingProbeX(float playerX, int teamSide, float lead) {
-+  return playerX - static_cast<float>(teamSide) * std::max(0.0f, lead);
-+}
-+
-+inline bool IsAutomaticRunnerEligible(bool active, bool humanControlled, bool goalkeeper,
-+                                      bool ballCarrier) {
-+  return active && !humanControlled && !goalkeeper && !ballCarrier;
-+}
-+
-+// Keep a closing defender committed unless a replacement is clearly better.
-+// Ratings are distance in metres plus a positional-role penalty.
-+inline bool ShouldKeepPressurePlayer(float currentRating, float bestRating) {
-+  return currentRating <= bestRating + 1.5f;
-+}
-+inline float ClampSetting(float value) {
-+  return std::max(0.0f, std::min(value, 1.0f));
-+}
-+
-+// PES 5/6: CPU is more selective about runs (0.62 vs 0.60 base).
-+// Players pick their moment rather than running automatically.
-+inline float GetAttackingRunThreshold(float counterAttack) {
-+  return 0.62f - ClampSetting(counterAttack) * 0.24f;
-+}
-+
-+inline unsigned int GetAttackingRunDuration_ms(float counterAttack) {
-+  return 2800U + static_cast<unsigned int>(ClampSetting(counterAttack) * 2200.0f);
-+}
-+
-+// Territory is -1 at the team's own goal and +1 at the opponent's goal.
-+inline float GetAttackingTerritory(float ballX, int teamSide, float pitchHalfLength) {
-+  if (pitchHalfLength <= 0.0f)
-+    return 0.0f;
-+  return std::max(-1.0f, std::min(ballX * static_cast<float>(-teamSide) / pitchHalfLength, 1.0f));
-+}
-+
-+// PES 5/6: CPU sits in a mid-block and only presses when the opponent
-+// is in a dangerous zone — not from deep in their own half.
-+// territoryThreshold of 0.55 means CPU needs opponent past the halfway
-+// line before pressing at medium settings.
-+inline bool ShouldStartZonePressure(float pressure, float attackingTerritory,
-+                                    float primaryDefenderDistance) {
-+  const float setting = ClampSetting(pressure);
-+  if (setting < 0.05f)
-+    return false;
-+
-+  const float territoryThreshold = 0.55f - setting * 0.90f;
-+  const float distanceThreshold = 5.0f + setting * 8.0f;  // tighter range (was 6+10)
-+  return attackingTerritory >= territoryThreshold && primaryDefenderDistance <= distanceThreshold;
-+}
-+
-+inline unsigned int GetZonePressureDuration_ms(float pressure) {
-+  return 700U + static_cast<unsigned int>(ClampSetting(pressure) * 1600.0f);
-+}
-+
-+// PES 5/6: dribblers favour combination play over soloing (0.55 base vs 0.58).
-+// This keeps wingers looking for a one-two rather than always charging.
-+inline float GetDribbleForwardDrive(float dribbleOffensiveness, float roleMindset) {
-+  return 0.55f + ClampSetting(dribbleOffensiveness) * 0.28f + ClampSetting(roleMindset) * 0.12f;
-+}
-+
-+// PES 5/6: slightly wider support triangle (0.68 base vs 0.65)
-+// for cleaner give-and-go combinations in central areas.
-+inline float GetSupportWebScale(float supportDistance) {
-+  return 0.68f + ClampSetting(supportDistance) * 0.20f;
-+}
-+
-+// Defenders still join possession play, but centre-backs retain more of their
-+// base shape than full-backs.
-+inline float GetDefenderSupportScale(float roleMindset) {
-+  return std::min(0.72f + ClampSetting(roleMindset) * 0.52f, 1.0f);
-+}
-+
-+// Prefer a nearby midfielder or forward as the second presser when the distance
-+// difference is small, preserving the back line without making pressure slow.
-+inline float GetSecondaryPressureRolePenalty(float roleMindset) {
-+  return (1.0f - ClampSetting(roleMindset)) * 1.0f;
-+}
-+
-+// Under pressure, permit a safe lateral or slightly backward pass when it
-+// creates clear breathing room. This complements, rather than replaces, the
-+// existing preference for progressive passes.
-+inline bool ShouldConsiderSupportPass(float currentTacticalRating, float currentSpaceRating,
-+                                      float teammateTacticalRating, float teammateSpaceRating,
-+                                      float longPossessionFactor) {
-+  const float retentionNeed =
-+      std::max(1.0f - ClampSetting(currentSpaceRating), ClampSetting(longPossessionFactor));
-+  return retentionNeed >= 0.55f && teammateSpaceRating >= currentSpaceRating + 0.12f &&
-+         teammateTacticalRating >= currentTacticalRating - 0.15f;
-+}
-+
-+inline float GetSupportPassBonus(float currentSpaceRating, float teammateSpaceRating,
-+                                 float longPossessionFactor) {
-+  const float spaceGain = ClampSetting((teammateSpaceRating - currentSpaceRating) / 0.4f);
-+  const float retentionNeed =
-+      std::max(1.0f - ClampSetting(currentSpaceRating), ClampSetting(longPossessionFactor));
-+  return spaceGain * retentionNeed * 0.35f;
-+}
-+
-+}  // namespace AITactics
-+
-+#endif
---- /dev/null
-+++ b/src/onthepitch/gameplaytuning.hpp
-@@ -0,0 +1,81 @@
-+// Copyright 2019 Google LLC & Bastiaan Konings
-+// Licensed under the Apache License, Version 2.0 (the "License");
-+
-+#ifndef _HPP_GAMEPLAY_TUNING
-+#define _HPP_GAMEPLAY_TUNING
-+
-+#include <algorithm>
-+#include <cmath>
-+
-+namespace GameplayTuning {
-+
-+enum class AdvantageDecision { Continue, RecallFoul, PlayedOut };
-+
-+inline AdvantageDecision EvaluateAdvantage(unsigned long now_ms, unsigned long foulAt_ms,
-+                                           bool possessionLost) {
-+  // Subtract timestamps first: subtracting the allowance from an early match
-+  // clock would underflow and prematurely discard the foul.
-+  const unsigned long elapsed_ms = now_ms - foulAt_ms;
-+  if (elapsed_ms > 3500)
-+    return AdvantageDecision::PlayedOut;
-+  if (elapsed_ms > 600 && possessionLost)
-+    return AdvantageDecision::RecallFoul;
-+  return AdvantageDecision::Continue;
-+}
-+inline float Clamp01(float value) {
-+  return std::max(0.0f, std::min(value, 1.0f));
-+}
-+
-+// Adds a small, explainable first-touch penalty under close pressure or when a
-+// fast incoming ball arrives from outside the player's field of view.
-+inline float GetFirstTouchContextPenalty(float opponentDistance, float calmness, float balance,
-+                                         float incomingBallSpeed, float incomingFacingAlignment,
-+                                         int playerCondition = 3) {
-+  const float pressure = Clamp01((1.6f - opponentDistance) / 1.2f);
-+  const float composure = Clamp01(calmness * 0.65f + balance * 0.35f);
-+  const float ballPace = Clamp01((incomingBallSpeed - 4.0f) / 10.0f);
-+  const float blindSide = Clamp01((0.25f - incomingFacingAlignment) / 1.25f);
-+
-+  // PES 5/6: pressure penalty is sharper (0.10 vs 0.08) — being closed down
-+  // under a hard incoming ball is genuinely dangerous.
-+  const float pressurePenalty = pressure * (1.0f - composure * 0.65f) * 0.10f;
-+  const float orientationPenalty = ballPace * blindSide * (1.0f - composure * 0.4f) * 0.10f;
-+
-+  // PES condition penalty (3 is neutral, 1 is terrible, 5 is excellent)
-+  // PES condition penalty: 3 is neutral, 1 is poor, 5 is excellent.
-+  // Weight 0.03 makes a 2-star condition gap produce ~0.06 extra error —
-+  // enough to be perceptible but not overwhelming.
-+  float conditionMod = (3 - playerCondition) * 0.03f;
-+
-+  return std::min(std::max(0.0f, pressurePenalty + orientationPenalty + conditionMod), 0.25f);
-+}
-+
-+// Distance remains the primary fatigue input. This workload factor makes
-+// jogging slightly cheaper and repeated sprinting slightly more expensive.
-+inline float GetFatigueWorkloadFactor(float movementSpeed, float maximumSpeed, bool carryingBall) {
-+  if (maximumSpeed <= 0.0f)
-+    return 1.0f;
-+
-+  const float speedRatio = Clamp01(movementSpeed / maximumSpeed);
-+  const float sprintLoad = Clamp01((speedRatio - 0.55f) / 0.45f);
-+  // PES 5/6: sprinting is notably more taxing than jogging (0.36 vs 0.28)
-+  // and carrying the ball while at full pace costs extra (0.06 vs 0.04).
-+  // Late in a match, fatigued players visibly slow down.
-+  float workload = 0.90f + sprintLoad * sprintLoad * 0.36f;
-+  if (carryingBall)
-+    workload += sprintLoad * 0.06f;
-+  return workload;
-+}
-+
-+inline bool IsGoalMouthThreat(float lateralPosition, float ballHeight, float goalHalfWidth,
-+                              float goalHeight, float anticipationFactor) {
-+  const float anticipation = std::max(anticipationFactor, 1.0f);
-+  const float anticipatedHalfWidth = goalHalfWidth * anticipation;
-+  const float anticipatedHeight = goalHeight + 0.11f + (anticipation - 1.0f) * 0.25f;
-+  return std::fabs(lateralPosition) <= anticipatedHalfWidth && ballHeight >= 0.0f &&
-+         ballHeight <= anticipatedHeight;
-+}
-+
-+}  // namespace GameplayTuning
-+
-+#endif  // _HPP_GAMEPLAY_TUNING

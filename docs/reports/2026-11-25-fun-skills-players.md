@@ -207,6 +207,26 @@ ground pass never waits to see if a second tap comes; a double tap on your own p
   every other frame, off-screen ones every fourth (positions still every frame; replays and the man on the ball
   always full).
 
+## 2.59-2.61: the owner's friend's list - slow turns, goals from anywhere, a weak keeper, no shot control, shine
+
+- Goals from anywhere / a weak keeper: the engine scales every CPU stat by 0.3 + 0.7 x difficulty, keeper included,
+  and its reactions by +100 x (1 - difficulty) ms. At Amateur (0.3) the keeper played at x0.51. gftest
+  (GF_RIGHT_DIFF, SHOTGOALS goals per shot by distance): close shots scored 44 % at Amateur v 27 % at World Class,
+  power shots from 30-45 m 7 % v 0 %. The keeper now keeps at least the 0.85 level: Amateur close shots 30 %,
+  long power 0 %. Easy stays easy through the outfield and the decisions.
+- Slow turns: measured on the ball (GF_FEEL_TEST) - facing back after ~0.32 s, moving back after 0.61 s, inside
+  real players' 0.5-0.7 s but slower than FC Mobile's arcade turn. The human's own player now gets agility factor
+  1.0 and acceleration 0.8 (engine defaults 0.5 / 0.5; the CPU keeps them): moving back 0.53 s. Facing back is
+  bound by the turn clips' length.
+- Shot control: the human's shot ran at autoDirectionBias 1 with the stick's angle off the goal scaled so only 90
+  deg reached the post; a thumb tilts 20-40. The angle is doubled (45 deg = the post; straight at goal still lets the
+  engine pick the open corner).
+- Shine: on Vulkan at the matched exposure the skin's specular and rim read as grey plastic; matte skin there
+  (roughness 0.78, specular 0.22, rim 0.1).
+- Controls: a SKILL button (tap step over, swipe the move that way, SPRINT + swipe the showier set, hold close
+  control) and a clear power shot (hold SHOOT: orange ring, POWER, a buzz).
+- Match guard (2.59): a match that closes while loading or draws no pitch steps the graphics down for the next start.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

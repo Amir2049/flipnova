@@ -113,6 +113,14 @@ static func dress(model: Node3D, k: Dictionary, number: int, is_gk: bool, rng: R
 	skin.rim_enabled = true
 	skin.rim = 0.3
 	skin.rim_tint = 0.4
+	# Vulkan at the matched exposure (3.9, 2.59) doubled the skin's specular and rim into a grey plastic shine
+	# ("why does the player shine"): a matte, warm skin there, as on the Compatibility picture
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		skin.roughness = 0.78
+		skin.metallic_specular = 0.22
+		skin.rim = 0.1
+		skin.rim_tint = 0.8
+		kit_mat.rim = 0.25
 	var boots := StandardMaterial3D.new()
 	boots.albedo_color = BOOTS[rng.randi() % (2 if is_gk else BOOTS.size())]
 	boots.roughness = 0.45

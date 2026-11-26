@@ -141,6 +141,10 @@ int main(int argc, char** argv) {
     setup.right_difficulty = setup.left_difficulty;
     setup.brain_temperature = argc > 5 ? (float)atof(argv[5]) : 0.f;
   }
+  if (getenv("GF_RIGHT_DIFF")) {   // the CPU at a game level (Amateur 0.3, Pro 0.6, World Class 0.95), the human's side full
+    setup.left_difficulty = 1.0f;
+    setup.right_difficulty = (float)atof(getenv("GF_RIGHT_DIFF"));
+  }
   FILE* df = argc > 6 ? fopen(argv[6], "w") : nullptr;
   if (getenv("GF_CRASH_FILE")) afc::crash_guard_install(getenv("GF_CRASH_FILE"));
   for (int t = 0; t < 2; t++) {
@@ -216,14 +220,15 @@ int main(int argc, char** argv) {
   bool aim_done = false;
   int aim_passer = -1;
   float aim_dx = 1.f, aim_dy = 0.f;
-  int gl_in = 0, gl_over = 0, gl_wide = 0;
+  int gl_in = 0, gl_over = 0, gl_wide = 0, gl_y_n = 0;
+  float gl_y_sum = 0.f, gl_y_abs = 0.f;   // where shots cross the goal line (engine y; posts at +-3.66)
   int cross_t = -1, cross_n = 0, cross_shots = 0, cross_air = 0;
   bool cross_shoot = false, cross_done = false, cross_pressed = false;
   int cross_press = 0, cross_bi = -1;
   float cross_pv[3] = {0.f, 0.f, 0.f};
   float cross_closest = 1e9f, cross_z_at = 0.f;
   bool tap_air = false, tap_watch_air_done = false;
-  int by_dist_n[4] = {0, 0, 0, 0}, by_dist_on[4] = {0, 0, 0, 0};   // shots from <20, 20-30, 30-45, 45+ m: on target
+  int by_dist_n[4] = {0, 0, 0, 0}, by_dist_on[4] = {0, 0, 0, 0}, by_dist_goal[4] = {0, 0, 0, 0}, last_shot_bk = -1, last_shot_f = -1000, goals_seen = 0;   // shots from <20, 20-30, 30-45, 45+ m: on target
   int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
   for (int f = 0; f < stop; f++) {
     if (feel_test) {
@@ -309,6 +314,8 @@ int main(int argc, char** argv) {
               }
               by_dist_n[bk]++;
               if (on) by_dist_on[bk]++;
+              last_shot_bk = bk;
+              last_shot_f = f;
             }
             speed_sum += sp;
             launches++;
@@ -329,8 +336,15 @@ int main(int argc, char** argv) {
       // where shots really cross the goal line the human attacks (+x): in, over the bar, wide
       if (gl_prev < 52.5f && ps.ball[0] >= 52.5f && ps.ball_vel[0] > 8.f) {
         if (std::fabs(ps.ball[1]) < 3.66f) { if (ps.ball[2] < 2.44f) gl_in++; else gl_over++; } else gl_wide++;
+        gl_y_sum += ps.ball[1]; gl_y_abs += std::fabs(ps.ball[1]); gl_y_n++;
       }
       gl_prev = ps.ball[0];
+      // a goal of ours within 4 s of our last shot: that shot's distance band scored
+      if (ps.goals[0] > goals_seen) {
+        if (last_shot_bk >= 0 && f - last_shot_f < 240) by_dist_goal[last_shot_bk]++;
+        last_shot_bk = -1;
+      }
+      goals_seen = ps.goals[0];
       // GF_AIM_TEST: the stick points at a team-mate who is NOT the nearest (15-35 m, any direction); a pass is
       // pressed; AIM prints how often the ball reached the man aimed at, and how often the nearest instead
       static const bool aim_test = getenv("GF_AIM_TEST") != nullptr;
@@ -455,7 +469,11 @@ int main(int argc, char** argv) {
                    (shot_style == 3 ? afc::GF_LOW : 0u) | (shot_style == 4 ? afc::GF_POWER : 0u);
       if (getenv("GF_CROSS_TEST")) tap_bits = afc::GF_HIGH_PASS;
       const bool aiming = getenv("GF_AIM_TEST") && aim_t >= 0 && aim_t < 30;
-      afc::gf_input(aiming ? aim_dx : 1.f, aiming ? aim_dy : 0.f, (tap_left > 0 ? tap_bits : 0u) | (cross_shoot ? afc::GF_SHOT : 0u));
+      // GF_SHOT_AIM=deg: shots with the stick that many degrees off straight at goal (+ = the engine's +y side)
+      static const float shot_aim = getenv("GF_SHOT_AIM") ? (float)atof(getenv("GF_SHOT_AIM")) * 0.0174533f : 0.f;
+      const bool aim_shot = shot_style >= 0 && tap_left > 0 && shot_aim != 0.f;
+      afc::gf_input(aiming ? aim_dx : aim_shot ? std::cos(shot_aim) : 1.f, aiming ? aim_dy : aim_shot ? std::sin(shot_aim) : 0.f,
+                    (tap_left > 0 ? tap_bits : 0u) | (cross_shoot ? afc::GF_SHOT : 0u));
       if (tap_left > 0) tap_left--;
     }
     afc::gf_frame();
@@ -547,7 +565,7 @@ int main(int argc, char** argv) {
     printf("CARDS red %d yellow %d\n", reds, yellows);
   }
   if (aim_n) printf("AIM passes %d  reached the man aimed at %d  went to the nearest %d  lost %d\n", aim_n, aim_hit, aim_nearest, aim_lost);
-  if (gl_in + gl_over + gl_wide) printf("GOALLINE in %d over %d wide %d\n", gl_in, gl_over, gl_wide);
+  if (gl_in + gl_over + gl_wide) printf("GOALLINE in %d over %d wide %d  mean y %.2f  mean |y| %.2f\n", gl_in, gl_over, gl_wide, gl_y_sum / std::max(1, gl_y_n), gl_y_abs / std::max(1, gl_y_n));
   { extern int afc_header_count; if (cross_n) printf("HEADERS assisted %d\n", afc_header_count); }
   if (cross_n) printf("CROSS crosses %d  first-time shots %d  off the ground %d\n", cross_n, cross_shots, cross_air);
   if (tap_n) printf("TAP passes %d  within 3 m of the spot %d  mean closest %.1f m\n", tap_n, tap_hit, tap_sum / tap_n);
@@ -564,6 +582,8 @@ int main(int argc, char** argv) {
   if (shot_style >= 0)
     printf("SHOTDIST on target: <20m %d/%d  20-30m %d/%d  30-45m %d/%d  45m+ %d/%d\n", by_dist_on[0], by_dist_n[0],
            by_dist_on[1], by_dist_n[1], by_dist_on[2], by_dist_n[2], by_dist_on[3], by_dist_n[3]);
+    printf("SHOTGOALS goals per shot: <20m %d/%d  20-30m %d/%d  30-45m %d/%d  45m+ %d/%d\n", by_dist_goal[0], by_dist_n[0],
+           by_dist_goal[1], by_dist_n[1], by_dist_goal[2], by_dist_n[2], by_dist_goal[3], by_dist_n[3]);
   if (shot_style >= 0)
     printf("SHOT style %d launches %d mean_elevation_deg %.1f mean_speed %.1f m/s\n", shot_style, launches,
            launches ? elev_sum / launches : 0.0, launches ? speed_sum / launches : 0.0);
