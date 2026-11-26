@@ -61,6 +61,20 @@ func _process(_d) -> bool:
 		_drag("shoot", 4, Vector2(0, 60))
 		check(tc.variant("shoot") == "down", "a flick down off SHOOT is still a low drive")
 		_touch("shoot", 4, false, Vector2(0, 60))
+		# driven passes (2.62): a flick down off PASS / THROUGH / LOB; LOB has no flick up
+		for bn in ["pass", "through", "lob"]:
+			_touch(bn, 5, true)
+			_drag(bn, 5, Vector2(0, 60))
+			check(tc.variant(bn) == "down" and tc.held(bn), "a flick down off %s is a driven pass" % bn.to_upper())
+			_touch(bn, 5, false, Vector2(0, 60))
+		_touch("lob", 6, true)
+		_drag("lob", 6, Vector2(0, -60))
+		check(tc.variant("lob") == "", "a flick up off LOB is no variant (it is already a lob)")
+		_touch("lob", 6, false, Vector2(0, -60))
+		_touch("pass", 7, true)
+		_drag("pass", 7, Vector2(0, -60))
+		check(tc.variant("pass") == "up", "a flick up off PASS is still a lofted pass")
+		_touch("pass", 7, false, Vector2(0, -60))
 		tc.flash("STEP OVER")
 		check(tc.flash_txt == "STEP OVER", "the move's name is shown")
 		t0 = 0

@@ -14,7 +14,7 @@
  
 --- a/src/gamedefines.hpp
 +++ b/src/gamedefines.hpp
-@@ -126,7 +126,14 @@
+@@ -126,7 +126,15 @@
  
  enum e_PlayerCommandModifier {
    e_PlayerCommandModifier_None = 0,
@@ -26,7 +26,8 @@
 +  e_PlayerCommandModifier_AfcPoint = 16,
 +  e_PlayerCommandModifier_LowDriven = 32,  // AFC: a low drive, skimming the grass
 +  e_PlayerCommandModifier_PowerShot = 64,  // AFC: everything into it - the fastest shot, the least placed   // AFC: a pass to a spot the player tapped - kept as aimed, not re-targeted
-+  e_PlayerCommandModifier_OneTwo = 8   // the passer breaks forward once the pass is struck
++  e_PlayerCommandModifier_OneTwo = 8,  // the passer breaks forward once the pass is struck
++  e_PlayerCommandModifier_AfcDriven = 128   // AFC (FC's driven passes): a ground pass struck harder, a lob / cross flatter and faster
  };
  
  class IController;
@@ -680,10 +681,11 @@
      void _AddCelebration(std::vector<PlayerCommand> &commandQueue);
 --- a/src/onthepitch/player/controller/humancontroller.cpp
 +++ b/src/onthepitch/player/controller/humancontroller.cpp
-@@ -23,6 +23,44 @@
+@@ -23,6 +23,45 @@
  
  #include "../../../main.hpp"
  
++extern int afc_pass_driven;   // AFC: 1 = the pass was pressed with a flick down (native/src/gf_api.cpp)
 +extern int afc_shot_style;   // AFC: 0 normal, 1 chip, 2 finesse, 3 low driven, 4 power (native/src/gf_api.cpp)
 +
 +// AFC: a pass to a spot on the pitch (FC Mobile's tap passing): set by gf_pass_to just before the pass button goes,
@@ -725,7 +727,7 @@
  HumanController::HumanController(Match *match, AIControlledKeyboard *hid)
      : PlayerController(match), hid(hid) {
    DO_VALIDATION;
-@@ -124,10 +162,17 @@
+@@ -124,10 +163,17 @@
    if (actionMode == 2) {
      DO_VALIDATION;
  
@@ -745,7 +747,7 @@
                        // button is released), it will usually touch ball after
                        // the remaining time anyway, so we still have time to add
                        // more power, yet still respond as fast as possible
-@@ -141,6 +186,7 @@
+@@ -141,6 +187,7 @@
  
        // action button released!
  
@@ -753,7 +755,7 @@
        // force set piece methods
        if (match->IsInSetPiece() &&
            team->GetController()->GetPieceTaker() == player &&
-@@ -162,6 +208,47 @@
+@@ -162,6 +209,48 @@
  
          commandQueue.push_back(command);
  
@@ -778,6 +780,7 @@
 +        command.useDesiredLookAt = false;
 +        command.touchInfo.inputDirection = (target - me).GetNormalized(player->GetDirectionVec());
 +        command.touchInfo.inputPower = 0.5f;
++        if (afc_pass_driven) command.modifier |= e_PlayerCommandModifier_AfcDriven;   // a flick down: driven, either way
 +        const float attack = -team->GetDynamicSide();
 +        const bool toFeet = best && bestD < 4.5f && (target - best->GetPosition().Get2D()).coords[0] * attack < 2.0f;
 +        if (toFeet) {
@@ -801,10 +804,11 @@
        } else if (actionButton == e_ButtonFunction_ShortPass) {
          DO_VALIDATION;
  
-@@ -169,12 +256,17 @@
+@@ -169,12 +258,18 @@
          command.desiredFunctionType = e_FunctionType_ShortPass;
          command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
++        if (afc_pass_driven) command.modifier |= e_PlayerCommandModifier_AfcDriven;   // AFC: flick down = driven
 +        // AFC, from League-Soccer (Apache-2.0): a one-two - SWITCH (AFC: sprint) held with the pass sends the passer
 +        // on a run when the pass is struck
 +        if (hid->GetButton(e_ButtonFunction_Switch)) command.modifier |= e_PlayerCommandModifier_OneTwo;
@@ -822,8 +826,11 @@
          AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
  
          commandQueue.push_back(command);
-@@ -188,7 +280,7 @@
+@@ -186,9 +281,10 @@
+         command.desiredFunctionType = e_FunctionType_LongPass;
+         command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
++        if (afc_pass_driven) command.modifier |= e_PlayerCommandModifier_AfcDriven;   // AFC: flick down = driven
  
          float inputPower = clamp(std::pow(gaugeFactor, 0.65f), 0.01f, 1.0f);
 -        command.touchInfo.inputDirection = inputDirection;
@@ -831,8 +838,11 @@
          command.touchInfo.inputPower = inputPower;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_throughpass_autodirection", _default_ThroughPass_AutoDirection);
          command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_throughpass_autopower", _default_ThroughPass_AutoPower);
-@@ -205,7 +297,7 @@
+@@ -203,9 +299,10 @@
+         command.desiredFunctionType = e_FunctionType_HighPass;
+         command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
++        if (afc_pass_driven) command.modifier |= e_PlayerCommandModifier_AfcDriven;   // AFC: flick down = driven
  
          float inputPower = clamp(std::pow(gaugeFactor, 0.55f), 0.01f, 1.0f);
 -        command.touchInfo.inputDirection = inputDirection;
@@ -840,7 +850,7 @@
          command.touchInfo.inputPower = inputPower;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_highpass_autodirection", _default_HighPass_AutoDirection);
          command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_highpass_autopower", _default_HighPass_AutoPower);
-@@ -221,9 +313,23 @@
+@@ -221,9 +318,23 @@
          command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
          command.desiredVelocityFloat = inputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
@@ -864,7 +874,7 @@
          command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
          command.touchInfo.desiredPower =
              clamp(std::pow(gaugeFactor, 0.6f), 0.01f, 1.0f);
-@@ -322,10 +428,56 @@
+@@ -322,10 +433,56 @@
      // ball control?
      bool keepCurrentBodyDirection = false;
      // sidestep dribble disabled for now, too quirky: if (hid->GetButton(e_ButtonFunction_Dribble)) keepCurrentBodyDirection = true;
@@ -925,7 +935,7 @@
  
      // reload original input
      if (actionMode == 2) {
-@@ -506,6 +658,16 @@
+@@ -506,6 +663,16 @@
          DO_VALIDATION;
          allowHighPass = false;
          allowShot = false;
@@ -942,7 +952,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_ShortPass) &&
-@@ -514,6 +676,7 @@
+@@ -514,6 +681,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_ShortPass;
@@ -950,7 +960,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_LongPass) &&
-@@ -522,6 +685,7 @@
+@@ -522,6 +690,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_LongPass;
@@ -958,7 +968,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_HighPass) &&
-@@ -530,6 +694,7 @@
+@@ -530,6 +699,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_HighPass;
@@ -966,7 +976,7 @@
        }
  
        if (hid->GetButton(e_ButtonFunction_Shot) &&
-@@ -537,6 +702,7 @@
+@@ -537,6 +707,7 @@
          DO_VALIDATION;
          actionMode = 2;
          actionButton = e_ButtonFunction_Shot;
@@ -1209,7 +1219,25 @@
          float maxDeviationAngle = 0.15f * pi;
          radian angleDiff = tmpBallDirection.Get2D().GetAngle2D(ballDirection.Get2D());
          if (fabs(angleDiff) <= maxDeviationAngle) {
-@@ -507,6 +527,10 @@
+@@ -497,6 +517,17 @@
+           //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
+         }
+ 
++        if (currentAnim.originatingCommand.modifier & e_PlayerCommandModifier_AfcDriven) {
++          // AFC: a driven pass - on the grass a quarter faster (through a closing lane), in the air flatter and quicker
++          if (currentAnim.functionType == e_FunctionType_HighPass) {
++            touchVec.coords[0] *= 1.12f;
++            touchVec.coords[1] *= 1.12f;
++            touchVec.coords[2] *= 0.6f;
++          } else {
++            touchVec.coords[0] *= 1.25f;
++            touchVec.coords[1] *= 1.25f;
++          }
++        }
+         touchVec = touchVec * (1.0f - bumpyRideBias) + currentBallVec * bumpyRideBias;
+ 
+         match->GetBall()->Touch(touchVec);
+@@ -507,6 +538,10 @@
          match->GetBall()->SetRotation(xRot, yRot, zcurve, 0.9f * (1.0f - bumpyRideBias));
  
          team->SetLastTouchPlayer(CastPlayer(), GetTouchTypeForBodyPart(currentAnim.anim->GetVariable("touch_bodypart")));
@@ -1220,7 +1248,7 @@
        }
  
        else if (currentAnim.functionType == e_FunctionType_Shot) {
-@@ -528,6 +552,11 @@
+@@ -528,6 +563,11 @@
          } else {
            ballDirection = ballDirectionAltered;
          }
@@ -1232,7 +1260,7 @@
  
          radian xRot = 0;
          radian yRot = 0;
-@@ -573,7 +602,7 @@
+@@ -573,7 +613,7 @@
            DO_VALIDATION;
            reactionDifficulty =
                std::pow(lastTouchPlayer->GetLastTouchBias(
@@ -1241,7 +1269,7 @@
                         0.6f);
          }
          if ((1.0f - veloDifficulty) * (1.0f - reactionDifficulty) < 0.3f) canRetain = false; // too hard!
-@@ -592,6 +621,8 @@
+@@ -592,6 +632,8 @@
                (currentBallMovement.GetLength() * 0.3f +
                 playerMovement.GetLength() * 2.5f);
            touchVec.coords[2] += 1.2f;
@@ -1250,7 +1278,7 @@
  
            touchVec = touchVec * (1.0f - bumpyRideBias) + currentBallVec * bumpyRideBias;
  
-@@ -606,6 +637,8 @@
+@@ -606,6 +648,8 @@
          Vector3 touchVec = GetVectorFromString(currentAnim.anim->GetVariable("balldirection")).GetRotated2D(spatialState.angle);
          touchVec = touchVec * 6.0f + match->GetBall()->GetMovement() * -0.28f;
          touchVec += Vector3(0, 0, 6);
@@ -1259,7 +1287,7 @@
  
          touchVec = touchVec * (1.0f - bumpyRideBias) + currentBallVec * bumpyRideBias;
  
-@@ -1161,7 +1194,7 @@
+@@ -1161,7 +1205,7 @@
      if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && (CastPlayer()->HasPossession()/* || team->GetTeamPossessionAmount() >= 1.0f*/ || focusDistance > 12.0f)) return false;
      if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && currentAnim.frameNum + minRemainingMovementReQueueFrames > currentAnim.anim->GetEffectiveFrameCount()) return false;
      if (currentAnim.functionType == e_FunctionType_Movement && command.desiredFunctionType == e_FunctionType_Movement && (!allowMovementReQueue || reQueueDelayFrames > 0)) return false;
@@ -1268,7 +1296,7 @@
      if (currentAnim.functionType == e_FunctionType_BallControl && command.desiredFunctionType == e_FunctionType_Trap) return false;
      if (currentAnim.functionType == e_FunctionType_Trap && command.desiredFunctionType == e_FunctionType_Trap && (!allowTrapReQueue || currentAnim.frameNum + minRemainingTrapReQueueFrames > currentAnim.touchFrame || reQueueDelayFrames > 0)) return false;
      if (currentAnim.functionType == e_FunctionType_Trap && command.desiredFunctionType == e_FunctionType_BallControl && (!allowTrapReQueue || currentAnim.frameNum + minRemainingTrapReQueueFrames > currentAnim.touchFrame || reQueueDelayFrames > 0)) return false;
-@@ -1239,6 +1272,11 @@
+@@ -1239,6 +1283,11 @@
      DO_VALIDATION;
      query.byOutgoingBallDirection = true;
      query.outgoingBallDirection = command.touchInfo.desiredDirection.GetRotated2D(-spatialState.angle);
@@ -1280,7 +1308,7 @@
    }
  
    query.byIncomingVelocity = true;
-@@ -1942,6 +1980,12 @@
+@@ -1942,6 +1991,12 @@
  
        if (ballPos.coords[2] < 0.5f && isBase) ballDistanceZ = std::max(ballDistanceZ - 0.15f, 0.0f); // low balls should be doable with ground level anims, doesn't look that bad :P
  
@@ -1293,7 +1321,7 @@
        if (ballDistanceZ < 0.22f) {
          DO_VALIDATION;
  
-@@ -2004,6 +2048,10 @@
+@@ -2004,6 +2059,10 @@
            DO_VALIDATION;
            radiusFactor *= 1.3f;
            radiusCheatOffset += 0.15f;
@@ -1304,7 +1332,7 @@
          }
  
          if ((functionType == e_FunctionType_Trap ||
-@@ -2225,6 +2273,11 @@
+@@ -2225,6 +2284,11 @@
    return toDesired;
  }
  
@@ -1316,7 +1344,7 @@
  Vector3 Humanoid::GetBestPossibleTouch(const Vector3 &desiredTouch,
                                         e_FunctionType functionType) {
    DO_VALIDATION;
-@@ -2259,8 +2312,19 @@
+@@ -2259,8 +2323,19 @@
  
    // apply stats
    if (functionType == e_FunctionType_ShortPass ||
@@ -1338,7 +1366,7 @@
  
    float distanceFactor = 0.0f;
    float heightFactor = 0.0f;
-@@ -2292,7 +2356,10 @@
+@@ -2292,7 +2367,10 @@
    resultTouch = resultTouch * (1.0f - ballMovementFactor) +
                  match->GetBall()->GetMovement() * ballMovementFactor;
  
@@ -1352,7 +1380,12 @@
  }
 --- a/src/onthepitch/player/humanoid/humanoid_utils.cpp
 +++ b/src/onthepitch/player/humanoid/humanoid_utils.cpp
-@@ -15,6 +15,7 @@
+@@ -1,3 +1,4 @@
++#include <cstdlib>
+ // Copyright 2019 Google LLC & Bastiaan Konings
+ // Licensed under the Apache License, Version 2.0 (the "License");
+ // you may not use this file except in compliance with the License.
+@@ -15,6 +16,7 @@
  // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
  // i do not offer support, so don't ask. to be used for inspiration :)
  
@@ -1360,7 +1393,17 @@
  #include "humanoid_utils.hpp"
  #include <cmath>
  
-@@ -188,6 +189,21 @@
+@@ -28,6 +30,9 @@
+ #include "../../../utils/animationextensions/footballanimationextension.hpp"
+ #include "../../AIsupport/AIfunctions.hpp"
+ #include "../playerbase.hpp"
++static const float afc_shot_floor = getenv("GF_SHOT_FLOOR") ? (float)atof(getenv("GF_SHOT_FLOOR")) : 0.25f;   // real squads, 8 matches: 2.75 goals a match (real ~2.7)
++static const float afc_shot_press = getenv("GF_SHOT_PRESS") ? (float)atof(getenv("GF_SHOT_PRESS")) : 0.25f;
++static const float afc_press_r = 2.5f;
+ 
+ e_TouchType GetTouchTypeForBodyPart(const std::string &bodypartname) {
+   DO_VALIDATION;
+@@ -188,6 +193,21 @@
    heightFactor += ballBodyVeloPenalty * 2.0f;
    heightFactor += fartherAwayPenalty;
  
@@ -1382,7 +1425,7 @@
    // make intercepting passes harder
    if (match->GetLastTouchTeamID() != player->GetTeam()->GetID()) {
      DO_VALIDATION;
-@@ -207,7 +223,8 @@
+@@ -207,7 +227,8 @@
    ballMovementFactor = clamp(ballMovementFactor, 0.0f, 0.9f);
  
    float skillPenaltyMultiplier =
@@ -1392,7 +1435,7 @@
        boostrandom(0.5f, 1.0f);
    distanceFactor *= skillPenaltyMultiplier;
    heightFactor *= skillPenaltyMultiplier;
-@@ -376,6 +393,10 @@
+@@ -376,6 +397,10 @@
           ball->GetMovement() * ballMovementFactor;
  }
  
@@ -1403,7 +1446,7 @@
  Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
                        radian nextStartAngle, radian nextBodyAngle,
                        const Vector3 &outgoingMovement, const Anim &currentAnim,
-@@ -467,9 +488,36 @@
+@@ -467,9 +492,49 @@
                           (0.6f + powerEasinessFactor * 0.4f);
    float difficultyFactor = clamp(1.0f - easinessFactor, 0.0f, 1.0f);
  
@@ -1413,6 +1456,19 @@
 +  const float shotDistance = (match->GetBall()->Predict(0).Get2D() - oppGoal).GetLength();
 +  const float longRange = clamp((shotDistance - 18.0f) / 25.0f, 0.0f, 1.0f);
 +  difficultyFactor = std::max(difficultyFactor, longRange * 0.9f);
++  // AFC: calibrated to real football (Opta / StatsBomb: ~33-35 % of shots on target, ~11 % scored, 14.7 % inside the
++  // box, 4.2 % outside). Every shot carries some error, and a defender close to the shooter adds more - the engine had
++  // neither (CPU v CPU, real squads: 57 % on target, 18 % scored)
++  {
++    float nearest = 100.0f;
++    Team *opp = match->GetTeam(1 - player->GetTeam()->GetID());
++    for (Player *o : opp->GetAllPlayers()) {
++      if (!o->IsActive()) continue;
++      nearest = std::min(nearest, (o->GetPosition() - player->GetPosition()).GetLength());
++    }
++    const float pressure = clamp((afc_press_r - nearest) / (afc_press_r - 0.7f), 0.0f, 1.0f);
++    difficultyFactor = std::max(difficultyFactor, afc_shot_floor + afc_shot_press * pressure);
++  }
 +
    // best case result
  
@@ -1440,7 +1496,7 @@
    Vector3 desiredShot = (currentAnim.originatingCommand.touchInfo.desiredDirection.Get2D() + Vector3(0, 0, desiredHeight)).GetNormalized() * power;
  
    // worst case result
-@@ -488,6 +536,9 @@
+@@ -488,6 +553,9 @@
    worstCaseDirection.Normalize();
  
    float worstCaseHeight = curve(std::pow(difficultyFactor, 0.7f), 0.7f) * 0.7f;
@@ -1450,7 +1506,7 @@
  
    float worstCasePower =
        power * (1.0f - std::pow(difficultyFactor, 0.7f) * 0.5f);
-@@ -499,6 +550,9 @@
+@@ -499,6 +567,9 @@
    float worstCaseFactor = boostrandom(0.0f, 1.0f);
    worstCaseFactor =
        std::pow(worstCaseFactor, player->GetStat(technical_shot) * 0.7f);
@@ -1460,7 +1516,7 @@
  
    Vector3 shot = desiredShot * (1.0f - worstCaseFactor) +
                   worstCaseShot * worstCaseFactor;
-@@ -509,12 +563,13 @@
+@@ -509,12 +580,13 @@
    float randomCurveFactor = 0.3f + worstCaseFactor * 0.7f;
    float plannedCurveFactor = 0.7f;
  
@@ -1477,7 +1533,7 @@
           (boostrandom(-20, 20) * randomCurveFactor);
  
    // lateral curve
-@@ -523,8 +578,9 @@
+@@ -523,8 +595,9 @@
    bodyTouchAngle *= 2.0f;
    //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
    radian amount = bodyTouchAngle * 0.25f;

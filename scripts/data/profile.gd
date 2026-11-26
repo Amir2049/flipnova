@@ -5,7 +5,7 @@ extends Node
 const PATH := "user://profile.json"
 const TMP := "user://profile.json.tmp"
 const BAK := "user://profile.json.bak"
-const VERSION := 8
+const VERSION := 9
 
 const ATTACK_ACTIONS := [["pass", "Short pass"], ["shoot", "Shoot"], ["lob", "Lob / cross"], ["through", "Through ball"],
 	["sprint", "Sprint"], ["close", "Close control"], ["skill_mod", "Skill modifier"], ["stepover", "Step over"]]
@@ -30,7 +30,7 @@ const PAD_PRESETS := {
 const DEFAULT_SETTINGS := {
 	"difficulty": 0, "half": 1, "camera": 0, "volume": 0.8, "crowd": 0.7, "effects": 0.9, "quality": 3,
 	"radar": true, "names": true, "replays": true, "vibration": true, "stoppage_menu": false,
-	"celebration": "random", "touch_size": 1.0, "touch_opacity": 0.75, "swipe_skills": true, "flick_loft": false, "edge_sprint": false,
+	"celebration": "random", "touch_size": 1.0, "touch_opacity": 0.75, "swipe_skills": true, "flick_loft": true, "edge_sprint": false,
 	"touch_fixed": false, "touch_left": false,
 	"pad_preset": "PES", "home": 0, "away": 1, "side": 0, "tac_mentality": 2, "tac_width": 1, "tac_press": 1, "tac_style": 0,
 	"style": "authentic", "game_speed": 1, "offside": true, "sl_sprint": 1.0, "sl_accel": 1.0, "sl_pass": 1.0, "sl_shot_error": 1.0,
@@ -88,6 +88,9 @@ func load_profile() -> void:
 	if int(d.get("version", 0)) < 8:
 		# 2.59: the new Pro camera (PES-2021-like wide view) for everyone once; the list now starts with it
 		data["settings"]["camera"] = 0
+	if int(d.get("version", 0)) < 9:
+		# 2.62: flicks on the pass buttons for everyone once (up lofted, down driven: FC's pass types)
+		data["settings"]["flick_loft"] = true
 	if d.get("pad") is Dictionary:
 		for k in d["pad"]:
 			var v = d["pad"][k]

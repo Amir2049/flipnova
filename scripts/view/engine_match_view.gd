@@ -427,6 +427,10 @@ func _input_to_engine() -> void:
 	if atk:
 		# a flick up off PASS / THROUGH lofts it (FC Mobile)
 		if on.call("pass", "pass"): b |= B_HIGH if _flick("pass") else B_SHORT
+		# a flick down off PASS / THROUGH / LOB: driven (harder on the grass, flatter in the air; FC's driven passes)
+		for pb in ["pass", "through", "lob"]:
+			if touch != null and touch.active and touch.variant(pb) == "down" and touch.held(pb):
+				b |= B_LOW
 		if on.call("shoot", "shoot"):
 			b |= B_SHOT
 			# a flick up off SHOOT: a chip; sideways: a finesse shot (pad: skill modifier / close control + SHOOT)

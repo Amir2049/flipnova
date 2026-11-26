@@ -23,7 +23,7 @@ const POWER_AT := 0.42             # SHOOT held this long is a power shot (Engin
 const SKILL_HOLD := 0.22           # SKILL held this long without a swipe: close control
 const STICK_ZONE := 0.45           # the stick lives on this share of the screen width
 const TOP_SAFE := 90.0             # the score bar and pause button
-const SWIPEABLE := ["pass", "through"]
+const SWIPEABLE := ["pass", "through", "lob"]   # flick up = lofted (PASS / THROUGH), flick down = driven (all three)
 
 var stick := Vector2.ZERO          # x right, y up, length 0..1
 var stick_touch := -1
@@ -41,7 +41,7 @@ var size_k := 1.0
 var opacity := 0.75
 var fixed_stick := false
 var left_handed := false
-var flick_loft := false             # flick up off PASS / THROUGH lofts it; off: those buttons act on the touch, no wait
+var flick_loft := true              # flicks off PASS / THROUGH / LOB (up lofted, down driven); off: they act on the touch, no wait
 var sprint_button := true          # always shown now (edge sprint is an option in the game settings)
 var vibrate := true
 var swipes := {}                   # touch index -> {start, t0, path}
@@ -64,7 +64,7 @@ func configure(opts: Dictionary) -> void:
 	vibrate = opts.get("vibration", true)
 	fixed_stick = bool(opts.get("touch_fixed", false))
 	left_handed = bool(opts.get("touch_left", false))
-	flick_loft = bool(opts.get("flick_loft", false))
+	flick_loft = bool(opts.get("flick_loft", true))
 	if is_inside_tree():
 		_layout()
 
@@ -322,8 +322,13 @@ func _input(event: InputEvent) -> void:
 				return
 			if flick_loft and b["touch"] == d.index and b["held"] and name in SWIPEABLE and b["variant"] == "":
 				var mv: Vector2 = d.position - b["start"]
-				if -mv.y > FLICK * u and absf(mv.x) < -mv.y * 1.2:
-					b["variant"] = "up"
+				var flick := ""
+				if -mv.y > FLICK * u and absf(mv.x) < -mv.y * 1.2 and name != "lob":
+					flick = "up"       # lofted pass / lofted through ball
+				elif mv.y > FLICK * u and absf(mv.x) < mv.y * 1.2:
+					flick = "down"     # driven pass / driven through ball / driven cross (FC's driven passes, 2.62)
+				if flick != "":
+					b["variant"] = flick
 					b["commit"] = true
 					if vibrate and OS.has_feature("mobile"):
 						Input.vibrate_handheld(8)
@@ -455,8 +460,14 @@ func _draw() -> void:
 			var cc := Color(0.04, 0.04, 0.04) if down else Color(1, 1, 1, 0.55 * a)
 			if b["variant"] == "up":
 				cc = Color(0.04, 0.04, 0.04)
-			draw_polyline(PackedVector2Array([pos + Vector2(-9, 5) * u - Vector2(0, pos.y - cy), pos + Vector2(0, -3) * u - Vector2(0, pos.y - cy),
-				pos + Vector2(9, 5) * u - Vector2(0, pos.y - cy)]), cc, 2.5 * u, true)
+			if name != "lob":
+				draw_polyline(PackedVector2Array([pos + Vector2(-9, 5) * u - Vector2(0, pos.y - cy), pos + Vector2(0, -3) * u - Vector2(0, pos.y - cy),
+					pos + Vector2(9, 5) * u - Vector2(0, pos.y - cy)]), cc, 2.5 * u, true)
+			# and a chevron under the label: flick down = driven
+			var dy := rr * 0.62
+			var dc := Color(0.04, 0.04, 0.04) if (down or b["variant"] == "down") else Color(1, 1, 1, 0.55 * a)
+			draw_polyline(PackedVector2Array([pos + Vector2(-9, -5) * u + Vector2(0, dy), pos + Vector2(0, 3) * u + Vector2(0, dy),
+				pos + Vector2(9, -5) * u + Vector2(0, dy)]), dc, 2.5 * u, true)
 		if name == "skill" and not defending:
 			# four small ticks: swipe on it
 			for k in 4:
@@ -474,6 +485,8 @@ func _draw() -> void:
 		var txt: String = labels.get(name, name.to_upper())
 		if b["variant"] == "up" and down:
 			txt = "LOB PASS" if name == "pass" else "LOB THRU"
+		elif b["variant"] == "down" and down and name in SWIPEABLE:
+			txt = {"pass": "DRIVEN", "through": "DRIVEN THRU", "lob": "DRIVEN CROSS"}[name]
 		if name == "shoot" and not defending and b["held"] and b["variant"] == "":
 			if held_for("shoot") >= POWER_AT:
 				txt = "POWER"

@@ -212,7 +212,8 @@ int main(int argc, char** argv) {
   // GF_SHOT_STYLE=0/1/2: the tap is a SHOT (normal / chip / finesse) instead of a pass; prints the ball's launch
   const int shot_style = getenv("GF_SHOT_STYLE") ? atoi(getenv("GF_SHOT_STYLE")) : -1;
   double elev_sum = 0.0, speed_sum = 0.0;
-  int launches = 0;
+  int launches = 0, pass_speed_n = 0;
+  float pass_speed_sum = 0.f, pass_up_sum = 0.f;   // passes as struck: speed, upward speed
   float tap_tx = 0.f, tap_ty = 0.f, tap_best = 0.f, tap_sum = 0.f;
   int tap_watch = -1, tap_n = 0, tap_hit = 0;
   float gl_prev = 0.f;
@@ -298,6 +299,7 @@ int main(int argc, char** argv) {
         float bs = std::sqrt(ps.ball_vel[0] * ps.ball_vel[0] + ps.ball_vel[1] * ps.ball_vel[1]);
         if (!mine || bs > 7.f) {
           passes++;
+          if (bs > 7.f && shot_style < 0) { pass_speed_sum += std::sqrt(bs * bs + ps.ball_vel[2] * ps.ball_vel[2]); pass_up_sum += ps.ball_vel[2]; pass_speed_n++; }
           pass_frames += f - tap_at;
           if (shot_style >= 0 && bs > 7.f) {
             float sp = std::sqrt(bs * bs + ps.ball_vel[2] * ps.ball_vel[2]);
@@ -468,6 +470,7 @@ int main(int argc, char** argv) {
         tap_bits = afc::GF_SHOT | (shot_style == 1 ? afc::GF_CHIP : 0u) | (shot_style == 2 ? afc::GF_FINESSE : 0u) |
                    (shot_style == 3 ? afc::GF_LOW : 0u) | (shot_style == 4 ? afc::GF_POWER : 0u);
       if (getenv("GF_CROSS_TEST")) tap_bits = afc::GF_HIGH_PASS;
+      if (getenv("GF_PASS_DRIVEN") && shot_style < 0) tap_bits |= afc::GF_LOW;   // driven passes (flick down)
       const bool aiming = getenv("GF_AIM_TEST") && aim_t >= 0 && aim_t < 30;
       // GF_SHOT_AIM=deg: shots with the stick that many degrees off straight at goal (+ = the engine's +y side)
       static const float shot_aim = getenv("GF_SHOT_AIM") ? (float)atof(getenv("GF_SHOT_AIM")) * 0.0174533f : 0.f;
@@ -584,6 +587,7 @@ int main(int argc, char** argv) {
            by_dist_on[1], by_dist_n[1], by_dist_on[2], by_dist_n[2], by_dist_on[3], by_dist_n[3]);
     printf("SHOTGOALS goals per shot: <20m %d/%d  20-30m %d/%d  30-45m %d/%d  45m+ %d/%d\n", by_dist_goal[0], by_dist_n[0],
            by_dist_goal[1], by_dist_n[1], by_dist_goal[2], by_dist_n[2], by_dist_goal[3], by_dist_n[3]);
+  if (pass_speed_n) printf("PASSSPEED %d passes: mean speed %.1f m/s, mean upward %.1f m/s\n", pass_speed_n, pass_speed_sum / pass_speed_n, pass_up_sum / pass_speed_n);
   if (shot_style >= 0)
     printf("SHOT style %d launches %d mean_elevation_deg %.1f mean_speed %.1f m/s\n", shot_style, launches,
            launches ? elev_sum / launches : 0.0, launches ? speed_sum / launches : 0.0);

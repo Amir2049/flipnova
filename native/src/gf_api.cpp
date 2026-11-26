@@ -3,6 +3,7 @@
 #include "crash_guard.h"
 
 int afc_shot_style = 0;
+int afc_pass_driven = 0;   // a pass pressed with GF_LOW (flick down): driven (humancontroller)
 extern float afc_pitch_wetness;   // ball.cpp (patch)   // read by the engine's HumanController when it builds a shot (patch)
 extern float afc_tactics[2][3];
 extern int afc_style[2];             // teamAIcontroller.cpp (patch): playing style
@@ -232,6 +233,7 @@ void gf_input(float dx, float dy, unsigned buttons) {
   // the engine builds a shot when SHOOT is let go: the style chosen while it was held stays until the next press
   if (buttons & GF_SHOT)
     afc_shot_style = (buttons & GF_CHIP) ? 1 : (buttons & GF_FINESSE) ? 2 : (buttons & GF_LOW) ? 3 : (buttons & GF_POWER) ? 4 : 0;
+  if (buttons & (GF_SHORT_PASS | GF_LONG_PASS | GF_HIGH_PASS)) afc_pass_driven = (buttons & GF_LOW) ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------------------------------- TiZero
