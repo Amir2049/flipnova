@@ -149,6 +149,15 @@ ground pass never waits to see if a second tap comes; a double tap on your own p
   courts made EA pay players). AFC keeps invented names; next is an editor with import/export so players can make
   their own patches.
 
+## 2.53-2.54: goal replay in three cuts, the club editor and patches
+
+- Goal replay (zocram4cc's broadcast cuts rebuilt in Godot): the move from the TV camera, the finish at half speed
+  from behind the net, the scorer close up from pitch level; tests/shot_replay.gd.
+- Squads > CLUB: the club's name, short name, both kits (four colours and the pattern), shown everywhere at once
+  (GameData.CLUBS = the shipped clubs + the player's edits). Squads > PATCH: every edit as one text to copy and
+  share, and IMPORT of a pasted one - how option files kept PES alive without licences; AFC itself ships only its
+  invented names. tests/patch_test.gd.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

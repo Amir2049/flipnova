@@ -63,6 +63,7 @@ func load_profile() -> void:
 	for k in ["squads", "career", "cup", "records"]:
 		if d.get(k) is Dictionary:
 			data[k] = d[k]
+	GameData.apply_club_edits(data["squads"])
 	if d.get("settings") is Dictionary:
 		for k in d["settings"]:
 			data["settings"][k] = d["settings"][k]
@@ -226,3 +227,33 @@ func set_record(key: String, v: int) -> bool:
 		save()
 		return true
 	return false
+
+
+## A patch: every squad and club edit as one text the player can share (names, numbers, line-ups, club names, kits).
+## AFC ships no real names; a patch is what players make and pass round, the way option files were.
+func export_patch() -> String:
+	return JSON.stringify({"afc_patch": 1, "version": str(ProjectSettings.get_setting("application/config/version", "")),
+		"squads": data["squads"]}, "  ")
+
+
+## Merges a patch (text from export_patch) into the squads. Returns the number of clubs it touched, -1 when the
+## text is not a patch.
+func import_patch(text: String) -> int:
+	var d = JSON.parse_string(text.strip_edges())
+	if not d is Dictionary or int(d.get("afc_patch", 0)) != 1 or not d.get("squads") is Dictionary:
+		return -1
+	var n := 0
+	for id in d["squads"]:
+		if not d["squads"][id] is Dictionary:
+			continue
+		var known := false
+		for c in GameData.CLUBS_BASE:
+			if c["id"] == str(id):
+				known = true
+		if not known:
+			continue
+		data["squads"][str(id)] = d["squads"][id]
+		n += 1
+	GameData.apply_club_edits(data["squads"])
+	save()
+	return n

@@ -835,7 +835,14 @@ func _squads() -> void:
 		_squads()))
 	tools.add_child(UI.spacer(0, 0, true))
 	tools.add_child(UI.button("BEST XI", func(): edits.erase("lineup"); Profile.save(); squad_pick = -1; _squads(), Vector2(140, 48), "ghost", 18))
-	tools.add_child(UI.button("RESET CLUB", func(): Profile.data["squads"].erase(GameData.CLUBS[sel_club]["id"]); Profile.save(); squad_pick = -1; _squads(), Vector2(160, 48), "danger", 18))
+	tools.add_child(UI.button("CLUB", func(): _go(_club_edit), Vector2(110, 48), "ghost", 18))
+	tools.add_child(UI.button("PATCH", func(): _go(_patch_page), Vector2(110, 48), "ghost", 18))
+	tools.add_child(UI.button("RESET CLUB", func():
+		Profile.data["squads"].erase(GameData.CLUBS[sel_club]["id"])
+		GameData.apply_club_edits(Profile.squads())
+		Profile.save()
+		squad_pick = -1
+		_squads(), Vector2(160, 48), "danger", 18))
 	vb.add_child(tools)
 	var hint := UI.label("Tap a player, then another to swap them (starter ↔ bench, or two positions). EDIT changes the name and number.", 16, UI.MUTED)
 	vb.add_child(hint)
@@ -951,6 +958,101 @@ func _edit_box(p: Dictionary, idx: int, edits: Dictionary) -> Control:
 		squad_pick = -1
 		_squads(), Vector2(0, 50), "accent"))
 	return box
+
+
+## The club itself: its name, short name and both kits (colours and pattern). Shown everywhere at once.
+func _club_edit() -> void:
+	var c: Dictionary = GameData.CLUBS[sel_club]
+	var ce := Profile.club_edits(sel_club)
+	if not ce.get("club") is Dictionary:
+		ce["club"] = {}
+	var cl: Dictionary = ce["club"]
+	var pg := _page("EDIT CLUB", UI.button("◀  SQUADS", func(): _go(_squads), Vector2(170, 52), "ghost", 18))
+	var vb: VBoxContainer = pg[1]
+	var row := UI.hbox(12)
+	vb.add_child(row)
+	var name_e := LineEdit.new()
+	name_e.text = c["name"]
+	name_e.placeholder_text = "Club name"
+	name_e.max_length = 28
+	name_e.custom_minimum_size = Vector2(420, 50)
+	name_e.add_theme_font_size_override("font_size", 22)
+	row.add_child(name_e)
+	var short_e := LineEdit.new()
+	short_e.text = c["short"]
+	short_e.placeholder_text = "ABC"
+	short_e.max_length = 4
+	short_e.custom_minimum_size = Vector2(120, 50)
+	short_e.add_theme_font_size_override("font_size", 22)
+	row.add_child(short_e)
+	var kits := UI.hbox(24)
+	vb.add_child(kits)
+	var pickers := {}
+	for which in ["kit", "away"]:
+		var col := UI.vbox(8)
+		kits.add_child(col)
+		col.add_child(UI.caption("Home kit" if which == "kit" else "Away kit"))
+		var k: Dictionary = c[which]
+		for part in [["shirt", "Shirt"], ["shirt2", "Second colour"], ["shorts", "Shorts"], ["socks", "Socks"]]:
+			var h := UI.hbox(10)
+			var lb := UI.label(part[1], 18)
+			lb.custom_minimum_size = Vector2(170, 0)
+			h.add_child(lb)
+			var cp := ColorPickerButton.new()
+			cp.color = KitPainter.hex(int(k.get(part[0], 0xffffff)))
+			cp.custom_minimum_size = Vector2(120, 44)
+			cp.edit_alpha = false
+			h.add_child(cp)
+			col.add_child(h)
+			pickers[which + "/" + part[0]] = cp
+		var pats: Array = GameData.KIT_PATTERNS
+		var pi := maxi(0, pats.find(str(k.get("pattern", "solid"))))
+		pickers[which + "/pattern"] = [pi]
+		col.add_child(UI.choice_row("Pattern", pats.map(func(x): return str(x).capitalize()), pi, func(i: int): pickers[which + "/pattern"][0] = i))
+	vb.add_child(UI.button("SAVE CLUB", func():
+		cl["name"] = name_e.text.strip_edges()
+		cl["short"] = short_e.text.strip_edges()
+		for which in ["kit", "away"]:
+			var kd := {}
+			for part in ["shirt", "shirt2", "shorts", "socks"]:
+				var cc: Color = (pickers[which + "/" + part] as ColorPickerButton).color
+				kd[part] = (int(cc.r8) << 16) | (int(cc.g8) << 8) | int(cc.b8)
+			kd["pattern"] = GameData.KIT_PATTERNS[int(pickers[which + "/pattern"][0])]
+			cl[which] = kd
+		GameData.apply_club_edits(Profile.squads())
+		Profile.save()
+		_go(_squads), Vector2(260, 56), "accent", 20))
+	_set_screen(pg[0])
+
+
+## Patches: every edit (names, numbers, line-ups, clubs, kits) as text to share, and a pasted one to load.
+func _patch_page() -> void:
+	var pg := _page("PATCH", UI.button("◀  SQUADS", func(): _go(_squads), Vector2(170, 52), "ghost", 18))
+	var vb: VBoxContainer = pg[1]
+	vb.add_child(UI.label("A patch carries all your squad and club edits. Export copies it so you can send it; to load one, paste it below and press IMPORT. AFC itself ships only its own invented names.", 16, UI.MUTED))
+	var te := TextEdit.new()
+	te.custom_minimum_size = Vector2(0, 300)
+	te.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	te.placeholder_text = "Paste a patch here"
+	te.add_theme_font_size_override("font_size", 14)
+	vb.add_child(te)
+	var note := UI.label("", 18, UI.ACCENT)
+	var row := UI.hbox(12)
+	vb.add_child(row)
+	row.add_child(UI.button("EXPORT  (copy)", func():
+		var t: String = Profile.export_patch()
+		DisplayServer.clipboard_set(t)
+		te.text = t
+		var f := FileAccess.open("user://afc_patch.json", FileAccess.WRITE)
+		if f:
+			f.store_string(t)
+		note.text = "Copied - paste it in a message or a file to share it.", Vector2(260, 56), "accent", 20))
+	row.add_child(UI.button("PASTE", func(): te.text = DisplayServer.clipboard_get(), Vector2(150, 56), "ghost", 20))
+	row.add_child(UI.button("IMPORT", func():
+		var n: int = Profile.import_patch(te.text)
+		note.text = "That is not an AFC patch." if n < 0 else "Patch loaded: %d clubs updated." % n, Vector2(170, 56), "normal", 20))
+	vb.add_child(note)
+	_set_screen(pg[0])
 
 
 # ------------------------------------------------------------------ catalogue, controls, settings

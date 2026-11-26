@@ -2,7 +2,9 @@ class_name GameData
 extends RefCounted
 ## Clubs, kits, formations and generated squads. Every club and player name is original to AFC.
 
-const CLUBS := [
+## The clubs as shipped; CLUBS is this with the player's own edits on top (name, short name, kits - Squads > CLUB,
+## or an imported patch), rebuilt by apply_club_edits.
+const CLUBS_BASE := [
 	{"id": "HRA", "name": "Al-Hara FC", "short": "HRA", "stars": 4,
 		"kit": {"shirt": 0xd7263d, "shirt2": 0xffffff, "pattern": "pin", "shorts": 0xffffff, "socks": 0xd7263d},
 		"away": {"shirt": 0xf4f1de, "shirt2": 0xd7263d, "pattern": "solid", "shorts": 0xd7263d, "socks": 0xf4f1de},
@@ -36,6 +38,30 @@ const CLUBS := [
 		"away": {"shirt": 0xff6a2b, "shirt2": 0x15151a, "pattern": "solid", "shorts": 0x15151a, "socks": 0xff6a2b},
 		"gk": {"shirt": 0x9ad1f5, "shorts": 0x15151a, "socks": 0x9ad1f5}},
 ]
+static var CLUBS: Array = CLUBS_BASE.duplicate(true)
+const KIT_PATTERNS := ["solid", "stripes", "pin", "hoops", "sash"]
+
+
+## The player's edits on the clubs (squads[id]["club"] = {name, short, kit: {...}, away: {...}}) over the shipped
+## ones. Called when the profile loads and after every club edit or patch import.
+static func apply_club_edits(squads: Dictionary) -> void:
+	CLUBS = CLUBS_BASE.duplicate(true)
+	for c in CLUBS:
+		var ce = squads.get(c["id"], {})
+		if not ce is Dictionary or not ce.get("club") is Dictionary:
+			continue
+		var cl: Dictionary = ce["club"]
+		if str(cl.get("name", "")).strip_edges() != "":
+			c["name"] = str(cl["name"]).strip_edges().left(28)
+		if str(cl.get("short", "")).strip_edges() != "":
+			c["short"] = str(cl["short"]).strip_edges().to_upper().left(4)
+		for which in ["kit", "away"]:
+			if cl.get(which) is Dictionary:
+				for k in ["shirt", "shirt2", "shorts", "socks"]:
+					if cl[which].has(k):
+						c[which][k] = int(cl[which][k])
+				if KIT_PATTERNS.has(str(cl[which].get("pattern", ""))):
+					c[which]["pattern"] = str(cl[which]["pattern"])
 
 # [depth 0 back .. 1 front, side -1 left .. 1 right, role]
 const FORMATIONS := {
