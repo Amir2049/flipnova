@@ -46,6 +46,8 @@ struct GfSetup {
   int brain_every = 10;          // frames between a player's decisions (10 = TiZero's own 10 per second)
   // the line-ups: 11 x (x -1..1 with the own goal at -1, y -0.42..0.42, e_PlayerRole); empty = gfootball's 4-4-2
   std::vector<float> formation[2];
+  // the players' ratings: 11 x 22 engine stats (PlayerStat order, 0..1) per side; empty = the engine's stock players
+  std::vector<float> stats[2];
 };
 
 struct GfPlayer {
@@ -89,6 +91,7 @@ void gf_state(GfState* out);
 void gf_input(float dx, float dy, unsigned buttons);  // the human's stick (engine axes, length 0..1) and held buttons
 void gf_stop();
 void gf_substitute(int team, int player);
+void gf_set_player_stats(int team, int player, const float* stats22);   // a substitute's ratings
 void gf_set_tactics(int team, float mentality, float width, float pressing);  // team instructions, each -1..1 (0 = engine's own)           // a fresh player comes on: tiredness back to none
 bool gf_running();
 

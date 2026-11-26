@@ -130,6 +130,16 @@ bool gf_start(const GfSetup& s) {
   GetContext().config->Set("match_duration", md);
   GetContext().config->Set("afc_dribble_lead", s.dribble_lead);
   g_env->reset(*cfg, true);
+  // the game's ratings for every player: pace, shooting, passing... decide how he plays (they were the engine's
+  // stock profiles for every club until 2.47)
+  if (Match* m = GetGameTask()->GetMatch()) {
+    for (int t = 0; t < 2; t++) {
+      if (s.stats[t].size() < 11 * 22) continue;
+      const std::vector<Player*>& ps = m->GetTeam(t)->GetAllPlayers();
+      for (int i = 0; i < 11 && i < (int)ps.size(); i++)
+        for (int k = 0; k < 22; k++) ps[i]->GetPlayerData()->AfcSetStat(k, s.stats[t][i * 22 + k]);
+    }
+  }
   g_human = (g_tz_on && g_tz_side == 0) ? 0 : s.human_players;
   if (g_human > 0) {
     auto c = GetControllers()[0];
@@ -158,6 +168,16 @@ void gf_set_tactics(int team, float mentality, float width, float pressing) {
   afc_tactics[team][0] = c(mentality);
   afc_tactics[team][1] = c(width);
   afc_tactics[team][2] = c(pressing);
+}
+
+void gf_set_player_stats(int team, int player, const float* stats22) {
+  if (!g_env || team < 0 || team > 1) return;
+  SetGame(g_env);
+  Match* m = GetGameTask()->GetMatch();
+  if (!m) return;
+  const std::vector<Player*>& ps = m->GetTeam(team)->GetAllPlayers();
+  if (player >= 0 && player < (int)ps.size())
+    for (int k = 0; k < 22; k++) ps[player]->GetPlayerData()->AfcSetStat(k, stats22[k]);
 }
 
 void gf_substitute(int team, int player) {

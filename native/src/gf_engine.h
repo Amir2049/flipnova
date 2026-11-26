@@ -27,6 +27,7 @@ class GFEngine : public RefCounted {
   void set_input(float dx, float dy, int buttons);
   void substitute(int team, int player);
   void set_tactics(int team, float mentality, float width, float pressing);
+  void set_player_stats(int team, int player, const PackedFloat32Array& stats);
   // ball, score, mode, clock, owner, the human's player
   Dictionary state();
   // 22 players x STRIDE floats: pos x y z, yaw, root x y z, tired, has_ball, active, then 14 joints x (x y z w)

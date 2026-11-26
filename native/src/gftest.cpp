@@ -143,6 +143,21 @@ int main(int argc, char** argv) {
   }
   FILE* df = argc > 6 ? fopen(argv[6], "w") : nullptr;
   if (getenv("GF_CRASH_FILE")) afc::crash_guard_install(getenv("GF_CRASH_FILE"));
+  for (int t = 0; t < 2; t++) {
+    const char* e = getenv(t == 0 ? "GF_STATS_L" : "GF_STATS_R");
+    if (e) setup.stats[t].assign(11 * 22, (float)atof(e));
+  }
+  // GF_STATS_FILE: two lines of 242 numbers, the game's real squads (engine_match_view.gd team_stats)
+  if (const char* sf = getenv("GF_STATS_FILE")) {
+    if (FILE* fp = fopen(sf, "r")) {
+      for (int t = 0; t < 2; t++) {
+        setup.stats[t].clear();
+        float v;
+        for (int k = 0; k < 11 * 22 && fscanf(fp, "%f", &v) == 1; k++) setup.stats[t].push_back(v);
+      }
+      fclose(fp);
+    }
+  }
   if (!afc::gf_start(setup)) {
     fprintf(stderr, "start failed\n");
     return 2;

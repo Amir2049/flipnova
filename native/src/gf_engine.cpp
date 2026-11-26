@@ -16,6 +16,7 @@ void GFEngine::_bind_methods() {
   ClassDB::bind_method(D_METHOD("stride"), &GFEngine::stride);
   ClassDB::bind_method(D_METHOD("substitute", "team", "player"), &GFEngine::substitute);
   ClassDB::bind_method(D_METHOD("set_tactics", "team", "mentality", "width", "pressing"), &GFEngine::set_tactics);
+  ClassDB::bind_method(D_METHOD("set_player_stats", "team", "player", "stats"), &GFEngine::set_player_stats);
 }
 
 bool GFEngine::start(const String& data_dir, const Dictionary& o) {
@@ -38,6 +39,11 @@ bool GFEngine::start(const String& data_dir, const Dictionary& o) {
     PackedFloat32Array f = o.get(keys[t], PackedFloat32Array());
     for (int i = 0; i < f.size(); i++) s.formation[t].push_back(f[i]);
   }
+  const char* skeys[2] = {"home_stats", "away_stats"};
+  for (int t = 0; t < 2; t++) {
+    PackedFloat32Array f = o.get(skeys[t], PackedFloat32Array());
+    for (int i = 0; i < f.size(); i++) s.stats[t].push_back(f[i]);
+  }
   bool ok = afc::gf_start(s);
   fresh_ = false;
   return ok;
@@ -48,6 +54,10 @@ void GFEngine::set_crash_file(const String& path) { afc::crash_guard_install(pat
 void GFEngine::frames(int n) {
   for (int i = 0; i < n; i++) afc::gf_frame();
   fresh_ = false;
+}
+
+void GFEngine::set_player_stats(int team, int player, const PackedFloat32Array& stats) {
+  if (stats.size() >= 22) afc::gf_set_player_stats(team, player, stats.ptr());
 }
 
 void GFEngine::set_tactics(int team, float mentality, float width, float pressing) {

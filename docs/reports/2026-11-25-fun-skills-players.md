@@ -95,6 +95,19 @@ Measured each, 8 matches CPU v CPU (possession lost / goals; 2.44: 884 / 31):
   keeper model), the net's cloth (our net is drawn in Godot); already ours: no offside from corners, throw-ins and
   goal kicks, the offside restart where the offence was
 
+## 2.47: the players' own ratings, playing styles
+
+- Found: the 11-a-side engine never got the game's ratings - every club fielded the engine's stock players, so a
+  90-finisher and a 60 played alike. Now each player's ratings (pace, finishing, passing...) become his 22 engine
+  stats (engine_match_view.gd engine_stats), a substitute's too. gftest: a side rated 0.9 against one rated 0.55,
+  4 matches, 14-3.
+- Playing styles (zocram4cc ef6d5d5), read off the ratings so the same man plays the same way every match: a
+  long-range shooter (power and finishing) shoots from up to 9 m further out, a fox in the box (a finishing
+  striker) wants it more, a playmaker (vision) and the holding men look to pass first.
+- The game's real squads (gftest GF_STATS_FILE, 4 pairings x 2): 4.4 goals a match, 20 shots, 71 % of shots on
+  target kept out.
+- Not for our engine: zocram4cc's keeper save model (f14c99d) replaces a coin flip our engine never had.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

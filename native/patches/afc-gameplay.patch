@@ -1,3 +1,17 @@
+--- a/src/data/playerdata.hpp
++++ b/src/data/playerdata.hpp
+@@ -54,6 +54,11 @@
+     std::string GetLastName() const { return lastName; }
+     inline float GetStat(PlayerStat name) const { return stats.GetReal(name); }
+     float get_physical_velocity() const { return physical_velocity; }
++    // AFC: the game's own ratings for this player (engine stat order, 0..1), set for every match
++    void AfcSetStat(int stat, float value) const {
++      const_cast<PlayerData*>(this)->stats.Set((PlayerStat)stat, value);
++      const_cast<PlayerData*>(this)->UpdateValues();
++    }
+ 
+     int GetSkinColor() const { return skinColor; }
+ 
 --- a/src/gamedefines.hpp
 +++ b/src/gamedefines.hpp
 @@ -126,7 +126,11 @@
@@ -188,7 +202,35 @@
        }
      }
    }
-@@ -1010,7 +1045,29 @@
+@@ -978,12 +1013,26 @@
+                        player->GetPosition())
+                           .GetLength(),
+                       0.0f, 32.0f);
++  // zocram4cc ef6d5d5, playing styles, here read off the player's own ratings (so the same man plays the same way
++  // every match): a long-range shooter (power and finishing) tries from up to 9 m further out, a fox in the box
++  // (a finishing striker) wants it more inside, a playmaker (vision) and an anchorman (holding role) look to pass
++  float shotAppetite = 1.0f, shootingRange = 16.0f;
++  {
++    const e_PlayerRole role = CastPlayer()->GetFormationEntry().role;
++    const float shot = CastPlayer()->GetStat(technical_shot), power = CastPlayer()->GetStat(physical_shotpower);
++    const float vision = CastPlayer()->GetStat(mental_vision);
++    if (power > 0.78f && shot > 0.7f && role != e_PlayerRole_CB) { shotAppetite += 0.35f; shootingRange += 9.0f; }
++    if (role == e_PlayerRole_CF && shot > 0.76f) { shotAppetite += 0.3f; shootingRange -= 2.0f; }
++    if ((role == e_PlayerRole_CM || role == e_PlayerRole_AM) && vision > 0.8f) shotAppetite -= 0.2f;
++    if (role == e_PlayerRole_DM || role == e_PlayerRole_CB) shotAppetite -= 0.25f;
++    shotAppetite = clamp(shotAppetite, 0.55f, 2.0f);
++  }
+   float idealShotPosFactor =
+       1.0f - NormalizedClamp(
+                  (Vector3((pitchHalfW - 7.0f) * -team->GetDynamicSide(), 0, 0) -
+                   player->GetPosition())
+                      .GetLength(),
+-                 0.0f, 16.0f);
++                 0.0f, shootingRange);
+   idealShotPosFactor = curve(idealShotPosFactor, 1.0f);
+   if (idealShotPosFactor > 0.1f) {
+     DO_VALIDATION;
+@@ -1010,7 +1059,29 @@
  
      odds = std::pow(odds, 0.5f);
  
@@ -215,11 +257,11 @@
 +    const float angleShare = 0.25f + 0.75f * (shotDist > 0.0f ? clamp(fabs(toGoalC.coords[0]) / shotDist, 0.0f, 1.0f) : 1.0f);
 +    const float shotXg = 0.97f * std::exp(-shotDist / 9.0f) * angleShare / (1.0f + 0.35f * laneBodies);
 +
-+    if (odds + boostrandom(0.0f, 0.5f) > 0.5f && shotXg >= 0.14f / 1.9f) {
++    if ((odds + boostrandom(0.0f, 0.5f)) * shotAppetite > 0.5f && shotXg >= 0.14f / std::max(0.5f, 1.9f * shotAppetite)) {
        DO_VALIDATION;
        PlayerCommand command;
        command.desiredFunctionType = e_FunctionType_Shot;
-@@ -1019,8 +1076,8 @@
+@@ -1019,8 +1090,8 @@
        command.desiredVelocityFloat = rawInputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
        command.touchInfo.desiredDirection =
            (Vector3((pitchHalfW + 1.0f) * -team->GetDynamicSide(),
@@ -230,7 +272,7 @@
                     0) -
             (CastPlayer()->GetPosition() + CastPlayer()->GetMovement() * 0.2f))
                .GetNormalized(Vector3(-team->GetDynamicSide(), 0, 0));
-@@ -1055,7 +1112,7 @@
+@@ -1055,7 +1126,7 @@
    commandQueue.push_back(command);
  }
  
@@ -239,7 +281,7 @@
    DO_VALIDATION;
  
    int yside = signSide(player->GetDirectionVec().coords[1]); // > 0 ? 1 : -1;
-@@ -1065,6 +1122,20 @@
+@@ -1065,6 +1136,20 @@
            .GetNormalized(0) +
        Vector3(0, 0, 0.3f);
    sensibleAwayDir.Normalize(player->GetDirectionVec());
@@ -260,7 +302,7 @@
  
    PlayerCommand command;
    command.useDesiredMovement = false;
-@@ -1142,7 +1213,9 @@
+@@ -1142,7 +1227,9 @@
  
          Vector3 originToBallPos = (intersect - origin);
          float penaltyTime = (passType == e_FunctionType_HighPass && u > 0.5f) ? 2.5f : 0.0f; // trapping high balls takes time

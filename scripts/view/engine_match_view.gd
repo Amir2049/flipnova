@@ -161,6 +161,37 @@ static func brain_file() -> String:
 	return ProjectSettings.globalize_path(dst)
 
 
+## A player's ratings (35..95) as the engine's 22 stats (0..1, PlayerStat order): pace and shooting and passing decide
+## how he plays in the 11-a-side engine (2.47; before, every club fielded the engine's own stock players).
+static func engine_stats(p: Dictionary) -> PackedFloat32Array:
+	var a := func(k: String, d: float = 65.0) -> float: return clampf((float(p.get(k, d)) - 10.0) / 90.0, 0.1, 1.0)
+	var gk := str(p.get("pos", "")) == "GK"
+	var out := PackedFloat32Array()
+	out.append_array([
+		(a.call("strength") + a.call("agility")) * 0.5,                    # balance
+		a.call("gk_reflex") if gk else (a.call("agility") + a.call("control")) * 0.5,   # reaction
+		a.call("accel"), a.call("pace"), a.call("stamina_attr"), a.call("agility"),
+		a.call("power"),                                                   # shot power
+		a.call("tackling"), a.call("tackling"),                            # standing, sliding tackle
+		a.call("gk_handling") if gk else a.call("control"),                # ball control (a keeper's: handling)
+		a.call("dribbling"), a.call("short_pass"), a.call("long_pass"),
+		(a.call("strength") + a.call("finishing")) * 0.5,                  # header
+		a.call("finishing"), (a.call("finishing") + a.call("curve")) * 0.5,   # shot, volley
+		(a.call("control") + a.call("finishing")) * 0.5,                   # calmness
+		a.call("stamina_attr"), a.call("strength"),                        # work rate, resilience
+		a.call("gk_diving") if gk else a.call("tackling"),                 # defensive positioning
+		(a.call("finishing") + a.call("dribbling")) * 0.5,                 # offensive positioning
+		(a.call("short_pass") + a.call("long_pass")) * 0.5])               # vision
+	return out
+
+
+static func team_stats(players: Array) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	for i in 11:
+		out.append_array(engine_stats(players[i] if i < players.size() else {}))
+	return out
+
+
 ## AFC formation slots ([depth 0..1, width -1..1, role]) as the engine's line-up: x -1..1 from the own goal,
 ## y -0.42..0.42 (negative = the left side), and gfootball's player roles.
 static func formation_entries(form: String) -> PackedFloat32Array:
@@ -281,7 +312,8 @@ func start(config: Dictionary) -> void:
 		"difficulty_away": AWAY_DIFF[level],
 		"seed": int(config.get("seed", randi() % 100000)), "match_seconds": match_seconds, "offsides": opts.get("offside", true), "wetness": 1.0 if rain else 0.0,
 		"home_formation": formation_entries(team_defs[0]["formation"]),
-		"away_formation": formation_entries(team_defs[1]["formation"])}
+		"away_formation": formation_entries(team_defs[1]["formation"]),
+		"home_stats": team_stats(roster[0]), "away_stats": team_stats(roster[1])}
 	if level >= 3:
 		var bp := brain_file()
 		if bp != "":
@@ -822,6 +854,8 @@ func substitute(t: int, i: int, k: int) -> void:
 	subs_used[t] += 1
 	appeared[t].append(str(incoming.get("name", "")))
 	engine.substitute(t, i)
+	if engine.has_method("set_player_stats"):
+		engine.set_player_stats(t, i, engine_stats(incoming))
 	var td: Dictionary = team_defs[t]
 	var gk := i == 0
 	pviews[t * 11 + i].redress(td["gk"] if gk else td["kit"], int(incoming.get("number", 12)), gk,
