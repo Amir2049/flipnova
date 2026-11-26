@@ -1264,7 +1264,26 @@ func _draw_radar() -> void:
 	radar.draw_circle(to.call(b.x, b.y), 2.6, Color(1, 1, 1))
 
 
+var chance_cd := 0.0
+
+## The crowd follows the game in engine matches too (it only did on the built-in engine): on its feet near the
+## goals, up for a shot that flies close, a roar for a near miss.
+func _update_crowd(dt: float) -> void:
+	if pitch_view == null or st.is_empty():
+		return
+	var b: Vector3 = st["ball"]
+	var bv: Vector3 = st["ball_vel"]
+	pitch_view.update_crowd(dt, b.x)
+	chance_cd = maxf(0.0, chance_cd - dt)
+	if chance_cd <= 0.0 and int(st["mode"]) == 0 and absf(b.x) > 40.0 and signf(bv.x) == signf(b.x) and absf(bv.x) > 12.0 \
+			and absf(b.y + bv.y * ((52.5 - absf(b.x)) / maxf(absf(bv.x), 1.0))) < 9.0:
+		pitch_view.set_excitement(0.75)
+		sfx.roar(0.5)
+		chance_cd = 3.0
+
+
 func _update_hud(dt: float) -> void:
+	_update_crowd(dt)
 	var g: Vector2i = st["goals"]
 	score_lbl.text = "%s  %d - %d  %s" % [team_defs[0]["short"], g.x, g.y, team_defs[1]["short"]]
 	var minute: float = st["minute"]
@@ -1301,6 +1320,8 @@ func _update_hud(dt: float) -> void:
 			sfx.goal()
 		sfx.roar(1.0)
 		cam.shake(0.4)
+		if pitch_view:
+			pitch_view.set_excitement(1.0)   # the whole ground on its feet
 		replay_cut = 1.0   # keep a second after the ball goes in, then cut the replay
 	var mode: int = st["mode"]
 	var ctl: int = st["controlled"]
