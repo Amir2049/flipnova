@@ -173,6 +173,20 @@ ground pass never waits to see if a second tap comes; a double tap on your own p
 - A first-time finish is remembered: SHOOT pressed while a cross is in the air - even before control passes to the
   man it is going to - is pressed again as the ball reaches him.
 
+## 2.57: headers that happen, a take-on that did not
+
+- Why headers failed: the engine has two header clips, and one only plays when the ball meets the head on its
+  touch frame; crosses arrived at head height (1.2-1.7 m at 0.1-0.4 m from the receiver) and were still chested
+  down. Looser clip matching, dropping the outgoing-angle filter for air shots, wider height slack: no change. And
+  the engine's own action buffer dropped a SHOOT press whenever the time to the ball jumped - which a ball in the
+  air does all the time.
+- Header and volley assist (the human's player): SHOOT pressed in the last 1.5 s, the ball within 1.4 m at 0.45 m
+  to just over his head, no clip has taken it - he heads it (or volleys it) towards goal, away from the keeper's
+  side, placed and powered by his heading / volley rating. gftest GF_CROSS_TEST (+ GF_CROSS_EARLY: pressed right
+  after the cross): 10 assisted in 49 crosses, plus 8 struck first time by a clip.
+- Tried, not taken: a scripted CPU take-on (a cut at close-control pace, then a burst): defenders beaten 32 -> 34-36
+  of ~780 faced, ball lost 199 -> 241-268. gftest TAKEON counts take-ons for both teams.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

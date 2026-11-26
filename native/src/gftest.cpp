@@ -174,6 +174,8 @@ int main(int argc, char** argv) {
   }
   double tac_depth = 0.0, tac_width = 0.0;
   long tac_n = 0;
+  int to_t = -1, to_owner = -1, to_def = -1, to_n = 0, to_won = 0, to_fail = 0;
+  float to_att = 1.f;
   int regains_left = 0, quick_regains = 0, lost_at = -1;
   auto t1 = std::chrono::steady_clock::now();
   printf("started in %.0f ms\n", std::chrono::duration<double, std::milli>(t1 - t0).count());
@@ -219,6 +221,7 @@ int main(int argc, char** argv) {
   bool cross_shoot = false, cross_done = false, cross_pressed = false;
   int cross_press = 0, cross_bi = -1;
   float cross_pv[3] = {0.f, 0.f, 0.f};
+  float cross_closest = 1e9f, cross_z_at = 0.f;
   bool tap_air = false, tap_watch_air_done = false;
   int by_dist_n[4] = {0, 0, 0, 0}, by_dist_on[4] = {0, 0, 0, 0};   // shots from <20, 20-30, 30-45, 45+ m: on target
   int restarts[7] = {0, 0, 0, 0, 0, 0, 0};
@@ -379,9 +382,13 @@ int main(int argc, char** argv) {
         cross_t++;
         // SHOOT tapped like a person: when the ball in the air is ~10 m from the man it is coming to
         if (cross_press > 0) { cross_shoot = true; cross_press--; } else cross_shoot = false;
+        // GF_CROSS_EARLY: SHOOT pressed right after the cross (on the crosser), then pressed again for him as the
+        // ball reaches the receiver - what engine_match_view.gd's remembered finish does
+        if (getenv("GF_CROSS_EARLY") && cross_t == 10) cross_press = 6;
         if (!cross_pressed && cross_t > 6 && ps.ball[2] > 0.5f && ps.controlled >= 0) {
           const afc::GfPlayer& c = ps.players[ps.controlled];
-          if (std::hypot(ps.ball[0] - c.pos[0], ps.ball[1] - c.pos[1]) < 10.f) {
+          static const float press_r = getenv("GF_CROSS_EARLY") ? 7.f : 10.f;
+          if (std::hypot(ps.ball[0] - c.pos[0], ps.ball[1] - c.pos[1]) < press_r && cross_t > 18) {
             cross_press = 8; cross_pressed = true;
             if (getenv("GF_CROSS_DEBUG")) printf("press: ctl %d target %d ball z %.1f t %d\n", ps.controlled, cross_bi, ps.ball[2], cross_t);
           }
@@ -399,7 +406,14 @@ int main(int argc, char** argv) {
           cross_shots++; if (ps.ball[2] > 0.45f) cross_air++; cross_done = true;
           if (getenv("GF_CROSS_DEBUG")) printf("shot: by team %d player %d (ctl %d) z %.2f t %d\n", ps.ball_owner_team, ps.ball_owner_player, ps.controlled, ps.ball[2], cross_t);
         }
-        if (cross_t >= 220) { cross_t = -1; cross_shoot = false; cross_done = false; cross_pressed = false; }
+        // the height the ball passes the receiver at (closest approach, while still in the air)
+        if (cross_bi >= 0 && cross_t > 10) {
+          const afc::GfPlayer& rcv = ps.players[cross_bi];
+          const float d = std::hypot(ps.ball[0] - rcv.pos[0], ps.ball[1] - rcv.pos[1]);
+          if (d < cross_closest) { cross_closest = d; cross_z_at = ps.ball[2]; }
+        }
+        if (cross_t == 219 && getenv("GF_CROSS_DEBUG")) printf("arrive: closest %.1f m at height %.2f\n", cross_closest, cross_z_at);
+        if (cross_t >= 220) { cross_closest = 1e9f; cross_t = -1; cross_shoot = false; cross_done = false; cross_pressed = false; }
       }
       if (tap_test && hold == 40 && tap_at < 0 && ps.game_mode == 0) {
         const afc::GfPlayer& me = ps.players[ps.controlled];
@@ -461,6 +475,26 @@ int main(int argc, char** argv) {
       if (ms.game_mode != prev_mode && ms.game_mode > 0 && ms.game_mode < 7) restarts[ms.game_mode]++;
       prev_mode = ms.game_mode;
       if (ms.game_mode == 0) in_play++;
+      // take-ons (both teams): the man on the ball with an opponent within 2 m in front of him (toward the goal he
+      // attacks); 1.5 s later: still his and the defender behind him = beaten, the ball lost = failed
+      if (ms.game_mode == 0 && to_t < 0 && ms.ball_owner_team >= 0 && ms.ball_owner_player >= 0) {
+        const int oi = ms.ball_owner_team * 11 + ms.ball_owner_player;
+        const float att = ms.ball_owner_team == 0 ? 1.f : -1.f;   // the left team attacks +x (gf_state frame)
+        const afc::GfPlayer& me = ms.players[oi];
+        for (int j = 0; j < 11; j++) {
+          const int dj = (1 - ms.ball_owner_team) * 11 + j;
+          const float dx = (ms.players[dj].pos[0] - me.pos[0]) * att, dy = ms.players[dj].pos[1] - me.pos[1];
+          if (dx > 0.3f && dx < 2.0f && std::fabs(dy) < 1.2f) { to_t = 0; to_owner = oi; to_def = dj; to_att = att; to_n++; break; }
+        }
+      } else if (to_t >= 0) {
+        to_t++;
+        const int oi = ms.ball_owner_team >= 0 ? ms.ball_owner_team * 11 + ms.ball_owner_player : -1;
+        if (oi >= 0 && oi / 11 != to_owner / 11) { to_fail++; to_t = -1; }
+        else if (to_t >= 150) {
+          if (oi == to_owner && (ms.players[to_def].pos[0] - ms.players[to_owner].pos[0]) * to_att < -0.5f) to_won++;
+          to_t = -1;
+        }
+      }
       if (ms.game_mode == 0 && f % 10 == 0) {
         // the left team's shape: outfield distance up the pitch from its own keeper, and spread across it
         float cx = 0.f, cy = 0.f;
@@ -514,9 +548,11 @@ int main(int argc, char** argv) {
   }
   if (aim_n) printf("AIM passes %d  reached the man aimed at %d  went to the nearest %d  lost %d\n", aim_n, aim_hit, aim_nearest, aim_lost);
   if (gl_in + gl_over + gl_wide) printf("GOALLINE in %d over %d wide %d\n", gl_in, gl_over, gl_wide);
+  { extern int afc_header_count; if (cross_n) printf("HEADERS assisted %d\n", afc_header_count); }
   if (cross_n) printf("CROSS crosses %d  first-time shots %d  off the ground %d\n", cross_n, cross_shots, cross_air);
   if (tap_n) printf("TAP passes %d  within 3 m of the spot %d  mean closest %.1f m\n", tap_n, tap_hit, tap_sum / tap_n);
   if (tac_n) printf("TAC left depth %.2f m  width %.2f m  regains %d  within 5 s %d\n", tac_depth / tac_n, tac_width / tac_n, regains_left, quick_regains);
+  printf("TAKEON faced %d  beaten %d  lost %d\n", to_n, to_won, to_fail);
   printf("STATS possession_changes %d  goal_kicks %d  free_kicks %d  corners %d  throw_ins %d  penalties %d  in_play %.0f%%\n",
          poss_changes, restarts[2], restarts[3], restarts[4], restarts[5], restarts[6], 100.0 * in_play / stop);
   if (feel_test)
