@@ -7,7 +7,7 @@ the plan is the one Google followed with the same parent engine: the engine simu
 | Stage | Status |
 |---|---|
 | Z1 build their game as-is on Linux, play a match | done (full match, recorded) |
-| Z2 headless library: their engine minus menus / viewer / OpenGL renderer; `NullRenderer3D` (here, generated from their `interface_renderer3d.hpp`, all 69 methods, compiles); AFC's SDL stand-in (`native/shims`); SQLite built in | started |
+| Z2 headless: `NullRenderer3D` (generated from their `interface_renderer3d.hpp`, all 69 methods + the message loop), chosen by `"graphics3d_renderer" "null"` (patches/zocram-headless.patch on their efd50d9). A full match plays with no window, no GL and no display (Linux). Next: their menus out of the loop, step-driven frames, AFC's SDL stand-in, SQLite built in | in progress |
 | Z3 `ZFEngine` GDExtension with GFEngine's API (start / frames / poses / state / set_input); a match frame = `match->Process()` + `PreparePutBuffers()` (GameTask::ProcessPhase), called in step | |
 | Z4 Android build, a separate app (own package and name) beside AFC | |
 
