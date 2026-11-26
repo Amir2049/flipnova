@@ -80,7 +80,7 @@
          if (distanceRating + angleRating < bestRating) {
            DO_VALIDATION;
            bestRating = distanceRating + angleRating;
-@@ -1187,6 +1206,19 @@
+@@ -1187,6 +1206,42 @@
  
    goalPos.coords[1] =
        sideFactor * goalHalfWidth * 0.9f * player->GetTeam()->GetDynamicSide();
@@ -93,7 +93,30 @@
 +      float shooting = clamp(player->GetStat(technical_shot) * 0.7f + player->GetStat(mental_calmness) * 0.3f, 0.0f, 1.0f);
 +      float open = goalHalfWidth - (0.2f + (1.0f - shooting) * 3.5f);
 +      if (open > 0.0f) {
-+        goalPos.coords[1] = keeper->GetPosition().coords[1] >= 0.0f ? -open : open;
++        // zocram4cc b2688e7: the corner by its value - the lane to each post with fewer bodies in it (2 m either side
++        // of the line, past the ball, short of the goal) is the open one; level, the post the keeper is further from
++        const Vector3 origin = player->GetPosition() + player->GetMovement() * 0.12f;
++        std::vector<Player*> opponents;
++        player->GetTeam()->GetMatch()->GetTeam(abs(player->GetTeam()->GetID() - 1))->GetActivePlayers(opponents);
++        auto bodies = [&](float y) {
++          const Vector3 end(goalPos.coords[0], y, 0);
++          const Vector3 lane = end - origin;
++          const float len = lane.GetLength();
++          if (len < 0.1f) return 0;
++          const Vector3 dir = lane / len;
++          int n = 0;
++          for (Player *o : opponents) {
++            if (o->GetFormationEntry().role == e_PlayerRole_GK) continue;   // the keeper is the other question
++            const Vector3 to = o->GetPosition().Get2D() - origin;
++            const float along = to.GetDotProduct(dir);
++            if (along > 0.0f && along <= len && (to - dir * along).GetLength() < 2.0f) n++;
++          }
++          return n;
++        };
++        const int left = bodies(-open), right = bodies(open);
++        float corner = keeper->GetPosition().coords[1] >= 0.0f ? -open : open;
++        if (left != right) corner = left < right ? -open : open;
++        goalPos.coords[1] = corner;
 +      }
 +    }
 +  }
@@ -416,18 +439,19 @@
        huntDistanceThreshold *= 0.5f * CastPlayer()->GetFatigueFactorInv() +
                                 0.5f * (1.0f - NormalizedClamp(CastPlayer()->GetAverageVelocity(10), idleVelocity, sprintVelocity));
        huntDistanceThreshold *=
-@@ -813,6 +837,10 @@
+@@ -813,6 +837,11 @@
    state->process(lastDesiredVelocity);
  }
  
 +// real squads, 8 matches: weight 0 / 0.15 / 0.3 -> possession lost 959 / 925 / 913, shots 175 / 184 / 192
 +static const float afc_chance_w = 0.3f;
++static const float afc_runner_w = getenv("GF_RUNNER_W") ? (float)atof(getenv("GF_RUNNER_W")) : 0.3f;
 +static const float afc_chain_w = 0.6f;   // HELIOS-style two-step chain: 0 → 915 lost, 0.3 → 884, 0.6 → 853 (8 real-squad matches)
 +
  void ElizaController::GetOnTheBallCommands(
      std::vector<PlayerCommand> &commandQueue, Vector3 &rawInputDirection,
      float &rawInputVelocityFloat) {
-@@ -869,6 +897,7 @@
+@@ -869,6 +898,7 @@
      float tacticalDiffRating = 0.0f;
      float passRating = 0.0f;
      float proximityRating = 0.0f;
@@ -435,7 +459,7 @@
      e_FunctionType passType;
    };
  
-@@ -897,15 +926,31 @@
+@@ -897,15 +927,31 @@
        mateRating.player = mates[i];
        mateRating.tacticalRating = mateTacticalRating;
  
@@ -469,14 +493,14 @@
          if (passingOddsShort >= passingOddsLong &&
              passingOddsShort >= passingOddsHigh) {
            DO_VALIDATION;
-@@ -921,8 +966,71 @@
+@@ -921,8 +967,75 @@
          }
  
          float totalRating = mateRating.tacticalDiffRating * tacticalDiffWeight +
 -                            mateRating.passRating * passWeight -
 +                            mateRating.passRating * passWeight + mateRating.supportRating -
                              oneTouchIsHard;
-+        if (isActiveRunner) totalRating += 0.3f;
++        // (the runner's bonus is priced with his chance, below)
 +        // AFC, after HELIOS base's action chain (MIT, helios-base/src/player/planner, sample_field_evaluator.cpp):
 +        // look two steps ahead. A state is worth how far up the pitch the ball is plus how close to goal (HELIOS:
 +        // x + max(0, 40 - goal distance)), with a big bonus when the man on it can shoot; a pass is worth the better
@@ -538,11 +562,15 @@
 +          const float angle = 0.25f + 0.75f * (d > 0.0f ? clamp(fabs(toGoal.coords[0]) / d, 0.0f, 1.0f) : 1.0f);
 +          const float xg = 0.97f * std::exp(-d / 9.0f) * angle / (1.0f + 0.35f * bodies);
 +          totalRating += afc_chance_w * clamp(xg / 0.1f, 0.0f, 3.0f) * (0.5f + mates[i]->GetStat(technical_shot));
++          // zocram4cc fd31ea5 + b270241: the ball into the runner's path is worth the chance he shoots from and what he
++          // is as a finisher - it was a flat +0.3 wherever he ran (a reference chance of 0.1 xG keeps the old level)
++          if (isActiveRunner)
++            totalRating += afc_runner_w * clamp(xg / 0.1f, 0.25f, 2.0f) * (0.5f + mates[i]->GetStat(technical_shot));
 +        }
  
          totalRating /= totalWeight2;
  
-@@ -957,12 +1065,12 @@
+@@ -957,12 +1070,12 @@
             bestMateRating.passRating < panicProneness * goalCloseness) &&
            possessionAmount < 0.9f + panicProneness * goalCloseness * 0.8f) {
          DO_VALIDATION;
@@ -557,7 +585,7 @@
        }
      }
    }
-@@ -978,12 +1086,26 @@
+@@ -978,12 +1091,26 @@
                         player->GetPosition())
                            .GetLength(),
                        0.0f, 32.0f);
@@ -585,7 +613,7 @@
    idealShotPosFactor = curve(idealShotPosFactor, 1.0f);
    if (idealShotPosFactor > 0.1f) {
      DO_VALIDATION;
-@@ -1010,7 +1132,29 @@
+@@ -1010,7 +1137,29 @@
  
      odds = std::pow(odds, 0.5f);
  
@@ -616,7 +644,7 @@
        DO_VALIDATION;
        PlayerCommand command;
        command.desiredFunctionType = e_FunctionType_Shot;
-@@ -1019,8 +1163,8 @@
+@@ -1019,8 +1168,8 @@
        command.desiredVelocityFloat = rawInputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
        command.touchInfo.desiredDirection =
            (Vector3((pitchHalfW + 1.0f) * -team->GetDynamicSide(),
@@ -627,7 +655,7 @@
                     0) -
             (CastPlayer()->GetPosition() + CastPlayer()->GetMovement() * 0.2f))
                .GetNormalized(Vector3(-team->GetDynamicSide(), 0, 0));
-@@ -1055,7 +1199,7 @@
+@@ -1055,7 +1204,7 @@
    commandQueue.push_back(command);
  }
  
@@ -636,7 +664,7 @@
    DO_VALIDATION;
  
    int yside = signSide(player->GetDirectionVec().coords[1]); // > 0 ? 1 : -1;
-@@ -1065,6 +1209,20 @@
+@@ -1065,6 +1214,20 @@
            .GetNormalized(0) +
        Vector3(0, 0, 0.3f);
    sensibleAwayDir.Normalize(player->GetDirectionVec());
@@ -657,7 +685,7 @@
  
    PlayerCommand command;
    command.useDesiredMovement = false;
-@@ -1142,7 +1300,9 @@
+@@ -1142,7 +1305,9 @@
  
          Vector3 originToBallPos = (intersect - origin);
          float penaltyTime = (passType == e_FunctionType_HighPass && u > 0.5f) ? 2.5f : 0.0f; // trapping high balls takes time
@@ -1397,7 +1425,7 @@
  #include "../../../utils/animationextensions/footballanimationextension.hpp"
  #include "../../AIsupport/AIfunctions.hpp"
  #include "../playerbase.hpp"
-+static const float afc_shot_floor = getenv("GF_SHOT_FLOOR") ? (float)atof(getenv("GF_SHOT_FLOOR")) : 0.25f;   // real squads, 8 matches: 2.75 goals a match (real ~2.7)
++static const float afc_shot_floor = getenv("GF_SHOT_FLOOR") ? (float)atof(getenv("GF_SHOT_FLOOR")) : 0.28f;   // real squads, 16 matches: 0.25 -> 3.3 goals a match, 0.30 -> 2.2 (real ~2.7)
 +static const float afc_shot_press = getenv("GF_SHOT_PRESS") ? (float)atof(getenv("GF_SHOT_PRESS")) : 0.25f;
 +static const float afc_press_r = 2.5f;
  
@@ -1516,8 +1544,14 @@
  
    Vector3 shot = desiredShot * (1.0f - worstCaseFactor) +
                   worstCaseShot * worstCaseFactor;
-@@ -509,12 +580,13 @@
-   float randomCurveFactor = 0.3f + worstCaseFactor * 0.7f;
+@@ -506,15 +577,18 @@
+ 
+   // add a little curve
+ 
+-  float randomCurveFactor = 0.3f + worstCaseFactor * 0.7f;
++  // zocram4cc b2688e7: the ball's swerve in flight goes with the finisher (0.05 for the best, 1 for the worst) - the
++  // strike's scatter already carries his error, and 0.3 + worstCaseFactor * 0.7 made even a perfect strike wobble
++  float randomCurveFactor = 0.05f + (1.0f - clamp(player->GetStat(technical_shot), 0.0f, 1.0f)) * 0.95f;
    float plannedCurveFactor = 0.7f;
  
 -  // forward/backward 'curve'
@@ -1533,7 +1567,7 @@
           (boostrandom(-20, 20) * randomCurveFactor);
  
    // lateral curve
-@@ -523,8 +595,9 @@
+@@ -523,8 +597,9 @@
    bodyTouchAngle *= 2.0f;
    //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
    radian amount = bodyTouchAngle * 0.25f;
@@ -1795,7 +1829,16 @@
    // disable
    //offsideTrapX = pitchHalfW * team->GetSide();
  
-@@ -233,8 +265,10 @@
+@@ -227,14 +259,18 @@
+         Player *runner = SelectAttackingRunPlayer(team);
+         if (runner) {
+           DO_VALIDATION;
+-          float distance = (runner->GetPosition() - team->GetDesignatedTeamPossessionPlayer()->GetPosition()).GetLength();
++          // AFC, from zocram4cc 1c242ad: no carrier yet (nobody has touched the ball) read as far away, not a null read
++          Player *carrier = team->GetDesignatedTeamPossessionPlayer();
++          float distance = carrier ? (runner->GetPosition() - carrier->GetPosition()).GetLength() : 40.0f;
+           float distanceRating =
+               std::pow(1.0f - NormalizedClamp(distance, 0, 40), 0.5f);
  
            // more likely to run when there's less defenders in front
            std::vector<Player*> opponents;
@@ -1807,7 +1850,7 @@
            AI_GetClosestPlayers(team->GetMatch()->GetTeam(abs(team->GetID() - 1)), spot, false, opponents, 4);
            float oppDensityRating = 1.0f;
            for (unsigned int i = 0; i < opponents.size(); i++) {
-@@ -318,6 +352,12 @@
+@@ -318,6 +354,12 @@
    }
  }
  
@@ -1820,7 +1863,7 @@
  Vector3 TeamAIController::GetAdaptedFormationPosition(
      Player *player, bool useDynamicFormationPosition) {
    DO_VALIDATION;
-@@ -469,6 +509,21 @@
+@@ -469,6 +511,21 @@
  
    Vector3 desiredPos = AI_GetAdaptedFormationPosition(team->GetMatch(), player, backXBound, frontXBound, lowYBound, highYBound, xFocus, xFocusStrength, yFocus, yFocusStrength, microFocus, microFocusStrength, midfieldFocus, midfieldFocusStrength, useDynamicFormationPosition);
  
@@ -1842,7 +1885,7 @@
    desiredPos.coords[0] = clamp(desiredPos.coords[0], -pitchHalfW, pitchHalfW);
    desiredPos.coords[1] = clamp(desiredPos.coords[1], -pitchHalfH, pitchHalfH);
  
-@@ -706,6 +761,12 @@
+@@ -706,6 +763,12 @@
      if (players.size() == 0) break;
    }
    //printf("\n");
@@ -1855,7 +1898,7 @@
  }
  
  void TeamAIController::ApplyOffsideTrap(Vector3 &position) const {
-@@ -1184,7 +1245,7 @@
+@@ -1184,7 +1247,7 @@
  
  void TeamAIController::ApplyTeamPressure() {
    DO_VALIDATION;
@@ -1864,7 +1907,7 @@
  
    Player *opp = match->GetTeam(abs(team->GetID() - 1))->GetBestPossessionPlayer();
    Vector3 opponentPos = opp->GetPosition() + opp->GetMovement() * 0.24f;
-@@ -1200,6 +1261,37 @@
+@@ -1200,6 +1263,37 @@
    }
  }
  
@@ -1902,7 +1945,7 @@
  void TeamAIController::ApplyKeeperRush() {
    DO_VALIDATION;
    endApplyKeeperRush_ms = match->GetActualTime_ms() + 300;
-@@ -1277,6 +1369,17 @@
+@@ -1277,6 +1371,17 @@
      }
      iter++;
    }

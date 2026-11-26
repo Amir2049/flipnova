@@ -227,6 +227,26 @@ ground pass never waits to see if a second tap comes; a double tap on your own p
   control) and a clear power shot (hold SHOOT: orange ring, POWER, a buzz).
 - Match guard (2.59): a match that closes while loading or draws no pitch steps the graphics down for the next start.
 
+## 2.64: the rest of zocram4cc, item by item
+
+zocram4cc/GameplayFootball now has 986 commits. Its engine-play commits not yet in AFC were read one by one:
+
+| Commit | What | AFC |
+|---|---|---|
+| 1c242ad | four upstream fixes | the run probe's direction was already in (League-Soccer); the carrier null guard taken; advantage-on-second-caution needs their CardBook (we have none); pitch sampler / adboard / overlay are their renderer |
+| fd31ea5 + b270241 | the runner priced by the chance he shoots from and what he is as a finisher | taken (it was a flat +0.3): 8 real-squad matches, ball lost 910 -> 879, on target 52 -> 41 % |
+| b2688e7 | the corner by value (fewer bodies in the lane to that post); swerve by finisher | taken; with it the shot floor re-tuned 0.25 -> 0.28 on 16 matches (0.25: 3.3 goals a match, 0.30: 2.2; real ~2.7) |
+| 5444f5b | a first-time pass completes the pass | their stats bookkeeping (AFC counts in Godot) |
+| 185bae2, c57c6c1 | the referee restarts a dead ball on real time | AFC's own: throw-ins take CROSS / SHOOT, a set piece of ours is taken after 15 s |
+| f8d5557 | shots miss | AFC's own, calibrated on Opta / StatsBomb (error floor + defender pressure) |
+| a9eba32 / 5c44452, ffc54b5, f014008, 731434b, 0b4af6e | keeper reach, strike band, placement depth, point-blank saves | parts of their save model (f14c99d), which replaces a coin flip our engine never had |
+| c5d2909 | catch by pace | not taken: our retain code needs the catch clip (2.4x) |
+| d38450e | shoot-out aim | their shoot-out mode |
+| e8852de | line-up: drag the formation, subs from the bench | a Godot screen to build (AFC has the tactics board) |
+
+Of their ~300 other commits since 2.45: PES model / kit / face import (Konami data: never), their renderer, their broadcast
+cut-scenes (AFC draws its own in Godot), and the measurement harness.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.
