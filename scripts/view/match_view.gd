@@ -222,6 +222,18 @@ func _environment() -> void:
 		e.glow_hdr_threshold = 1.2
 		e.fog_density *= 0.3            # the same fog in linear light washed the far pitch grey
 		e.adjustment_saturation += 0.08
+	# Ultra (Forward+, strong phones only - Settings > Graphics engine): contact shading where bodies meet the grass
+	# and each other, and the wet pitch mirrors the stadium in the rain
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		e.ssao_enabled = true
+		e.ssao_radius = 0.8
+		e.ssao_intensity = 1.6
+		e.ssao_power = 1.4
+		e.ssao_detail = 0.6
+		e.glow_hdr_threshold = 1.6      # the white lines bloomed into a haze
+		if rain:
+			e.ssr_enabled = true
+			e.ssr_max_steps = 48
 	env.environment = e
 	add_child(env)
 	sun = DirectionalLight3D.new()

@@ -53,9 +53,11 @@ func _ready() -> void:
 	body.add_child(UI.choice_row("Graphics", QUALITY, int(Profile.get_s("quality")), func(i: int): _apply("quality", i)))
 	var boot = load("res://scripts/boot.gd")
 	var rnote := UI.label("", 15, UI.MUTED)
-	body.add_child(UI.choice_row("Graphics engine", ["Vulkan (best look)", "OpenGL (older phones)"], 0 if boot.vulkan_wanted() else 1, func(i: int):
-		boot.set_vulkan(i == 0)
-		rnote.text = "Restart the game to switch." if (i == 0) != boot.vulkan_on() else ""))
+	var modes := ["ultra", "vulkan", "opengl"]
+	body.add_child(UI.choice_row("Graphics engine", ["Ultra (strong phones)", "Vulkan (recommended)", "OpenGL (older phones)"],
+		modes.find(boot.renderer_wanted()), func(i: int):
+		boot.set_renderer(modes[i])
+		rnote.text = "Restart the game to switch." if modes[i] != boot.renderer_now() else ""))
 	body.add_child(rnote)
 	body.add_child(UI.toggle_row("Radar", Profile.get_s("radar"), func(v: bool): _apply("radar", v)))
 	body.add_child(UI.toggle_row("Player names", Profile.get_s("names"), func(v: bool): _apply("names", v)))

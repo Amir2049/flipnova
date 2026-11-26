@@ -105,6 +105,11 @@ static func dress(model: Node3D, k: Dictionary, number: int, is_gk: bool, rng: R
 		skin.albedo_color = tone
 	skin.vertex_color_use_as_albedo = true   # brows, lips and eyelids are vertex colours on the skin
 	skin.roughness = 0.55
+	# Ultra (Forward+): light goes into the skin and comes back warm, the way skin is not plastic
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		skin.subsurf_scatter_enabled = true
+		skin.subsurf_scatter_strength = 0.35
+		skin.subsurf_scatter_skin_mode = true
 	skin.rim_enabled = true
 	skin.rim = 0.3
 	skin.rim_tint = 0.4

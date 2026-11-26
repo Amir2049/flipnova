@@ -148,26 +148,42 @@ static func vulkan_on() -> bool:
 	return RenderingServer.get_current_rendering_method() != "gl_compatibility"
 
 
-static func vulkan_wanted() -> bool:
-	return not FileAccess.file_exists(RENDER_OVERRIDE)
+## "ultra" (Forward+: contact shading, skin that lets light in - strong phones), "vulkan" (Mobile, the default),
+## "opengl" (Compatibility, older phones)
+static func renderer_wanted() -> String:
+	if not FileAccess.file_exists(RENDER_OVERRIDE):
+		return "vulkan"
+	return "ultra" if FileAccess.get_file_as_string(RENDER_OVERRIDE).contains("forward_plus") else "opengl"
+
+
+static func renderer_now() -> String:
+	match RenderingServer.get_current_rendering_method():
+		"forward_plus": return "ultra"
+		"gl_compatibility": return "opengl"
+	return "vulkan"
+
+
+static func set_renderer(mode: String) -> void:
+	if mode == "vulkan":
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(RENDER_OVERRIDE))
+		return
+	var m := "forward_plus" if mode == "ultra" else "gl_compatibility"
+	var f := FileAccess.open(RENDER_OVERRIDE, FileAccess.WRITE)
+	if f:
+		f.store_string('[rendering]\nrenderer/rendering_method="%s"\nrenderer/rendering_method.mobile="%s"\n' % [m, m])
+		f.flush()
 
 
 static func set_vulkan(on: bool) -> void:
-	if on:
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(RENDER_OVERRIDE))
-		return
-	var f := FileAccess.open(RENDER_OVERRIDE, FileAccess.WRITE)
-	if f:
-		f.store_string('[rendering]\nrenderer/rendering_method="gl_compatibility"\nrenderer/rendering_method.mobile="gl_compatibility"\n')
-		f.flush()
+	set_renderer("vulkan" if on else "opengl")
 
 
 static func _check_renderer() -> void:
 	if not vulkan_on():
 		return
 	if FileAccess.file_exists(VK_PENDING):
-		# the last start on Vulkan never got to the title: the next one runs on OpenGL
-		set_vulkan(false)
+		# the last start never got to the title: one step down (Ultra -> Vulkan -> OpenGL)
+		set_renderer("vulkan" if renderer_now() == "ultra" else "opengl")
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(VK_PENDING))
 		return
 	var f := FileAccess.open(VK_PENDING, FileAccess.WRITE)
