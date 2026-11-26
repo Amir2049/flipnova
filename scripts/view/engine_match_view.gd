@@ -980,6 +980,7 @@ func _cpu_subs() -> void:
 
 func _start_replay() -> void:
 	replay_t = 0.0
+	_plan_replay()
 	for v in pviews:
 		v.clip = {}
 	touch.release_all()
@@ -988,35 +989,117 @@ func _start_replay() -> void:
 	name_lbl.visible = false
 	stamina_bar.visible = false
 	hint_lbl.visible = false
+	radar_was = radar.visible
+	radar.visible = false
 	replay_root = Control.new()
 	replay_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	replay_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(replay_root)
-	var tag := UI.label("  REPLAY  ", 26, UI.INK)
+	replay_tag = UI.label("  REPLAY  ", 26, UI.INK)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = UI.ACCENT
 	sb.set_corner_radius_all(4)
-	tag.add_theme_stylebox_override("normal", sb)
-	tag.position = Vector2(24, 96)
-	replay_root.add_child(tag)
+	replay_tag.add_theme_stylebox_override("normal", sb)
+	replay_tag.position = Vector2(24, 96)
+	replay_root.add_child(replay_tag)
 	var skip := UI.button("SKIP  ▶", func(): _end_replay(), Vector2(150, 56), "normal", 20)
 	skip.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	skip.position = Vector2(-180, -90)
 	replay_root.add_child(skip)
 
 
+## The goal as TV shows it (zocram4cc's broadcast cuts, rebuilt for AFC): the move from the broadcast camera, the
+## finish again at half speed from behind the net, then the scorer close up from pitch level.
+var replay_cuts: Array = []       # [{from, to, speed, cam}] in recorded frames (60 / REC_EVERY a second)
+var replay_cut_i := 0
+var replay_tag: Label
+var replay_shooter := -1
+var radar_was := false
+
+func _plan_replay() -> void:
+	var n := replay_buf.size()
+	var fps := 60.0 / REC_EVERY
+	# the frame the ball crosses the line (or the end)
+	var g := n - 1
+	for k in n:
+		var b: Vector3 = replay_buf[k][1]
+		if absf(b.x) > 52.6 and absf(b.y) < 4.0:
+			g = k
+			break
+	# the shooter: who was nearest the ball as it was struck (the last frame it was within 1.2 m of a player before
+	# the line)
+	replay_shooter = -1
+	for k in range(g, maxi(0, g - int(fps * 3.0)), -1):
+		var p: PackedFloat32Array = replay_buf[k][0]
+		var b: Vector3 = replay_buf[k][1]
+		for i in 22:
+			if Vector2(p[i * stride], p[i * stride + 1]).distance_to(Vector2(b.x, b.y)) < 1.2 and i % 11 != 0:
+				replay_shooter = i
+				break
+		if replay_shooter >= 0:
+			break
+	if replay_shooter < 0:
+		# nobody within reach: the outfield player nearest the ball at the line
+		var p: PackedFloat32Array = replay_buf[g][0]
+		var b: Vector3 = replay_buf[g][1]
+		var best := 1e9
+		for i in 22:
+			if i % 11 == 0:
+				continue
+			var d := Vector2(p[i * stride], p[i * stride + 1]).distance_to(Vector2(b.x, b.y))
+			if d < best:
+				best = d
+				replay_shooter = i
+	var gx: float = (replay_buf[g][1] as Vector3).x
+	replay_cuts = [
+		{"from": maxi(0, g - int(fps * 5.0)), "to": mini(n - 1, g + int(fps * 1.5)), "speed": 1.0, "cam": "tv"},
+		{"from": maxi(0, g - int(fps * 2.5)), "to": mini(n - 1, g + int(fps * 0.8)), "speed": 0.5, "cam": "goal", "side": signf(gx)},
+	]
+	if replay_shooter >= 0:
+		replay_cuts.append({"from": maxi(0, g - int(fps * 1.6)), "to": mini(n - 1, g + int(fps * 0.4)), "speed": 0.6, "cam": "close"})
+	replay_cut_i = 0
+
+
 func _replay_step(dt: float) -> void:
 	replay_t += dt
-	var idx := int(replay_t * 60.0 / REC_EVERY)
-	if idx >= replay_buf.size():
+	if replay_cut_i >= replay_cuts.size():
 		_end_replay()
 		return
+	var c: Dictionary = replay_cuts[replay_cut_i]
+	var fps := 60.0 / REC_EVERY
+	var idx: int = int(c["from"]) + int(replay_t * fps * float(c["speed"]))
+	var first := replay_t <= dt + 0.0001
+	if idx > int(c["to"]):
+		replay_cut_i += 1
+		replay_t = 0.0
+		return
+	if replay_tag:
+		replay_tag.text = "  REPLAY  %d/%d  " % [replay_cut_i + 1, replay_cuts.size()] + ("  ◀◀ SLOW  " if float(c["speed"]) < 0.9 else "")
 	var fr: Array = replay_buf[idx]
-	_draw_frame(fr[0], fr[1], fr[2], dt)
+	_draw_frame(fr[0], fr[1], fr[2], dt * float(c["speed"]))
 	ring.visible = false
 	marker.visible = false
 	cam.external = false
-	cam.follow_replay(ball_proxy, dt, idx == 0, 0.0)
+	match str(c["cam"]):
+		"tv":
+			cam.follow_replay(ball_proxy, dt, first, 0.0)
+		"goal":
+			cam.follow_replay(ball_proxy, dt, first, float(c["side"]))
+		"close":
+			cam.external = true
+			var me: Vector3 = pviews[replay_shooter].position
+			var goal := Vector3(52.5 * signf((replay_buf[int(c["to"])][1] as Vector3).x), 0.0, 0.0)
+			var to_goal := (goal - me)
+			to_goal.y = 0.0
+			to_goal = to_goal.normalized() if to_goal.length() > 0.1 else Vector3.RIGHT
+			var side := to_goal.cross(Vector3.UP).normalized()
+			var want := me + side * 4.2 + to_goal * 1.5 + Vector3(0, 1.3, 0)
+			var look := me + Vector3(0, 1.0, 0) + to_goal * 0.8
+			var k := 1.0 if first else 1.0 - exp(-dt * 5.0)
+			cam.replay_pos = cam.replay_pos.lerp(want, k)
+			cam.replay_look = cam.replay_look.lerp(look, k)
+			cam.fov = lerpf(cam.fov, 38.0, k)
+			cam.look_at_from_position(cam.replay_pos, cam.replay_look, Vector3.UP)
 
 
 func _end_replay() -> void:
@@ -1024,6 +1107,7 @@ func _end_replay() -> void:
 		return
 	replay_t = -1.0
 	replay_buf = []
+	radar.visible = radar_was
 	if replay_root:
 		replay_root.queue_free()
 		replay_root = null
