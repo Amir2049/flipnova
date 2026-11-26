@@ -187,6 +187,26 @@ ground pass never waits to see if a second tap comes; a double tap on your own p
 - Tried, not taken: a scripted CPU take-on (a cut at close-control pace, then a burst): defenders beaten 32 -> 34-36
   of ~780 faced, ball lost 199 -> 241-268. gftest TAKEON counts take-ons for both teams.
 
+## 2.58: the "crash" was a freeze at throw-ins; mocap on the grass; FBX pipeline; graphics without lag
+
+- The match "crash": on ARM (the phone's build, under qemu) every test match froze from about 27' at a throw-in
+  of ours. At a throw-in the engine refuses a high pass and a shot, so CROSS, SHOOT or a long press on the pitch did
+  nothing and the game sat there. Now they take a long throw (ARM: 2 stalls a match -> 0 in 3 matches), and a set
+  piece of ours left 15 s is taken with PASS. Two full monkey matches in the real view (random stick, buttons,
+  taps, tactics, styles, forced replays, half time): STRESS OK.
+- HELIOS-style thinking (helios-base, MIT): a pass is priced by where it puts the ball and the best pass the
+  receiver has next (each step weighted by its lane odds). Weight 0 / 0.3 / 0.6 on 8 real-squad matches:
+  possession lost 915 / 884 / 853 -> 0.6.
+- Mocap: forward kinematics on AFC's own skeleton showed every celebration, walk and jog floating ~6 cm (the CMU
+  BVH hip joint sits ~10 cm above the thighs). Every clip now stands its lowest ankle on the grass.
+- One retarget tool for every source: BVH directly, any FBX (CMU FBX, Mixamo, Unreal/Rokoko rigs) through Blender
+  headless (tools/blender/fbx_joints.py), a whole pack folder in one command (tools/mocap/README.md). Checked on
+  the same CMU clip from both sources: same timing, legs within 5-8 deg. Six CMU soccer kicks added.
+- Graphics without lag: below full resolution on Vulkan the picture is brought back with AMD FSR 1.0 (edge-aware
+  upscale + sharpening) instead of a bilinear stretch; players far from the camera (38 m+) get a new skeleton pose
+  every other frame, off-screen ones every fourth (positions still every frame; replays and the man on the ball
+  always full).
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.
