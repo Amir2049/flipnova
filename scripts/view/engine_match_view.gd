@@ -460,6 +460,26 @@ func _input_to_engine() -> void:
 	if tap_frames > 0 and atk:
 		b |= tap_bits
 		tap_frames -= 1
+	# a first-time finish remembered: SHOOT pressed while our cross / lofted ball is in the air - even before control
+	# has passed to the man it is going to - is played again as the ball reaches him, so the header or volley is
+	# struck by the right man (the press used to land on the crosser and be lost)
+	if atk:
+		var bz: Vector3 = st["ball"]
+		var bvz: Vector3 = st["ball_vel"]
+		var flying := bz.z > 0.8 and int(st["owner_team"]) < 0 and Vector2(bvz.x, bvz.y).length() > 4.0
+		if flying and (b & B_SHOT) != 0:
+			finish_pending = true
+		if not flying and bz.z < 0.5:
+			finish_pending = false
+		var ctl2: int = st["controlled"]
+		if finish_pending and flying and ctl2 >= 0:
+			var me2 := Vector2(poses[ctl2 * stride], poses[ctl2 * stride + 1])
+			if me2.distance_to(Vector2(bz.x, bz.y)) < 7.0:
+				finish_frames = 8
+				finish_pending = false
+		if finish_frames > 0:
+			b |= B_SHOT
+			finish_frames -= 1
 	if atk:
 		_skill_inputs(stick)
 	elif touch:
@@ -474,6 +494,8 @@ func _input_to_engine() -> void:
 
 
 ## The human's dribbler: has he got the ball (a skill move needs it)?
+var finish_pending := false
+var finish_frames := 0
 var tap_bits := 0
 var tap_frames := 0
 var tap_ring: MeshInstance3D
@@ -780,7 +802,9 @@ func _process(dt: float) -> void:
 	if replay_t >= 0.0:
 		_replay_step(dt)
 		return
-	if not paused and not full_time:
+	# the match stands still while the scorer celebrates (it ran on behind the close-up, and after the replay the
+	# game had already restarted - owner, 2.55)
+	if not paused and not full_time and cele_t <= 0.0:
 		_step(dt)
 	_update_views(dt)
 	if not paused and not full_time:

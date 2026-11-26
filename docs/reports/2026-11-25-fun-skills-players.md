@@ -158,6 +158,21 @@ ground pass never waits to see if a second tap comes; a double tap on your own p
   share, and IMPORT of a pasted one - how option files kept PES alive without licences; AFC itself ships only its
   invented names. tests/patch_test.gd.
 
+## 2.56: passing that answers the stick and the body (owner: "the pass goes to the nearest man")
+
+- gftest GF_AIM_TEST (the stick on a team-mate 15-35 m away who is not the nearest): the stock target pick rated
+  distance to a spot a metre or two ahead (the short pass has no power gauge), so the nearest man won: to the man
+  aimed at 19 of 189, the nearest 49. Now the stick's angle decides for the human, distance breaks ties: 60 of 167
+  to him, 18 to the nearest (the rest: a closer man on the same line).
+- A pass waits for the body: turning to play it costs up to ~260 ms (behind him; nothing straight ahead; agility
+  shortens it), a man within 3 m up to 120 ms (calm players less); the direction is the one pressed, so a thumb
+  moving during the turn does not send it elsewhere. Tap to ball on mixed angles 348 -> 469 ms.
+- Pressure costs accuracy for everyone: up to +0.2 pass difficulty inside 3 m. Real squads, 8 matches: possession
+  lost 885, 35 goals.
+- The match no longer runs on behind the goal celebration (after the replay the game had already restarted).
+- A first-time finish is remembered: SHOOT pressed while a cross is in the air - even before control passes to the
+  man it is going to - is pressed again as the ball reaches him.
+
 ## Still to take
 
 - League-Soccer: stoppage time, deferred cautions, wind, human sprint speeds.

@@ -210,6 +210,10 @@ int main(int argc, char** argv) {
   float tap_tx = 0.f, tap_ty = 0.f, tap_best = 0.f, tap_sum = 0.f;
   int tap_watch = -1, tap_n = 0, tap_hit = 0;
   float gl_prev = 0.f;
+  int aim_t = -1, aim_target = -1, aim_near = -1, aim_n = 0, aim_hit = 0, aim_nearest = 0, aim_lost = 0;
+  bool aim_done = false;
+  int aim_passer = -1;
+  float aim_dx = 1.f, aim_dy = 0.f;
   int gl_in = 0, gl_over = 0, gl_wide = 0;
   int cross_t = -1, cross_n = 0, cross_shots = 0, cross_air = 0;
   bool cross_shoot = false, cross_done = false, cross_pressed = false;
@@ -324,6 +328,38 @@ int main(int argc, char** argv) {
         if (std::fabs(ps.ball[1]) < 3.66f) { if (ps.ball[2] < 2.44f) gl_in++; else gl_over++; } else gl_wide++;
       }
       gl_prev = ps.ball[0];
+      // GF_AIM_TEST: the stick points at a team-mate who is NOT the nearest (15-35 m, any direction); a pass is
+      // pressed; AIM prints how often the ball reached the man aimed at, and how often the nearest instead
+      static const bool aim_test = getenv("GF_AIM_TEST") != nullptr;
+      if (aim_test && hold == 40 && aim_t < 0 && ps.game_mode == 0 && ps.controlled >= 0) {
+        const afc::GfPlayer& me = ps.players[ps.controlled];
+        int near = -1; float nd = 1e9f;
+        for (int i = 1; i < 11; i++) if (i != ps.controlled) {
+          float d = std::hypot(ps.players[i].pos[0] - me.pos[0], ps.players[i].pos[1] - me.pos[1]);
+          if (d < nd) { nd = d; near = i; }
+        }
+        int pick = -1; float pd = 0.f;
+        for (int i = 1; i < 11; i++) if (i != ps.controlled && i != near) {
+          float d = std::hypot(ps.players[i].pos[0] - me.pos[0], ps.players[i].pos[1] - me.pos[1]);
+          if (d > 15.f && d < 35.f && d > pd) { pd = d; pick = i; }
+        }
+        if (pick >= 0) {
+          aim_target = pick; aim_near = near; aim_t = 0; aim_n++; aim_passer = ps.controlled;
+          aim_dx = (ps.players[pick].pos[0] - me.pos[0]) / pd; aim_dy = (ps.players[pick].pos[1] - me.pos[1]) / pd;
+        }
+      }
+      if (aim_t >= 0) {
+        aim_t++;
+        if (getenv("GF_AIM_DEBUG") && (aim_t % 25 == 1)) printf("aim t%d target %d near %d ctl %d owner %d/%d\n", aim_t, aim_target, aim_near, ps.controlled, ps.ball_owner_team, ps.ball_owner_player);
+        // the engine hands control to the man a pass is played to: that first switch is who it chose
+        if (aim_t > 3 && !aim_done && ps.controlled >= 0 && ps.controlled != aim_passer && ps.ball_owner_team != 0) {
+          if (ps.controlled == aim_target) aim_hit++;
+          else if (ps.controlled == aim_near) aim_nearest++;
+          aim_done = true;
+        }
+        if (aim_t > 3 && !aim_done && ps.ball_owner_team == 1) { aim_lost++; aim_done = true; }
+        if (aim_t >= 250) { aim_t = -1; aim_done = false; }
+      }
       static const int tap_test = getenv("GF_TAP_TEST") ? atoi(getenv("GF_TAP_TEST")) : 0;
       // GF_CROSS_TEST: a lofted ball to the most advanced team-mate, then SHOOT held while it is in the air; counts
       // the first-time finishes (the next touch is a shot) and how many were struck off the ground (volley / header)
@@ -404,7 +440,8 @@ int main(int argc, char** argv) {
         tap_bits = afc::GF_SHOT | (shot_style == 1 ? afc::GF_CHIP : 0u) | (shot_style == 2 ? afc::GF_FINESSE : 0u) |
                    (shot_style == 3 ? afc::GF_LOW : 0u) | (shot_style == 4 ? afc::GF_POWER : 0u);
       if (getenv("GF_CROSS_TEST")) tap_bits = afc::GF_HIGH_PASS;
-      afc::gf_input(1.f, 0.f, (tap_left > 0 ? tap_bits : 0u) | (cross_shoot ? afc::GF_SHOT : 0u));
+      const bool aiming = getenv("GF_AIM_TEST") && aim_t >= 0 && aim_t < 30;
+      afc::gf_input(aiming ? aim_dx : 1.f, aiming ? aim_dy : 0.f, (tap_left > 0 ? tap_bits : 0u) | (cross_shoot ? afc::GF_SHOT : 0u));
       if (tap_left > 0) tap_left--;
     }
     afc::gf_frame();
@@ -475,6 +512,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 22; i++) { reds += fs.players[i].active == 0; yellows += fs.players[i].card == 1; }
     printf("CARDS red %d yellow %d\n", reds, yellows);
   }
+  if (aim_n) printf("AIM passes %d  reached the man aimed at %d  went to the nearest %d  lost %d\n", aim_n, aim_hit, aim_nearest, aim_lost);
   if (gl_in + gl_over + gl_wide) printf("GOALLINE in %d over %d wide %d\n", gl_in, gl_over, gl_wide);
   if (cross_n) printf("CROSS crosses %d  first-time shots %d  off the ground %d\n", cross_n, cross_shots, cross_air);
   if (tap_n) printf("TAP passes %d  within 3 m of the spot %d  mean closest %.1f m\n", tap_n, tap_hit, tap_sum / tap_n);

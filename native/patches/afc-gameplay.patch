@@ -32,7 +32,36 @@
  class IController;
 --- a/src/onthepitch/AIsupport/AIfunctions.cpp
 +++ b/src/onthepitch/AIsupport/AIfunctions.cpp
-@@ -1187,6 +1187,19 @@
+@@ -1016,6 +1016,12 @@
+       powerFactor;
+ }
+ 
++// gftest GF_AIM_TEST (stick on a team-mate 15-35 m away, not the nearest): to him 19 -> 60 of ~170, to the nearest
++// 49 -> 18 (steeper weights, 4.0 / 6.0, made no difference: what is left is a closer man on the same line)
++static const float afc_aim_pow = 0.85f;
++static const float afc_aim_w = 2.0f;
++static const float afc_aim_d = 0.35f;
++
+ void AI_GetPass(Player *player, e_FunctionType passType,
+                 const Vector3 &inputDirection, float inputPower,
+                 float autoDirectionBias, float autoPowerBias,
+@@ -1102,6 +1108,15 @@
+             0.8f;  // pow() this so small differences matter more - from some
+                    // point on, it just doesn't really matter that much anymore
+         float angleRating = fabs((targetPos - playerPos).GetNormalized(0).GetAngle2D(inputDirection) / (1.0f * pi)) * 1.0f;
++        if (player->ExternalControllerActive()) {
++          // AFC: the human's pass goes where the stick points (FC). The stock rating measured distance to a spot a
++          // metre or two ahead of him (the short pass has no power gauge), so the nearest man won almost always:
++          // gftest GF_AIM_TEST, the stick on a team-mate 15-35 m away who is not the nearest - 19 of 189 went to him.
++          // Now the angle decides; distance only breaks near-ties.
++          const float dist = (targetPos - playerPos).GetLength();
++          angleRating = std::pow(angleRating, afc_aim_pow) * afc_aim_w;
++          distanceRating = NormalizedClamp(dist, 0.0f, 70.0f) * afc_aim_d;
++        }
+         if (distanceRating + angleRating < bestRating) {
+           DO_VALIDATION;
+           bestRating = distanceRating + angleRating;
+@@ -1187,6 +1202,19 @@
  
    goalPos.coords[1] =
        sideFactor * goalHalfWidth * 0.9f * player->GetTeam()->GetDynamicSide();
@@ -393,7 +422,7 @@
      void _AddCelebration(std::vector<PlayerCommand> &commandQueue);
 --- a/src/onthepitch/player/controller/humancontroller.cpp
 +++ b/src/onthepitch/player/controller/humancontroller.cpp
-@@ -23,6 +23,14 @@
+@@ -23,6 +23,39 @@
  
  #include "../../../main.hpp"
  
@@ -403,24 +432,57 @@
 +// used once by the next pass. kind 1 = on the ground, 2 = in the air (lob, lofted through ball, cross).
 +float afc_tap_x = 0.0f, afc_tap_y = 0.0f;
 +int afc_tap_kind = 0;
++// AFC: a pass waits for the body. Turning to play it (the angle between where he faces and where it goes) and a man
++// on his back cost time before the ball leaves - a pass straight ahead in space goes at once (FC: the pass "takes
++// longer if the player has to turn or is under pressure"). Set when the pass is pressed, counted down per frame.
++static int afc_pass_hold_ms = 0;
++static Vector3 afc_pass_dir;   // the stick when the pass was pressed: it goes there even if the thumb moves while he turns
++static const float afc_pass_hold_k = 1.0f;   // gftest GF_AIM_TEST: tap to ball 348 -> 469 ms on mixed angles, aim kept
 +static const float afc_lob_k = 0.78f;   // gftest GF_TAP_TEST=2: lands within 1-2 m of the spot
++
++int HumanController::AfcPassHold_ms() {
++  // the turn: where the stick sends it against where his body faces
++  Vector3 dir = hid->GetDirection();
++  afc_pass_dir = dir;
++  if (dir.GetLength() < 0.1f) return 0;
++  dir.Normalize();
++  const float angle = fabs(CastPlayer()->GetDirectionVec().GetAngle2D(dir)) / pi;   // 0 ahead .. 1 behind
++  const float agility = CastPlayer()->GetStat(physical_agility);
++  float hold = std::pow(angle, 1.5f) * 260.0f * (1.25f - 0.5f * agility);
++  // the press: the nearest opponent within 3 m
++  float nearest = 100.0f;
++  for (Player *opp : match->GetTeam(1 - team->GetID())->GetAllPlayers()) {
++    if (!opp->IsActive()) continue;
++    nearest = std::min(nearest, (opp->GetPosition() - CastPlayer()->GetPosition()).GetLength());
++  }
++  hold += clamp((3.0f - nearest) / 2.0f, 0.0f, 1.0f) * 120.0f * (1.2f - 0.4f * CastPlayer()->GetStat(mental_calmness));
++  return int(hold * afc_pass_hold_k);
++}
 +
  HumanController::HumanController(Match *match, AIControlledKeyboard *hid)
      : PlayerController(match), hid(hid) {
    DO_VALIDATION;
-@@ -127,7 +135,10 @@
-     if (!hid->GetButton(actionButton) ||
+@@ -124,10 +157,17 @@
+   if (actionMode == 2) {
+     DO_VALIDATION;
+ 
+-    if (!hid->GetButton(actionButton) ||
++    const bool afcPass = actionButton == e_ButtonFunction_ShortPass || actionButton == e_ButtonFunction_LongPass ||
++                         actionButton == e_ButtonFunction_HighPass;
++    if (afcPass && afc_pass_hold_ms > 0 && gauge_ms + actionBufferTime_ms < afc_pass_hold_ms) {
++      // still turning / shrugging him off: the pass waits (the button may already be up)
++    } else if (!hid->GetButton(actionButton) ||
          (hid->GetButton(actionButton) &&
           gauge_ms >
 -             500) ||  // allow anim to kick in before queue is complete (before
 +             500) ||
 +        // AFC: a short pass goes on the press (20 ms), not on the release - on a touch screen the wait for the
 +        // thumb to lift made every pass feel ~0.5 s late; its power is automatic (below)
-+        (actionButton == e_ButtonFunction_ShortPass && gauge_ms >= 20) ||  // allow anim to kick in before queue is complete (before
++        (actionButton == e_ButtonFunction_ShortPass && gauge_ms >= 20 + afc_pass_hold_ms) ||  // allow anim to kick in before queue is complete (before
                        // button is released), it will usually touch ball after
                        // the remaining time anyway, so we still have time to add
                        // more power, yet still respond as fast as possible
-@@ -162,6 +173,47 @@
+@@ -162,6 +202,47 @@
  
          commandQueue.push_back(command);
  
@@ -468,7 +530,7 @@
        } else if (actionButton == e_ButtonFunction_ShortPass) {
          DO_VALIDATION;
  
-@@ -169,12 +221,17 @@
+@@ -169,12 +250,17 @@
          command.desiredFunctionType = e_FunctionType_ShortPass;
          command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
@@ -477,7 +539,8 @@
 +        if (hid->GetButton(e_ButtonFunction_Switch)) command.modifier |= e_PlayerCommandModifier_OneTwo;
  
          float inputPower = clamp(std::pow(gaugeFactor, 0.7f), 0.01f, 1.0f);
-         command.touchInfo.inputDirection = inputDirection;
+-        command.touchInfo.inputDirection = inputDirection;
++        command.touchInfo.inputDirection = afc_pass_dir.GetLength() > 0.1f ? afc_pass_dir.GetNormalized(inputDirection) : inputDirection;
          command.touchInfo.inputPower = inputPower;
 -        command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shortpass_autodirection", _default_ShortPass_AutoDirection);
 -        command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_shortpass_autopower", _default_ShortPass_AutoPower);
@@ -488,7 +551,25 @@
          AI_GetPass(CastPlayer(), command.desiredFunctionType, command.touchInfo.inputDirection, command.touchInfo.inputPower, command.touchInfo.autoDirectionBias, command.touchInfo.autoPowerBias, command.touchInfo.desiredDirection, command.touchInfo.desiredPower, command.touchInfo.targetPlayer);
  
          commandQueue.push_back(command);
-@@ -221,6 +278,11 @@
+@@ -188,7 +274,7 @@
+         command.useDesiredLookAt = false;
+ 
+         float inputPower = clamp(std::pow(gaugeFactor, 0.65f), 0.01f, 1.0f);
+-        command.touchInfo.inputDirection = inputDirection;
++        command.touchInfo.inputDirection = afc_pass_dir.GetLength() > 0.1f ? afc_pass_dir.GetNormalized(inputDirection) : inputDirection;
+         command.touchInfo.inputPower = inputPower;
+         command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_throughpass_autodirection", _default_ThroughPass_AutoDirection);
+         command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_throughpass_autopower", _default_ThroughPass_AutoPower);
+@@ -205,7 +291,7 @@
+         command.useDesiredLookAt = false;
+ 
+         float inputPower = clamp(std::pow(gaugeFactor, 0.55f), 0.01f, 1.0f);
+-        command.touchInfo.inputDirection = inputDirection;
++        command.touchInfo.inputDirection = afc_pass_dir.GetLength() > 0.1f ? afc_pass_dir.GetNormalized(inputDirection) : inputDirection;
+         command.touchInfo.inputPower = inputPower;
+         command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_highpass_autodirection", _default_HighPass_AutoDirection);
+         command.touchInfo.autoPowerBias = GetConfiguration()->GetReal("gameplay_highpass_autopower", _default_HighPass_AutoPower);
+@@ -221,6 +307,11 @@
          command.useDesiredMovement = false;
          command.useDesiredLookAt = false;
          command.desiredVelocityFloat = inputVelocityFloat; // this is so we can use sprint/dribble buttons as shot modifiers
@@ -500,7 +581,7 @@
          command.touchInfo.inputDirection = inputDirection;
          command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection);
          command.touchInfo.autoDirectionBias = 1.0f;
-@@ -322,10 +384,16 @@
+@@ -322,10 +413,16 @@
      // ball control?
      bool keepCurrentBodyDirection = false;
      // sidestep dribble disabled for now, too quirky: if (hid->GetButton(e_ButtonFunction_Dribble)) keepCurrentBodyDirection = true;
@@ -521,6 +602,40 @@
  
      // reload original input
      if (actionMode == 2) {
+@@ -514,6 +611,7 @@
+         DO_VALIDATION;
+         actionMode = 2;
+         actionButton = e_ButtonFunction_ShortPass;
++        afc_pass_hold_ms = AfcPassHold_ms();
+       }
+ 
+       if (hid->GetButton(e_ButtonFunction_LongPass) &&
+@@ -522,6 +620,7 @@
+         DO_VALIDATION;
+         actionMode = 2;
+         actionButton = e_ButtonFunction_LongPass;
++        afc_pass_hold_ms = AfcPassHold_ms();
+       }
+ 
+       if (hid->GetButton(e_ButtonFunction_HighPass) &&
+@@ -530,6 +629,7 @@
+         DO_VALIDATION;
+         actionMode = 2;
+         actionButton = e_ButtonFunction_HighPass;
++        afc_pass_hold_ms = AfcPassHold_ms();
+       }
+ 
+       if (hid->GetButton(e_ButtonFunction_Shot) &&
+--- a/src/onthepitch/player/controller/humancontroller.hpp
++++ b/src/onthepitch/player/controller/humancontroller.hpp
+@@ -27,6 +27,7 @@
+ class HumanController : public PlayerController {
+ 
+   public:
++    int AfcPassHold_ms();   // AFC: how long a pass waits for the turn and the press
+     HumanController(Match *match = nullptr, AIControlledKeyboard *hid = nullptr);
+     virtual ~HumanController();
+ 
 --- a/src/onthepitch/player/controller/strategies/offtheball/default_mid.cpp
 +++ b/src/onthepitch/player/controller/strategies/offtheball/default_mid.cpp
 @@ -42,7 +42,7 @@
@@ -816,17 +931,19 @@
          }
  
          if ((functionType == e_FunctionType_Trap ||
-@@ -2225,6 +2268,9 @@
+@@ -2225,6 +2268,11 @@
    return toDesired;
  }
  
 +// zocram4cc 1d737cc: a good passer is rewarded more for his skill (0.5 -> 0.75 of the difficulty taken off)
 +static const float afc_pass_skill_w = 0.75f;
++// real squads, 8 matches: 0 / 0.15 / 0.25 -> possession lost 954 / 911 / 938, goals 31 / 24 / 43 (within the noise)
++static const float afc_press_err = 0.2f;
 +
  Vector3 Humanoid::GetBestPossibleTouch(const Vector3 &desiredTouch,
                                         e_FunctionType functionType) {
    DO_VALIDATION;
-@@ -2259,8 +2305,8 @@
+@@ -2259,8 +2307,19 @@
  
    // apply stats
    if (functionType == e_FunctionType_ShortPass ||
@@ -834,10 +951,21 @@
 -  if (functionType == e_FunctionType_HighPass) difficultyFactor *= (1.0f - CastPlayer()->GetStat(technical_highpass)  * 0.5f);
 +      functionType == e_FunctionType_LongPass) difficultyFactor *= (1.0f - CastPlayer()->GetStat(technical_shortpass) * afc_pass_skill_w);  // zocram4cc 1d737cc
 +  if (functionType == e_FunctionType_HighPass) difficultyFactor *= (1.0f - CastPlayer()->GetStat(technical_highpass)  * afc_pass_skill_w);
++  // AFC: a pass played with a man on your back is a worse pass - up to +0.25 difficulty inside 3 m, less for a calm
++  // player (the turn and the press also delay a human's pass, humancontroller.cpp)
++  {
++    float nearest = 100.0f;
++    for (Player *opp : match->GetTeam(1 - team->GetID())->GetAllPlayers()) {
++      if (!opp->IsActive()) continue;
++      nearest = std::min(nearest, (opp->GetPosition() - player->GetPosition()).GetLength());
++    }
++    const float press = clamp((3.0f - nearest) / 2.0f, 0.0f, 1.0f);
++    difficultyFactor = clamp(difficultyFactor + press * afc_press_err * (1.0f - 0.5f * CastPlayer()->GetStat(mental_calmness)), 0.0f, 1.0f);
++  }
  
    float distanceFactor = 0.0f;
    float heightFactor = 0.0f;
-@@ -2292,7 +2338,10 @@
+@@ -2292,7 +2351,10 @@
    resultTouch = resultTouch * (1.0f - ballMovementFactor) +
                  match->GetBall()->GetMovement() * ballMovementFactor;
  
