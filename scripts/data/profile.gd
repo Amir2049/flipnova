@@ -5,7 +5,7 @@ extends Node
 const PATH := "user://profile.json"
 const TMP := "user://profile.json.tmp"
 const BAK := "user://profile.json.bak"
-const VERSION := 7
+const VERSION := 8
 
 const ATTACK_ACTIONS := [["pass", "Short pass"], ["shoot", "Shoot"], ["lob", "Lob / cross"], ["through", "Through ball"],
 	["sprint", "Sprint"], ["close", "Close control"], ["skill_mod", "Skill modifier"], ["stepover", "Step over"]]
@@ -85,6 +85,9 @@ func load_profile() -> void:
 	if int(d.get("version", 0)) < 7 and int(data["settings"].get("quality", 1)) == 1:
 		# 2.21: graphics on Auto (it adapts to the phone) unless the player had picked Low or High
 		data["settings"]["quality"] = 3
+	if int(d.get("version", 0)) < 8:
+		# 2.59: the new Pro camera (PES-2021-like wide view) for everyone once; the list now starts with it
+		data["settings"]["camera"] = 0
 	if d.get("pad") is Dictionary:
 		for k in d["pad"]:
 			var v = d["pad"][k]

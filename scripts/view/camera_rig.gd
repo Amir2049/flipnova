@@ -2,7 +2,7 @@ class_name CameraRig
 extends Camera3D
 ## Broadcast camera: from the stand on the +z side, follows the play with look-ahead and smoothing.
 
-var mode := "broadcast"     # broadcast, tele, close
+var mode := "pro"           # pro, broadcast, tele, close, wide
 var focus := Vector3.ZERO
 var pitch: Pitch
 var shake_t := 0.0
@@ -19,8 +19,14 @@ const MODES := {
 	"tele": {"height": 22.0, "back": 46.0, "fov": 24.0, "follow_z": 0.6},
 	"close": {"height": 11.0, "back": 24.0, "fov": 32.0, "follow_z": 0.85},
 	"wide": {"height": 24.0, "back": 42.0, "fov": 30.0, "follow_z": 0.5},
+	# 2.59 "Pro" (the default; the owner asked for the feel of PES 2021's Wide camera): higher (~22 degrees down, less
+	# stand, players read), it stays nearer the halfway line and turns toward the play instead of sliding with it
+	# (truck 0.62: near a box the goal is seen on the diagonal, with depth), follows the ball further across the pitch,
+	# a longer lens for bigger players, the lens kept so they do not shrink as the turn takes it further away, and a
+	# little closer in the last third
+	"pro": {"height": 17.0, "back": 57.0, "fov": 17.0, "follow_z": 0.6, "truck": 0.62, "keep_size": true, "box_zoom": 0.1},
 }
-const NAMES := {"broadcast": "Broadcast", "tele": "Tele", "close": "Close", "wide": "Wide"}
+const NAMES := {"pro": "Pro", "broadcast": "Broadcast", "tele": "Tele", "close": "Close", "wide": "Wide"}
 
 var replay_pos := Vector3.ZERO
 var replay_look := Vector3.ZERO
@@ -70,15 +76,19 @@ func follow(ball: BallPhysics, extra: Vector2, dt: float, snap: bool = false) ->
 	# a touch wider on fast long balls, a touch tighter around the boxes
 	var bs := Vector2(ball.vel.x, ball.vel.z).length()
 	var near_goal := clampf((absf(focus.x) - (hl - 30.0)) / 14.0, 0.0, 1.0)
-	var want_zoom := 1.0 + clampf((bs - 14.0) / 20.0, 0.0, 0.1) - 0.07 * near_goal
+	var want_zoom := 1.0 + clampf((bs - 14.0) / 20.0, 0.0, 0.1) - float(cfg.get("box_zoom", 0.07)) * near_goal
 	zoom = lerpf(zoom, want_zoom, 1.0 if snap else 1.0 - exp(-dt * 1.2))
 	var look := Vector3(focus.x, 0.0, focus.z * float(cfg["follow_z"]))
-	var cam := Vector3(focus.x * 0.92, float(cfg["height"]), look.z + float(cfg["back"]))
+	var cam := Vector3(focus.x * float(cfg.get("truck", 0.92)), float(cfg["height"]), look.z + float(cfg["back"]))
 	# small pitches (the street cage): come in closer so the play fills the screen
 	var scale := clampf(pitch.length / 105.0, 0.55, 1.0)
 	if scale < 1.0:
 		cam = look + (cam - look) * (0.45 + 0.55 * scale)
 	fov = float(cfg["fov"]) * zoom
+	if cfg.get("keep_size", false):
+		# turned toward the play the camera is further from it: narrow the lens by as much, same player size
+		var d0 := Vector2(float(cfg["height"]), float(cfg["back"])).length()
+		fov *= d0 / maxf(d0, cam.distance_to(look))
 	if shake_t > 0.0:
 		shake_t -= dt
 		cam += Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * 0.25 * shake_t

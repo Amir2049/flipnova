@@ -361,6 +361,14 @@ func _title() -> void:
 		credit.offset_bottom = -14
 		credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		root.add_child(credit)
+		var gnote: String = load("res://scripts/boot.gd").graphics_note
+		if gnote != "":
+			# the last match closed while loading or drew no pitch: say what was lowered (boot._check_last_match)
+			credit.text = gnote
+			credit.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+			credit.add_theme_font_size_override("font_size", 18)
+			credit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			credit.offset_top = -96
 	else:
 		root.add_child(_engine_off_panel(ver))
 	_set_screen(root)

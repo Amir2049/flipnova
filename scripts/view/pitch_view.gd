@@ -32,6 +32,8 @@ uniform sampler2D grass_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D grass_nrm : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform vec3 grass_avg = vec3(0.3978, 0.517, 0.1711);
 uniform float detail = 0.0;                   // 0 = no texture (it failed to load), 1 = full
+uniform float tone_k = 1.0;                   // grass tone with the strengthened texture (calibrated, below)
+uniform float tex_k = 1.0;                    // texture strength: Vulkan's linear HDR + tone curve flattens it (2.59)
 varying vec3 wpos;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -51,12 +53,15 @@ void fragment() {
 	vec3 vdir = normalize(wpos - CAMERA_POSITION_WORLD);
 	float lean = mix(1.0, -1.0, s) * clamp(vdir.x * 1.6, -1.0, 1.0);
 	vec3 col = mix(grass_a, grass_b, 0.5 + 0.5 * mix(-1.0, 1.0, s) * 0.8 + lean * 0.3);
-	col *= 0.93 + 0.12 * noise(p * 0.9) + 0.05 * noise(p * 6.0) + 0.04 * noise(p * 31.0);
+	col *= 1.0 + (0.93 + 0.12 * noise(p * 0.9) + 0.05 * noise(p * 6.0) + 0.04 * noise(p * 31.0) - 1.0) * tex_k;
 	if (detail > 0.0) {
-		vec3 d1 = texture(grass_tex, p / 2.2).rgb / grass_avg;
-		vec3 d2 = texture(grass_tex, p / 8.5 + vec2(0.37, 0.61)).rgb / grass_avg;
+		// strengthened (Vulkan): around the texture's own mean (its last mip), so more texture is not darker grass
+		vec3 avg = tex_k > 1.001 ? max(textureLod(grass_tex, vec2(0.5), 12.0).rgb, vec3(0.01)) : grass_avg;
+		vec3 d1 = texture(grass_tex, p / 2.2).rgb / avg;
+		vec3 d2 = texture(grass_tex, p / 8.5 + vec2(0.37, 0.61)).rgb / avg;
 		vec3 dd = mix(vec3(1.0), d1, 0.55) * mix(vec3(1.0), d2, 0.3);
-		col *= mix(vec3(1.0), clamp(dd, vec3(0.5), vec3(1.6)), detail);
+		col *= clamp(mix(vec3(1.0), clamp(dd, vec3(0.5), vec3(1.6)), detail * tex_k), vec3(0.35), vec3(1.9));
+		col *= mix(1.0, tone_k, detail);   // Vulkan: the same mean tone as the picture it was tuned on
 		NORMAL_MAP = texture(grass_nrm, p / 2.2).rgb;
 		NORMAL_MAP_DEPTH = 0.7 * detail;
 	}
@@ -135,6 +140,12 @@ func _ground() -> void:
 		sm.set_shader_parameter("grass_tex", load("res://assets/textures/grass_color.jpg"))
 		sm.set_shader_parameter("grass_nrm", load("res://assets/textures/grass_normal.jpg"))
 		sm.set_shader_parameter("detail", 1.0)
+		# the turf the owner picked (2.59) is the Compatibility picture: fine grass contrast 0.028 there, 0.020 on Vulkan
+		var k := float(OS.get_environment("AFC_TEXK")) if OS.get_environment("AFC_TEXK") != "" else VULKAN_TEX_K
+		var tone := float(OS.get_environment("AFC_TONE")) if OS.get_environment("AFC_TONE") != "" else VULKAN_TONE_K
+		var gl := RenderingServer.get_current_rendering_method() == "gl_compatibility"
+		sm.set_shader_parameter("tex_k", 1.0 if gl else k)
+		sm.set_shader_parameter("tone_k", 1.0 if gl else tone)
 	_stand_shadow(sm)
 	mi.material_override = sm
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -538,6 +549,8 @@ func _box(st: SurfaceTool, lo: Vector3, hi: Vector3, part: float, open_ends: boo
 
 const STAND_SECTION := "res://assets/stadium/stand_section.glb"   # tools/blender/make_stadium.py
 const FLOODLIGHT := "res://assets/stadium/floodlight.glb"
+const VULKAN_TEX_K := 1.03
+const VULKAN_TONE_K := 0.64
 const SECTION_LEN := 12.0
 
 

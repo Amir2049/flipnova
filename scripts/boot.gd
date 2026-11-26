@@ -10,6 +10,7 @@ const NATIVE_STATE := "user://native_state.cfg"
 static var native_note := ""               # why the match engine is off, for the title screen
 static var safe_mode := false              # the last start never reached the title: start without the heavy parts
 static var safe_note := ""                 # where that start stopped
+static var graphics_note := ""             # the last match died loading or drew no picture: what was lowered
 ## The steps of a start, in order: a previous run whose last step is one of these never got to the title.
 const START_STEPS := ["starting", "loading the engine library", "library loaded", "loading the game files",
 	"game files loaded", "unpacking the engine data", "engine data ready", "opening the menus"]
@@ -23,6 +24,7 @@ func _ready() -> void:
 	t0 = Time.get_ticks_msec()
 	_check_last_start()
 	_check_renderer()
+	_check_last_match()
 	step("starting")
 	if not safe_mode:
 		_load_native()
@@ -478,3 +480,48 @@ func _show_crash(text: String) -> void:
 	box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_theme_font_size_override("font_size", 14)
 	vb.add_child(box)
+
+## The match guard (2.59). Phones whose GPU cannot take a renderer either close while the match loads or draw no
+## pitch at all (only the 2D labels: names, score). A marker is written when a match starts loading and removed when
+## its picture is seen (EngineMatchView._picture_check); a marker found at start means the last match never got that
+## far, so the next start steps the graphics down: Ultra -> Vulkan -> OpenGL, and the quality to Low.
+const MATCH_PENDING := "user://match_pending"
+
+
+static func match_loading() -> void:
+	var f := FileAccess.open(MATCH_PENDING, FileAccess.WRITE)
+	if f:
+		f.store_string("%s %s q%s" % [Time.get_datetime_string_from_system(), renderer_now(), str(Profile.get_s("quality"))])
+		f.flush()
+
+
+static func match_drawn() -> void:
+	if FileAccess.file_exists(MATCH_PENDING):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(MATCH_PENDING))
+
+
+## One step down; returns what changed ("" when already at the bottom).
+static func graphics_step_down() -> String:
+	var was := renderer_now()
+	var note := ""
+	if was == "ultra":
+		set_renderer("vulkan")
+		note = "graphics engine Ultra -> Vulkan"
+	elif was == "vulkan":
+		set_renderer("opengl")
+		note = "graphics engine Vulkan -> OpenGL"
+	if int(Profile.get_s("quality")) != 0:
+		Profile.set_s("quality", 0)
+		Profile.save()
+		note += (", " if note != "" else "") + "quality -> Low"
+	return note
+
+
+static func _check_last_match() -> void:
+	if not FileAccess.file_exists(MATCH_PENDING):
+		return
+	var what := FileAccess.get_file_as_string(MATCH_PENDING).strip_edges()
+	match_drawn()
+	var n := graphics_step_down()
+	if n != "":
+		graphics_note = "The last match closed before it was shown (%s), so: %s. Change it back in Settings." % [what, n]

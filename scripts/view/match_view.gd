@@ -38,7 +38,7 @@ var intro := false
 var intro_t := 0.0
 
 
-const MOBILE_EXPOSURE := 2.7
+const MOBILE_EXPOSURE := 3.9   # 2.59: matched to the Compatibility picture the owner chose as the look (pitch luminance 0.49 v 0.50, saturation 0.645 v 0.641)
 
 func _exit_tree() -> void:
 	if sim:
@@ -108,7 +108,7 @@ func start(config: Dictionary) -> void:
 	cam = CameraRig.new()
 	add_child(cam)
 	cam.setup(sim.pitch)
-	cam.mode = config.get("camera", "broadcast")
+	cam.mode = config.get("camera", "pro")
 	_markers()
 	hud = Hud.new()
 	add_child(hud)

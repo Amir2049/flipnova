@@ -79,6 +79,8 @@ var cele_focus := -1              # the scorer (camera target)
 var cele_angle := 0.0
 var cele_fov := 22.0
 var last_mode := -1
+var warn_lbl: Label   # "no picture" (the picture check)
+var picture_stats := Vector2(-1, -1)   # (mean, spread) of the screen's middle at the picture check
 var draw_n := 0            # frames drawn (animation LOD takes turns on it)
 var ball_owner_idx := -1   # 0..21, the man on the ball (always fully animated)
 var setpiece_since := -1   # ms when our taker stood over a set piece; after 15 s it is taken with PASS
@@ -243,6 +245,7 @@ static func level_of(difficulty: float) -> int:
 
 
 func start(config: Dictionary) -> void:
+	load("res://scripts/boot.gd").match_loading()   # cleared by _picture_check once the pitch is seen
 	cfg = config
 	opts = config.get("opts", {})
 	human_team = 0 if int(config.get("human_team", 0)) >= 0 else -1
@@ -297,7 +300,7 @@ func start(config: Dictionary) -> void:
 	cam = CameraRig.new()
 	add_child(cam)
 	cam.setup(pitch)
-	cam.mode = config.get("camera", "broadcast")
+	cam.mode = config.get("camera", "pro")
 	_markers()
 	_ui()
 	sfx = Sfx.new()
@@ -930,11 +933,54 @@ func _update_views(dt: float) -> void:
 		next_marker.visible = false
 
 
+## 1.5 s in, one look at the screen: some phones' GPUs draw no pitch (black or one flat colour behind the names and
+## the score). Then the graphics step down for the next start and the player is told to reopen the game. Either way
+## the match guard's marker goes (boot.gd match_drawn): this match did get on screen.
+func _picture_check() -> void:
+	var boot = load("res://scripts/boot.gd")
+	var img: Image = null
+	if DisplayServer.get_name() != "headless" and get_viewport():
+		img = get_viewport().get_texture().get_image()
+	boot.match_drawn()
+	if img == null or img.is_empty():
+		return
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGB8)
+	img.resize(64, 36, Image.INTERPOLATE_BILINEAR)
+	var n := 0
+	var sum := 0.0
+	var sq := 0.0
+	for y in range(11, 31):   # the middle of the screen: the pitch, under the stands and above the radar
+		for x in range(4, 60):
+			var l := img.get_pixel(x, y).get_luminance()
+			sum += l
+			sq += l * l
+			n += 1
+	var mean := sum / n
+	var sd := sqrt(maxf(0.0, sq / n - mean * mean))
+	picture_stats = Vector2(mean, sd)
+	if mean < 0.035 or sd < 0.012:
+		var what: String = boot.graphics_step_down()
+		# its own label (a foul or a goal banner must not replace it), on screen until the player leaves
+		warn_lbl = UI.label("No picture on this phone - %s.\nClose the game and open it again." % (what if what != "" else "send the report from Settings"), 26, Color(1, 0.85, 0.3))
+		warn_lbl.set_anchors_preset(Control.PRESET_CENTER)
+		warn_lbl.position = Vector2(-450, -60)
+		warn_lbl.size = Vector2(900, 120)
+		warn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		warn_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		warn_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+		warn_lbl.add_theme_constant_override("outline_size", 8)
+		banner_lbl.get_parent().add_child(warn_lbl)
+
+
 func _draw_frame(p: PackedFloat32Array, b: Vector3, bv: Vector3, dt: float) -> void:
 	# animation LOD (as console football games do): a player more than 38 m from the camera gets a new skeleton pose
 	# every other frame, one off screen every fourth - his position still moves every frame. Replays and the man on
 	# the ball always get every frame.
 	draw_n += 1
+	if draw_n == 90:
+		_picture_check()
 	ball_owner_idx = -1 if st.is_empty() or int(st["owner_team"]) < 0 else int(st["owner_team"]) * 11 + int(st["owner_player"])
 	var cam_pos: Vector3 = cam.global_position if cam else Vector3.ZERO
 	var near_cam := replay_t >= 0.0 or cam == null

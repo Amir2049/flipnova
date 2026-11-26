@@ -11,7 +11,7 @@ func _initialize():
 		pr.data["settings"] = {}
 	mv = load("res://scripts/view/engine_match_view.gd").new()
 	get_root().add_child(mv)
-	mv.start({"home": 0, "away": 3, "human_team": 0, "half_minutes": 4.0, "difficulty": 0.5, "camera": "broadcast",
+	mv.start({"home": 0, "away": 3, "human_team": 0, "half_minutes": 4.0, "difficulty": 0.5, "camera": OS.get_environment("CAM") if OS.get_environment("CAM") != "" else "pro",
 		"opts": {"weather": "clear", "time_of_day": "day", "quality": 1}})
 
 func _process(_dt) -> bool:
